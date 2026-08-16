@@ -1,0 +1,6 @@
+{
+  "name": "react-native-worklets",
+  "version": "0.5.1",
+  "private": true,
+  "main": "plugin.js"
+}
