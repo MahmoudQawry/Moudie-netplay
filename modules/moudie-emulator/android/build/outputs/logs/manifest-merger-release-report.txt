@@ -1,0 +1,42 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:1:1-16:12
+INJECTED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:1:1-16:12
+	package
+		INJECTED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:1:11-69
+application
+ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:2:3-15:17
+activity#expo.modules.moudieemulator.PS1PlayerActivity
+ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:3:5-8:72
+	android:screenOrientation
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:7:7-44
+	android:exported
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:6:7-31
+	android:configChanges
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:5:7-116
+	android:theme
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:8:7-69
+	android:name
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:4:7-40
+activity#expo.modules.moudieemulator.FamicomCompatPlayerActivity
+ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:9:5-14:72
+	android:screenOrientation
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:13:7-44
+	android:exported
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:12:7-31
+	android:configChanges
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:11:7-116
+	android:theme
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:14:7-69
+	android:name
+		ADDED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml:10:7-50
+uses-sdk
+INJECTED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml
+INJECTED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /home/ubuntu/moudie-netplay/modules/moudie-emulator/android/src/main/AndroidManifest.xml
