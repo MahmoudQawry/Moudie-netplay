@@ -32,6 +32,7 @@ class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEvents> {
       title: title as string,
       coreName: coreName as string,
       available: false,
+      downloadable: system === "arcade",
       localPlay: false,
       netplay: netplay as EmulatorCoreCapability["netplay"],
       maxRoomMembers: 10,

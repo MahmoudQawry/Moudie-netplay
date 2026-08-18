@@ -20,6 +20,7 @@ export type EmulatorCoreCapability = {
   title: string;
   coreName: string;
   available: boolean;
+  downloadable: boolean;
   localPlay: boolean;
   netplay: "retroarch" | "psp-network" | "planned";
   maxRoomMembers: number;

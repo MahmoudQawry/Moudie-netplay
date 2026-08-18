@@ -37,12 +37,17 @@ class MoudieEmulatorModule : Module() {
           "title" to definition.title,
           "coreName" to definition.coreName,
           "available" to available,
-          "localPlay" to available,
+          "downloadable" to NativeCoreCatalog.isDownloadable(definition),
+          "localPlay" to (available || NativeCoreCatalog.isDownloadable(definition)),
           "netplay" to definition.netplay,
           "maxRoomMembers" to 10,
           "maxControllerSlots" to definition.maxControllerSlots,
           "acceptedExtensions" to definition.extensions.sorted(),
-          "message" to if (available) "${definition.coreName} مضمّن في نسخة Android وجاهز للتشغيل المحلي." else "محرك ${definition.coreName} غير موجود داخل APK الحالي.",
+          "message" to when {
+            available -> "${definition.coreName} جاهز للتشغيل المحلي."
+            NativeCoreCatalog.isDownloadable(definition) -> "سيُنزل محرك ${definition.coreName} الرسمي عند أول تشغيل للآركيد؛ يلزم اتصال إنترنت ومساحة تخزين كافية."
+            else -> "محرك ${definition.coreName} غير موجود داخل APK الحالي."
+          },
         )
       }
     }
@@ -70,11 +75,16 @@ class MoudieEmulatorModule : Module() {
       val definition = NativeCoreCatalog.forSystem(system)
       require(uri.isNotBlank()) { "اختر ملف لعبة محلياً أولاً." }
       val available = appContext.reactContext?.let { NativeCoreCatalog.findCore(it, definition) != null } ?: false
+      val downloadable = NativeCoreCatalog.isDownloadable(definition)
       mapOf(
         "system" to system,
         "uri" to uri,
-        "ready" to available,
-        "message" to if (available) "تم تجهيز ملف ${definition.title}. يمكنك بدء اللعب المحلي الآن." else "محرك ${definition.coreName} غير مضمّن في هذه النسخة.",
+        "ready" to (available || downloadable),
+        "message" to when {
+          available -> "تم تجهيز ملف ${definition.title}. يمكنك بدء اللعب المحلي الآن."
+          downloadable -> "تم تجهيز ملف ${definition.title}. سيُنزل محرك الآركيد تلقائياً عند بدء أول لعبة."
+          else -> "محرك ${definition.coreName} غير مضمّن في هذه النسخة."
+        },
       )
     }
 
@@ -119,8 +129,17 @@ class MoudieEmulatorModule : Module() {
       val extension = fileName.substringAfterLast('.', "").lowercase()
       require(extension in definition.extensions) { "اختر ملف ${definition.title} بامتداد مدعوم: ${definition.extensions.sorted().joinToString(", ")}" }
       val activity = appContext.currentActivity ?: throw IllegalStateException("افتح المشغّل بعد ظهور التطبيق على الشاشة.")
+      // AsyncFunction runs outside the Android UI thread, so optional core
+      // retrieval can wait for the HTTPS download without freezing the activity.
       val coreFile = NativeCoreCatalog.findCore(activity, definition)
-        ?: throw IllegalStateException("تعذر العثور على ${definition.coreName} داخل APK. ثبّت نسخة Android الكاملة.")
+        ?: NativeCoreCatalog.downloadCore(activity, definition)
+        ?: throw IllegalStateException(
+          if (NativeCoreCatalog.isDownloadable(definition)) {
+            "تعذر تنزيل محرك ${definition.coreName}. تحقق من الإنترنت والمساحة المتاحة ثم أعد المحاولة."
+          } else {
+            "تعذر العثور على ${definition.coreName} داخل APK. ثبّت نسخة Android الكاملة."
+          },
+        )
       val gamePath = prepareGameFile(activity.cacheDir, uri, fileName, "moudie-${definition.system}-games")
       activity.runOnUiThread {
         activity.startActivity(Intent(activity, UniversalLibretroPlayerActivity::class.java).apply {

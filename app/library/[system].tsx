@@ -41,7 +41,7 @@ export default function EmulatorLibraryScreen() {
   const accepted = useMemo(() => capability?.acceptedExtensions.length ? capability.acceptedExtensions.map((extension) => `.${extension}`).join(" · ") : "يظهر الدعم داخل APK", [capability]);
 
   const chooseGame = async () => {
-    if (!capability?.available) {
+    if (!capability || (!capability.available && !capability.downloadable)) {
       Alert.alert("محرك Android مطلوب", capability?.message || "ثبّت APK الكامل لتشغيل هذا المحاكي.");
       return;
     }
@@ -79,14 +79,14 @@ export default function EmulatorLibraryScreen() {
           <Text style={styles.subtitle}>{meta.subtitle}</Text>
           <View style={styles.coreRow}>
             <Text style={[styles.coreName, { color: meta.color }]}>{capability?.coreName || "جارٍ التحقق"}</Text>
-            <View style={[styles.statusDot, { backgroundColor: capability?.available ? "#62E9A1" : "#FFB677" }]} />
-            <Text style={styles.statusText}>{capability?.available ? "المحرك جاهز" : "يتطلب APK Android"}</Text>
+            <View style={[styles.statusDot, { backgroundColor: capability?.available ? "#62E9A1" : capability?.downloadable ? "#75E9FF" : "#FFB677" }]} />
+            <Text style={styles.statusText}>{capability?.available ? "المحرك جاهز" : capability?.downloadable ? "يُنزل عند أول تشغيل" : "يتطلب APK Android"}</Text>
           </View>
         </View>
 
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>كيف يعمل هذا المحاكي؟</Text>
-          <Text style={styles.panelText}>اختر ملف لعبتك المرخص محليًا. لن يرفع التطبيق ملف اللعبة أو BIOS إلى الخادم. داخل اللعبة يمكنك الضغط على «ضبط» لسحب الأزرار وتكبيرها أو تصغيرها؛ ويحفظ ترتيب كل منصة واتجاه شاشة منفصلًا.</Text>
+          <Text style={styles.panelText}>اختر ملف لعبتك المرخص محليًا. لن يرفع التطبيق ملف اللعبة أو BIOS إلى الخادم. داخل اللعبة يمكنك الضغط على «ضبط» لسحب الأزرار وتكبيرها أو تصغيرها؛ ويحفظ ترتيب كل منصة واتجاه شاشة منفصلًا. {capability?.downloadable && !capability.available ? "سيُنزل محرك الآركيد الرسمي من المصدر الموثوق عند أول تشغيل، لذلك يلزم اتصال إنترنت ومساحة تخزين كافية." : ""}</Text>
           <View style={styles.detailRow}><MaterialCommunityIcons name="file-outline" color="#75E9FF" size={18} /><Text style={styles.detailText}>الامتدادات: {accepted}</Text></View>
           <View style={styles.detailRow}><MaterialCommunityIcons name="account-group-outline" color="#C98AFF" size={18} /><Text style={styles.detailText}>الغرفة: حتى {capability?.maxRoomMembers || 10} أعضاء؛ مقاعد اللعب الفعلية: {capability?.maxControllerSlots || "—"}</Text></View>
           <View style={styles.detailRow}><MaterialCommunityIcons name="content-save-outline" color="#F8CF68" size={18} /><Text style={styles.detailText}>حفظ/تحميل حالة محلية تلقائيًا مع زر حفظ يدوي.</Text></View>
@@ -94,7 +94,7 @@ export default function EmulatorLibraryScreen() {
 
         <Pressable onPress={chooseGame} disabled={loading} style={({ pressed }) => [styles.launch, { backgroundColor: meta.color }, (pressed || loading) && styles.launchPressed]}>
           {loading ? <ActivityIndicator color="#09121D" /> : <MaterialCommunityIcons name="folder-open-outline" size={23} color="#09121D" />}
-          <Text style={styles.launchText}>{loading ? "جارٍ تجهيز اللعبة…" : "اختر لعبة وابدأ"}</Text>
+          <Text style={styles.launchText}>{loading ? "جارٍ تجهيز اللعبة…" : capability?.downloadable && !capability.available ? "اختر لعبة ونزّل المحرك" : "اختر لعبة وابدأ"}</Text>
         </Pressable>
         <Text style={styles.legal}>باختيار ملف، تؤكد أنك تملك حق استخدامه. لا يتضمن Moudie أي ROM أو BIOS.</Text>
       </ScrollView>

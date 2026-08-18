@@ -41,6 +41,9 @@ importers:
       axios:
         specifier: ^1.13.2
         version: 1.13.2
+      babel-preset-expo:
+        specifier: 54.0.8
+        version: 54.0.8(@babel/core@7.28.5)(@babel/runtime@7.28.4)(expo@54.0.29)(react-refresh@0.14.2)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -173,6 +176,9 @@ importers:
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.0
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.19(tsx@4.21.0)(yaml@2.8.2)
       zod:
         specifier: ^4.2.1
         version: 4.2.1
@@ -222,9 +228,6 @@ importers:
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
-      tailwindcss:
-        specifier: ^3.4.17
-        version: 3.4.19(tsx@4.21.0)(yaml@2.8.2)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
