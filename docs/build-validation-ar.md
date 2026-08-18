@@ -24,6 +24,7 @@
 | 7 | Metro Android | نجح: تصدير حزمة JavaScript مستقلة؛ تضم 1,478 وحدة و46 مورداً. |
 | 8 | `:app:assembleRelease` | نجح: بناء APK v1.4.2 بنجاح بعد ضبط الذاكرة إلى Gradle 640 MiB وMetro 896 MiB. |
 | 9 | فحص APK | نجح: سلامة ZIP، arm64-v8a فقط، bundle مضمّن، وبصمة وتوقيع الحزمة. |
+| 10 | تحقق الإنتاج | نجح: إنشاء غرفة عبر API، انضمام لاعب بالرمز، لقطة موثقة للغرفة، ثم أحداث `netplay:joined` و`netplay:chat` و`netplay:input` وREADY وإشارة البدء المتزامن عبر Socket.IO. |
 
 ## فحص الحزمة النهائية
 
