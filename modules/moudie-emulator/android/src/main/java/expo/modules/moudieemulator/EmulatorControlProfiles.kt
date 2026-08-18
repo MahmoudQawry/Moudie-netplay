@@ -101,4 +101,21 @@ object EmulatorControlProfiles {
       EmulatorTouchButton("start", "START", KeyEvent.KEYCODE_BUTTON_START),
     ),
   )
+
+  val ARCADE = EmulatorControlProfile(
+    systemId = "arcade",
+    directions = dpad(),
+    actionButtons = listOf(
+      EmulatorTouchButton("p1", "1", KeyEvent.KEYCODE_BUTTON_A),
+      EmulatorTouchButton("p2", "2", KeyEvent.KEYCODE_BUTTON_B),
+      EmulatorTouchButton("p3", "3", KeyEvent.KEYCODE_BUTTON_X),
+      EmulatorTouchButton("p4", "4", KeyEvent.KEYCODE_BUTTON_Y),
+      EmulatorTouchButton("p5", "5", KeyEvent.KEYCODE_BUTTON_L1),
+      EmulatorTouchButton("p6", "6", KeyEvent.KEYCODE_BUTTON_R1),
+    ),
+    systemButtons = listOf(
+      EmulatorTouchButton("coin", "COIN", KeyEvent.KEYCODE_BUTTON_SELECT),
+      EmulatorTouchButton("start", "START", KeyEvent.KEYCODE_BUTTON_START),
+    ),
+  )
 }

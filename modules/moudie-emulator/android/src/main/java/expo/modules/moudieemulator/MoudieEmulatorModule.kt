@@ -16,12 +16,35 @@ class MoudieEmulatorModule : Module() {
     Events("nativeOverlayAction")
 
     Function("getRuntimeStatus") {
+      val context = appContext.reactContext
+      val availablePlayers = context?.let { runtimeContext ->
+        NativeCoreCatalog.all().filter { definition -> NativeCoreCatalog.findCore(runtimeContext, definition) != null }.map { it.system }
+      }.orEmpty()
       mapOf(
         "runtime" to "android-native",
-        "supportedSystems" to listOf("nes", "sega", "ps1", "psp"),
-        "availablePlayers" to listOf("nes", "ps1"),
+        "supportedSystems" to NativeCoreCatalog.all().map { it.system },
+        "availablePlayers" to availablePlayers,
         "nativeBuildRequired" to true,
       )
+    }
+
+    Function("getCoreCatalog") {
+      val context = appContext.reactContext
+      NativeCoreCatalog.all().map { definition ->
+        val available = context?.let { NativeCoreCatalog.findCore(it, definition) != null } ?: false
+        mapOf(
+          "system" to definition.system,
+          "title" to definition.title,
+          "coreName" to definition.coreName,
+          "available" to available,
+          "localPlay" to available,
+          "netplay" to definition.netplay,
+          "maxRoomMembers" to 10,
+          "maxControllerSlots" to definition.maxControllerSlots,
+          "acceptedExtensions" to definition.extensions.sorted(),
+          "message" to if (available) "${definition.coreName} مضمّن في نسخة Android وجاهز للتشغيل المحلي." else "محرك ${definition.coreName} غير موجود داخل APK الحالي.",
+        )
+      }
     }
 
     Function("getBiosStatus") {
@@ -44,13 +67,14 @@ class MoudieEmulatorModule : Module() {
     }
 
     Function("prepareLocalGame") { system: String, uri: String ->
-      require(system in supportedSystems) { "نظام المحاكاة غير مدعوم." }
+      val definition = NativeCoreCatalog.forSystem(system)
       require(uri.isNotBlank()) { "اختر ملف لعبة محلياً أولاً." }
+      val available = appContext.reactContext?.let { NativeCoreCatalog.findCore(it, definition) != null } ?: false
       mapOf(
         "system" to system,
         "uri" to uri,
-        "ready" to false,
-        "message" to "تم تجهيز الملف محلياً. يلزم تضمين Core النظام في بناء Android القادم.",
+        "ready" to available,
+        "message" to if (available) "تم تجهيز ملف ${definition.title}. يمكنك بدء اللعب المحلي الآن." else "محرك ${definition.coreName} غير مضمّن في هذه النسخة.",
       )
     }
 
@@ -86,6 +110,25 @@ class MoudieEmulatorModule : Module() {
             }
           },
         )
+      }
+    }
+
+    AsyncFunction("launchNativeGame") { system: String, uri: String, fileName: String ->
+      val definition = NativeCoreCatalog.forSystem(system)
+      require(uri.isNotBlank()) { "اختر ملف لعبة محلياً أولاً." }
+      val extension = fileName.substringAfterLast('.', "").lowercase()
+      require(extension in definition.extensions) { "اختر ملف ${definition.title} بامتداد مدعوم: ${definition.extensions.sorted().joinToString(", ")}" }
+      val activity = appContext.currentActivity ?: throw IllegalStateException("افتح المشغّل بعد ظهور التطبيق على الشاشة.")
+      val coreFile = NativeCoreCatalog.findCore(activity, definition)
+        ?: throw IllegalStateException("تعذر العثور على ${definition.coreName} داخل APK. ثبّت نسخة Android الكاملة.")
+      val gamePath = prepareGameFile(activity.cacheDir, uri, fileName, "moudie-${definition.system}-games")
+      activity.runOnUiThread {
+        activity.startActivity(Intent(activity, UniversalLibretroPlayerActivity::class.java).apply {
+          putExtra(UniversalLibretroPlayerActivity.EXTRA_SYSTEM, definition.system)
+          putExtra(UniversalLibretroPlayerActivity.EXTRA_CORE_PATH, coreFile.absolutePath)
+          putExtra(UniversalLibretroPlayerActivity.EXTRA_GAME_PATH, gamePath)
+          putExtra(UniversalLibretroPlayerActivity.EXTRA_GAME_NAME, fileName)
+        })
       }
     }
 
@@ -131,7 +174,7 @@ class MoudieEmulatorModule : Module() {
     }
   }
 
-  private val supportedSystems = setOf("nes", "sega", "ps1", "psp")
+  private val supportedSystems = setOf("nes", "sega", "ps1", "psp", "arcade")
   private val ps1BiosCandidates = setOf("scph5500.bin", "scph5501.bin", "scph5502.bin", "scph1001.bin")
   private val ps1GameExtensions = setOf("bin", "cue", "chd", "pbp")
 

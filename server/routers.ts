@@ -3,6 +3,8 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import { EMULATOR_ROOM_CAPABILITIES } from "./emulator-capabilities";
+import { createRoomMediaToken } from "./livekit";
 import { createAccessToken, createJoinCode, hashAccessToken } from "./rooms";
 import { z } from "zod";
 
@@ -21,6 +23,7 @@ export const appRouter = router({
   }),
 
   rooms: router({
+    capabilities: publicProcedure.query(() => Object.values(EMULATOR_ROOM_CAPABILITIES)),
     create: publicProcedure
       .input(
         z.object({
@@ -31,6 +34,8 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ input }) => {
+        const capability = EMULATOR_ROOM_CAPABILITIES[input.system];
+        if (input.maxPlayers > capability.maxRoomMembers) throw new Error("الحد الأقصى للغرفة هو عشرة أعضاء.");
         const hostToken = createAccessToken();
         const memberToken = createAccessToken();
         const created = await db.createRoom({
@@ -72,6 +77,13 @@ export const appRouter = router({
         const snapshot = await db.getRoomSnapshot(input.roomId);
         if (!snapshot) throw new Error("الغرفة لم تعد موجودة.");
         return snapshot;
+      }),
+    mediaToken: publicProcedure
+      .input(z.object({ roomId: z.number().int().positive(), memberId: z.number().int().positive(), memberToken: z.string().min(20) }))
+      .mutation(async ({ input }) => {
+        const member = await db.getMemberByAccessToken(input.memberId, hashAccessToken(input.memberToken));
+        if (!member || member.roomId !== input.roomId) throw new Error("لا تملك صلاحية دخول الصوت في هذه الغرفة.");
+        return createRoomMediaToken({ roomId: input.roomId, memberId: member.id, displayName: member.displayName, role: member.role });
       }),
     setReady: publicProcedure
       .input(

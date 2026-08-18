@@ -1,0 +1,21 @@
+# Copy this file with the project to a persistent Linux host. Supply all secrets via
+# the host environment; never place production credentials in Git.
+port: 7880
+bind_addresses:
+  - 0.0.0.0
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+
+redis:
+  address: 127.0.0.1:6379
+  password: ${REDIS_PASSWORD}
+
+logging:
+  level: info
+
+room:
+  auto_create: false

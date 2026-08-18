@@ -7,6 +7,12 @@
       android:screenOrientation="landscape"
       android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
     <activity
+      android:name=".UniversalLibretroPlayerActivity"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+      android:exported="false"
+      android:screenOrientation="landscape"
+      android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+    <activity
       android:name=".FamicomCompatPlayerActivity"
       android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
       android:exported="false"

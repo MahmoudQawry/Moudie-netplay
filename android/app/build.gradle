@@ -130,13 +130,6 @@ android {
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
-    // A standalone APK must be buildable in the constrained build environment.
-    // Lint remains available as an explicit developer check; it should not block
-    // packaging after the application and bundled JavaScript have compiled.
-    lint {
-        checkReleaseBuilds false
-        abortOnError false
-    }
 }
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`

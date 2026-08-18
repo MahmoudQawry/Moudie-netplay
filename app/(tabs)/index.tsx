@@ -25,7 +25,7 @@ export default function LobbyScreen() {
 
   const openLocalPlay = (system: string) => {
     haptic.light();
-    router.push({ pathname: "/play/[system]" as never, params: { system, mode: "local" } } as never);
+    router.push({ pathname: "/library/[system]" as never, params: { system } } as never);
   };
 
   return (

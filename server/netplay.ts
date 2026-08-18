@@ -95,10 +95,23 @@ export function registerNetplayServer(server: HttpServer) {
     socket.join(channel);
 
     const snapshot = await db.getRoomSnapshot(session.roomId).catch(() => undefined);
+    const activeSeats = (snapshot?.members ?? [])
+      .filter((member) => member.role === "host" || member.role === "player")
+      .sort((left, right) => {
+        if (left.role === "host") return -1;
+        if (right.role === "host") return 1;
+        return left.id - right.id;
+      });
+    const assignedPlayer = session.role === "spectator"
+      ? null
+      : (() => {
+          const index = activeSeats.findIndex((member) => member.id === session.memberId);
+          return index >= 0 && index < 10 ? index + 1 : null;
+        })();
     socket.emit("netplay:joined", {
       memberId: session.memberId,
       role: session.role,
-      assignedPlayer: session.role === "host" ? 1 : session.role === "player" ? 2 : null,
+      assignedPlayer,
       members: snapshot?.members ?? [],
       onlineMemberIds,
     });

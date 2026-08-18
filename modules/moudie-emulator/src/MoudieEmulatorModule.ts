@@ -1,6 +1,6 @@
 import { NativeModule, requireNativeModule } from "expo";
 
-import type { EmulatorRuntimeStatus, EmulatorSystem, MoudieEmulatorModuleEvents, PreparedLocalGame } from "./MoudieEmulator.types";
+import type { EmulatorCoreCapability, EmulatorRuntimeStatus, EmulatorSystem, MoudieEmulatorModuleEvents, PreparedLocalGame } from "./MoudieEmulator.types";
 
 export type PS1NetplayOptions = {
   serverUrl: string;
@@ -15,8 +15,10 @@ declare class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEven
   getRuntimeStatus(): EmulatorRuntimeStatus;
   getBiosStatus(): Record<string, { required: boolean; available: boolean; files?: string[]; message: string }>;
   getPs1LaunchStatus(): { available: boolean; message: string };
+  getCoreCatalog(): EmulatorCoreCapability[];
   prepareLocalGame(system: EmulatorSystem, uri: string): PreparedLocalGame;
   launchPS1Game(uri: string, fileName: string, netplay?: PS1NetplayOptions): Promise<void>;
+  launchNativeGame(system: EmulatorSystem, uri: string, fileName: string): Promise<void>;
   fingerprintPS1Game(uri: string, fileName: string): Promise<string>;
   launchFamicomCompatGame(uri: string, fileName: string): Promise<void>;
   launchFamicomFocusGame(uri: string, fileName: string): Promise<void>;
@@ -38,8 +40,10 @@ function unavailableModule(): MoudieEmulatorModule {
     getRuntimeStatus: () => ({ runtime: "android-native", supportedSystems: [], nativeBuildRequired: true }) as EmulatorRuntimeStatus,
     getBiosStatus: () => ({}),
     getPs1LaunchStatus: () => ({ available: false, message: unavailable }),
+    getCoreCatalog: () => [],
     prepareLocalGame: () => { throw new Error(unavailable); },
     launchPS1Game: reject,
+    launchNativeGame: reject,
     fingerprintPS1Game: reject,
     launchFamicomCompatGame: reject,
     launchFamicomFocusGame: reject,

@@ -90,7 +90,7 @@ const config: ExpoConfig = {
   },
   web: {
     bundler: "metro",
-    output: "static",
+    output: "single",
     favicon: "./assets/images/moudie-brand-icon.png",
   },
   plugins: [
