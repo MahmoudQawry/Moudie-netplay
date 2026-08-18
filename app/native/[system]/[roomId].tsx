@@ -37,6 +37,7 @@ export default function NativeRoomScreen() {
   const [picking, setPicking] = useState(false);
   const [status, setStatus] = useState("Choose the same local file on both devices.");
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
+  const launchRef = useRef<(netplay?: boolean, settingsMode?: boolean, synchronizedStart?: boolean) => Promise<void>>(async () => undefined);
   const catalog = useMemo(() => MoudieEmulatorModule.getCoreCatalog().find((entry) => entry.system === system), [system]);
   const snapshotQuery = useRealtimeRoomSnapshot(numericRoomId, credential, 4_000);
   const coreVersion = `moudie-${system}-libretro-lockstep-v1`;
@@ -49,11 +50,9 @@ export default function NativeRoomScreen() {
     const joined = (payload: { onlineMemberIds?: number[]; assignedPlayer?: number }) => { setConnected(true); setRemoteOnline(Boolean(payload.onlineMemberIds?.some((id) => id !== credential.memberId))); setAssignedPlayer(isPlayerSeat(payload.assignedPlayer) ? payload.assignedPlayer : null); };
     const disconnected = () => { setConnected(false); setRemoteOnline(false); setStatus("Room channel disconnected. Reconnecting automatically…"); };
     const presence = (payload: { memberId?: number; online?: boolean }) => { if (payload.memberId !== credential.memberId) setRemoteOnline(Boolean(payload.online)); };
-    const start = (payload: { system?: string }) => { if (payload.system === system && game) launch(true); };
+    const start = (payload: { system?: string }) => { if (payload.system === system) void launchRef.current(true, false, true); };
     socket.on("connect", () => setConnected(true)); socket.on("disconnect", disconnected); socket.on("netplay:joined", joined); socket.on("netplay:presence", presence); socket.on("netplay:session-start", start); socket.on("netplay:session-start-refused", (payload: { message?: string }) => setStatus(payload.message || "Waiting for the other player.")); socket.connect();
     return () => { socket.disconnect(); if (socketRef.current === socket) socketRef.current = null; };
-    // launch reads the latest selected game when the room sends its start event.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credential, game, numericRoomId, system]);
 
   const chooseGame = async () => {
@@ -84,14 +83,15 @@ export default function NativeRoomScreen() {
   };
 
   const requestStart = () => { socketRef.current?.emit("netplay:session-start-request", { system }); setStarting(true); setStatus("Checking every active player's file and matching core before synchronized start…"); };
-  const launch = async (netplay = false, settingsMode = false) => {
+  const launch = async (netplay = false, settingsMode = false, synchronizedStart = false) => {
     if (!game || Platform.OS === "web") return;
     try {
-      const session = netplay && credential && assignedPlayer ? { serverUrl: getNetplayServiceUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system, fingerprint: game.fingerprint, coreVersion, player: assignedPlayer } : undefined;
+      const session = netplay && credential && assignedPlayer && (synchronizedStart || connected) ? { serverUrl: getNetplayServiceUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system, fingerprint: game.fingerprint, coreVersion, player: assignedPlayer } : undefined;
       if (netplay && !session) throw new Error("This room needs an assigned player seat and a verified multiplayer session.");
       await MoudieEmulatorModule.launchNativeGame(system as EmulatorSystem, game.uri, game.name, { orientation, aspectRatio, settingsMode }, session);
     } catch (error) { const message = error instanceof Error ? error.message : "Try again."; Alert.alert(`Could not start ${meta.title}`, message); setStatus(message); }
   };
+  launchRef.current = launch;
 
   const host = snapshotQuery.data?.members.find((member) => member.id === credential?.memberId)?.role === "host";
   const canStart = Boolean(ready && assignedPlayer === 1 && remoteOnline && connected && !starting);

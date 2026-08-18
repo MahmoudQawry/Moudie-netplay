@@ -105,6 +105,11 @@ class UniversalNetplayClient(
     socket?.emit("netplay:universal-sync-ack", JSONObject().put("syncId", syncId))
   }
 
+  fun sendChat(text: String) {
+    val safeText = text.trim().take(400)
+    if (safeText.isNotEmpty()) socket?.emit("netplay:chat", JSONObject().put("text", safeText))
+  }
+
   fun close() {
     socket?.off()
     socket?.disconnect()

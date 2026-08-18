@@ -53,6 +53,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
   private var editToggleButton: TextView? = null
   private var aspectMode = "fit"
   private var micMuted = true
+  private val gameplayHud = mutableListOf<View>()
   @Volatile private var stateActionInProgress = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,12 +101,12 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     }
     root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     root.addView(createHeader(gameFile), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
-    root.addView(createSocialOverlay(), FrameLayout.LayoutParams(dp(48), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(12) })
+    attachGameplayHud()
     controlsContainer = FrameLayout(this)
     root.addView(controlsContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
     renderControls()
     setContentView(root)
-    root.post { applyAspectRatio() }
+    root.post { applyAspectRatio(); restoreScreenLayout(); enableScreenEditor() }
   }
 
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -140,15 +141,25 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     addView(editToggleButton)
   }
 
-  private fun createSocialOverlay(): LinearLayout = LinearLayout(this).apply {
-    orientation = LinearLayout.VERTICAL
-    gravity = Gravity.CENTER
-    alpha = .92f
-    addView(button("CHAT", KeyEvent.KEYCODE_UNKNOWN, dp(48), dp(44), onClick = { showToast("Text chat is available in an online room.") }), LinearLayout.LayoutParams(dp(48), dp(44)).apply { bottomMargin = dp(10) })
-    addView(button(if (micMuted) "MIC×" else "MIC", KeyEvent.KEYCODE_UNKNOWN, dp(48), dp(44), onClick = {
-      micMuted = !micMuted
-      showToast(if (micMuted) "Microphone muted." else "Microphone enabled. Voice connects when you join a room.")
-    }), LinearLayout.LayoutParams(dp(48), dp(44)))
+  private fun attachGameplayHud() {
+    gameplayHud.forEach { root.removeView(it) }
+    gameplayHud.clear()
+    val actions = listOf(
+      Triple("CHAT", "chat") { showToast("Open the room chat while connected to an online Famicom room.") },
+      Triple(if (micMuted) "MIC×" else "MIC", "microphone") {
+        micMuted = !micMuted
+        gameplayHud.filterIsInstance<DraggableHudButton>().firstOrNull { it.text.toString().startsWith("MIC") }?.text = if (micMuted) "MIC×" else "MIC"
+        showToast(if (micMuted) "Microphone muted." else "Microphone enabled.")
+      },
+      Triple("SAVE", "save") { saveState() },
+      Triple("LOAD", "load") { loadState() },
+      Triple("EXIT", "exit") { finish() },
+    )
+    actions.forEachIndexed { index, (label, id, action) ->
+      val hud = DraggableHudButton(this, controlPreferences, "famicom", id, label, editing = { controlEditMode }, action = action).also { it.restore() }
+      root.addView(hud, hud.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
+      gameplayHud += hud
+    }
   }
 
   private fun renderControls() {
@@ -247,17 +258,23 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     layoutParams = LinearLayout.LayoutParams(dp(92), dp(54))
   }
   private fun button(control: EmulatorTouchButton, width: Int, height: Int = dp(46)): TextView =
-    button(control.label, control.keyCode, width, height).also { view -> attachEditableControl(view, control.id, control.keyCode) }
-  private fun button(label: String, keyCode: Int, width: Int, height: Int = dp(46), onClick: (() -> Unit)? = null): TextView = TextView(this).apply {
+    button(control.label, control.keyCode, width, height, isDirection = control.id in setOf("up", "down", "left", "right")).also { view -> attachEditableControl(view, control.id, control.keyCode) }
+  private fun button(label: String, keyCode: Int, width: Int, height: Int = dp(46), onClick: (() -> Unit)? = null, isDirection: Boolean = false): TextView = TextView(this).apply {
     val side = maxOf(width, height)
     text = label; textSize = if (label.length == 1) 21f else 10f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-    background = circularControlBackground(); isClickable = true; isFocusable = true
+    background = if (isDirection) directionalControlBackground() else circularControlBackground(); isClickable = true; isFocusable = true
     layoutParams = LinearLayout.LayoutParams(side, side)
     if (onClick != null) setOnClickListener { onClick() } else setOnTouchListener { _, event -> when (event.actionMasked) { MotionEvent.ACTION_DOWN -> retroView.sendKeyEvent(KeyEvent.ACTION_DOWN, keyCode); MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> retroView.sendKeyEvent(KeyEvent.ACTION_UP, keyCode) }; true }
   }
   private fun circularControlBackground(): GradientDrawable = GradientDrawable().apply {
     shape = GradientDrawable.OVAL
     setColor(Color.argb(150, 37, 62, 85))
+    setStroke(dp(2), Color.argb(205, 218, 239, 255))
+  }
+  private fun directionalControlBackground(): GradientDrawable = GradientDrawable().apply {
+    shape = GradientDrawable.RECTANGLE
+    cornerRadius = dp(10).toFloat()
+    setColor(Color.argb(150, 14, 39, 61))
     setStroke(dp(2), Color.argb(205, 218, 239, 255))
   }
   private fun toggleControlEditing() {
@@ -332,12 +349,69 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     return min(requested, safeWidth / 5)
   }
   private fun applyAspectRatio() {
-    if (root.width <= 0 || root.height <= 0 || aspectMode == "fit") return
+    if (root.width <= 0 || root.height <= 0) return
+    if (aspectMode == "fit") {
+      gameFrame.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+      return
+    }
     val ratio = if (aspectMode == "4:3") 4f / 3f else 16f / 9f
     var width = root.width
     var height = (width / ratio).toInt()
     if (height > root.height) { height = root.height; width = (height * ratio).toInt() }
     gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
+  }
+
+  private fun screenLayoutKey(): String {
+    val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+    return "famicom.$orientation.screen"
+  }
+
+  private fun restoreScreenLayout() {
+    val key = screenLayoutKey()
+    gameFrame.translationX = controlPreferences.getFloat("$key.x", 0f)
+    gameFrame.translationY = controlPreferences.getFloat("$key.y", 0f)
+    val scale = controlPreferences.getFloat("$key.scale", 1f)
+    gameFrame.scaleX = scale
+    gameFrame.scaleY = scale
+  }
+
+  private fun persistScreenLayout() {
+    val key = screenLayoutKey()
+    controlPreferences.edit()
+      .putFloat("$key.x", gameFrame.translationX)
+      .putFloat("$key.y", gameFrame.translationY)
+      .putFloat("$key.scale", gameFrame.scaleX)
+      .apply()
+  }
+
+  private fun enableScreenEditor() {
+    var downX = 0f; var downY = 0f; var originX = 0f; var originY = 0f
+    val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+      override fun onScale(detector: ScaleGestureDetector): Boolean {
+        if (!controlEditMode) return false
+        val next = (gameFrame.scaleX * detector.scaleFactor).coerceIn(.55f, 1.5f)
+        gameFrame.scaleX = next
+        gameFrame.scaleY = next
+        return true
+      }
+    })
+    gameFrame.setOnTouchListener { _, event ->
+      if (!controlEditMode) return@setOnTouchListener false
+      scaler.onTouchEvent(event)
+      when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+          downX = event.rawX; downY = event.rawY
+          originX = gameFrame.translationX; originY = gameFrame.translationY
+          showToast("Screen selected. Drag or pinch to resize it for this orientation.")
+        }
+        MotionEvent.ACTION_MOVE -> if (!scaler.isInProgress) {
+          gameFrame.translationX = originX + event.rawX - downX
+          gameFrame.translationY = originY + event.rawY - downY
+        }
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> persistScreenLayout()
+      }
+      true
+    }
   }
 
   private fun showToast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()

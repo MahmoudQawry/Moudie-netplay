@@ -82,7 +82,7 @@ class PS1PlayerActivity : ComponentActivity() {
   private var selectedEditableControl: Pair<TextView, String>? = null
   private var aspectMode = "fit"
   private lateinit var topControls: FrameLayout
-  private var inGameOverlay: LinearLayout? = null
+  private val gameplayHud = mutableListOf<View>()
   private lateinit var stateFile: File
   private val controlProfile = EmulatorControlProfiles.PS1
   private var netplayClient: Ps1NetplayClient? = null
@@ -183,7 +183,7 @@ class PS1PlayerActivity : ComponentActivity() {
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.BOTTOM,
     ))
-    if (!settingsMode) attachGameplayOverlay()
+    attachGameplayOverlay()
     setContentView(root)
     root.post { applyAspectRatio(); restoreScreenLayout(); enableScreenEditor() }
     connectNetplayIfConfigured()
@@ -579,23 +579,21 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   private fun attachGameplayOverlay() {
-    inGameOverlay?.let { root.removeView(it) }
-    inGameOverlay = createInGameOverlay().also { overlay ->
-      root.addView(overlay, FrameLayout.LayoutParams(
-        FrameLayout.LayoutParams.WRAP_CONTENT,
-        dp(38),
-        Gravity.RIGHT or Gravity.TOP,
-      ).apply { rightMargin = dp(12); topMargin = dp(56) })
+    gameplayHud.forEach { root.removeView(it) }
+    gameplayHud.clear()
+    val actions = listOf(
+      Triple("CHAT", "chat") { showChatDialog() },
+      Triple(if (micOverlayMuted) "MIC×" else "MIC", "microphone") { toggleOverlayMicrophone() },
+      Triple("SAVE", "save") { saveState(silent = false) },
+      Triple("LOAD", "load") { loadState() },
+      Triple("EXIT", "exit") { finish() },
+    )
+    actions.forEachIndexed { index, (label, id, action) ->
+      val button = DraggableHudButton(this, controlPreferences, "ps1", id, label, editing = { settingsMode }, action = action).also { it.restore() }
+      if (id == "microphone") micOverlayButton = button
+      root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
+      gameplayHud += button
     }
-  }
-
-  private fun createInGameOverlay(): LinearLayout = LinearLayout(this).apply {
-    orientation = LinearLayout.HORIZONTAL
-    gravity = Gravity.CENTER
-    alpha = .94f
-    addView(button("CHAT", KeyEvent.KEYCODE_UNKNOWN, dp(52), dp(38), onClick = { showChatDialog() }), LinearLayout.LayoutParams(dp(52), dp(38)).apply { rightMargin = dp(8) })
-    micOverlayButton = button("MIC×", KeyEvent.KEYCODE_UNKNOWN, dp(52), dp(38), onClick = { toggleOverlayMicrophone() })
-    addView(micOverlayButton, LinearLayout.LayoutParams(dp(52), dp(38)))
   }
 
   private fun toggleOverlayMicrophone() {

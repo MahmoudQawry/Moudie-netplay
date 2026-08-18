@@ -34,6 +34,7 @@ export default function PS1Screen() {
   const playerOptions = { orientation: playerOrientation, aspectRatio: playerAspect };
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
+  const launchGameRef = useRef<(withNetplay?: boolean, settingsMode?: boolean, synchronizedStart?: boolean) => Promise<void>>(async () => undefined);
   const voiceChatRef = useRef<RoomVoiceChatHandle | null>(null);
   const [roomConnected, setRoomConnected] = useState(false);
   const [remoteOnline, setRemoteOnline] = useState(false);
@@ -86,9 +87,9 @@ export default function PS1Screen() {
       if (payload.memberId !== credential.memberId) setRemoteOnline(Boolean(payload.online));
     };
     const start = (payload: { system?: string }) => {
-      if (payload.system !== "ps1" || !game || !credential) return;
+      if (payload.system !== "ps1") return;
       setStatus("All active players are ready. Opening the PS1 player at the shared start time…");
-      launchGame(true);
+      void launchGameRef.current(true, false, true);
     };
     socket.on("connect", connected);
     socket.on("disconnect", disconnected);
@@ -105,8 +106,6 @@ export default function PS1Screen() {
       socket.disconnect();
       if (socketRef.current === socket) socketRef.current = null;
     };
-    // launchGame intentionally remains outside the dependency list so the socket subscription is recreated only when room credentials or game selection change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credential, game, numericRoomId]);
 
   const pickGame = async () => {
@@ -164,7 +163,7 @@ export default function PS1Screen() {
     setStatus("Checking every active player's game file and core before sending the start signal…");
   };
 
-  const launchGame = async (withNetplay = false, settingsMode = false) => {
+  const launchGame = async (withNetplay = false, settingsMode = false, synchronizedStart = false) => {
     if (!game) return;
     if (Platform.OS === "web") {
       Alert.alert("Android APK required", "The native PS1 player runs in the Android APK and is not available in the web preview.");
@@ -172,7 +171,7 @@ export default function PS1Screen() {
     }
     try {
       setIsLaunching(true);
-      const netplay = withNetplay && credential && assignedPlayer && game.fingerprint && ps1NetplayReady ? {
+      const netplay = withNetplay && credential && assignedPlayer && game.fingerprint && (synchronizedStart || ps1NetplayReady) ? {
         serverUrl: getNetplayServiceUrl(),
         roomId: numericRoomId,
         memberId: credential.memberId,
@@ -193,6 +192,7 @@ export default function PS1Screen() {
       setIsLaunching(false);
     }
   };
+  launchGameRef.current = launchGame;
 
   const pickBios = async () => {
     if (Platform.OS === "web") {

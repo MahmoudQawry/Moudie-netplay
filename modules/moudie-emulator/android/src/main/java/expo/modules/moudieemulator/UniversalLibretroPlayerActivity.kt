@@ -18,6 +18,7 @@ import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -78,7 +79,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private var micMuted = true
   private var micOverlayButton: TextView? = null
   private lateinit var headerView: LinearLayout
-  private var socialOverlay: LinearLayout? = null
+  private val gameplayHud = mutableListOf<View>()
   private var stateActionInProgress = false
   private var universalNetplayClient: UniversalNetplayClient? = null
   private var localPlayerIndex = 0
@@ -183,7 +184,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     metricPill = createMetricPill()
     root.addView(metricPill, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(32), Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = dp(54) })
     addController()
-    if (!settingsMode) attachGameplaySocialOverlay()
+    attachGameplaySocialOverlay()
     setContentView(root)
     root.post { applyAspectRatio(); restoreScreenLayout(); enableScreenEditor() }
     if (!settingsMode) connectNetplayIfConfigured()
@@ -573,29 +574,46 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   }
 
   private fun attachGameplaySocialOverlay() {
-    socialOverlay?.let { root.removeView(it) }
-    socialOverlay = createSocialOverlay().also { overlay ->
-      overlay.tag = "moudie-social-overlay"
-      val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-      root.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(38), if (landscape) Gravity.RIGHT or Gravity.TOP else Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply {
-        rightMargin = dp(12)
-        if (landscape) topMargin = dp(54)
-      })
+    gameplayHud.forEach { root.removeView(it) }
+    gameplayHud.clear()
+    val actions = listOf(
+      Triple("CHAT", "chat") { showChatDialog() },
+      Triple(if (micMuted) "MIC×" else "MIC", "microphone") {
+        micMuted = !micMuted
+        micOverlayButton?.text = if (micMuted) "MIC×" else "MIC"
+        showToast(if (micMuted) "Microphone muted." else "Microphone enabled.")
+      },
+      Triple("SAVE", "save") { saveState(silent = false) },
+      Triple("LOAD", "load") { loadState() },
+      Triple("EXIT", "exit") { finish() },
+    )
+    actions.forEachIndexed { index, (label, id, action) ->
+      val button = DraggableHudButton(this, preferences, definition.system, id, label, editing = { settingsMode }, action = action).also { it.restore() }
+      if (id == "microphone") micOverlayButton = button
+      root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
+      gameplayHud += button
     }
   }
 
-  private fun createSocialOverlay(): LinearLayout = LinearLayout(this).apply {
-    orientation = LinearLayout.HORIZONTAL
-    gravity = Gravity.CENTER
-    alpha = .94f
-    addView(headerButton("CHAT") { showToast("Open room chat from the player setup screen.") }, LinearLayout.LayoutParams(dp(52), dp(38)).apply { rightMargin = dp(8) })
-    micOverlayButton = headerButton(if (micMuted) "MIC×" else "MIC") {
-      micMuted = !micMuted
-      micOverlayButton?.text = if (micMuted) "MIC×" else "MIC"
-      val status = if (micMuted) "Microphone muted." else "Microphone enabled."
-      showToast("$status Voice is managed in the room.")
+  private fun showChatDialog() {
+    if (universalNetplayClient == null) {
+      showToast("In-game chat is available in a NetPlay session only.")
+      return
     }
-    addView(micOverlayButton, LinearLayout.LayoutParams(dp(52), dp(38)))
+    val input = EditText(this).apply {
+      hint = "Write a message to the room…"
+      setSingleLine(false)
+      maxLines = 3
+      setTextColor(Color.WHITE)
+      setHintTextColor(Color.LTGRAY)
+      setPadding(dp(16), dp(10), dp(16), dp(10))
+    }
+    AlertDialog.Builder(this)
+      .setTitle("Room message")
+      .setView(input)
+      .setNegativeButton("Cancel", null)
+      .setPositiveButton("Send") { _, _ -> universalNetplayClient?.sendChat(input.text?.toString().orEmpty()) }
+      .show()
   }
 
   private fun saveState(silent: Boolean) {

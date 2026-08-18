@@ -28,6 +28,7 @@ export default function PSPRoomScreen() {
   const [aspectRatio, setAspectRatio] = useState<"fit" | "4:3" | "16:9">("4:3");
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
+  const launchGameRef = useRef<(withNetplay?: boolean, settingsMode?: boolean, synchronizedStart?: boolean) => Promise<void>>(async () => undefined);
   const [roomConnected, setRoomConnected] = useState(false);
   const [remoteOnline, setRemoteOnline] = useState(false);
   const [assignedPlayer, setAssignedPlayer] = useState<PlayerSeat | null>(null);
@@ -53,15 +54,13 @@ export default function PSPRoomScreen() {
     };
     const presence = (payload: { memberId?: number; online?: boolean }) => { if (payload.memberId !== credential.memberId) setRemoteOnline(Boolean(payload.online)); };
     const start = (payload: { system?: string }) => {
-      if (payload.system !== "psp" || !game || !credential) return;
+      if (payload.system !== "psp") return;
       setStatus("All active players are ready. Opening the synchronized PSP player…");
-      launchGame(true);
+      void launchGameRef.current(true, false, true);
     };
     const refused = (payload: { message?: string }) => setStatus(payload.message || "Waiting for the other player to verify the same file.");
     socket.on("connect", connected); socket.on("disconnect", disconnected); socket.on("netplay:joined", joined); socket.on("netplay:presence", presence); socket.on("netplay:session-start", start); socket.on("netplay:session-start-refused", refused); socket.connect();
     return () => { socket.off("connect", connected); socket.off("disconnect", disconnected); socket.off("netplay:joined", joined); socket.off("netplay:presence", presence); socket.off("netplay:session-start", start); socket.off("netplay:session-start-refused", refused); socket.disconnect(); if (socketRef.current === socket) socketRef.current = null; };
-    // launchGame reads current room state when the synchronized start event arrives.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credential, game, numericRoomId]);
 
   const pickGame = async () => {
@@ -97,17 +96,18 @@ export default function PSPRoomScreen() {
     setStartRequested(true); setStatus("Checking both PSP files and the core before the shared start…");
   };
 
-  const launchGame = async (withNetplay = false, settingsMode = false) => {
+  const launchGame = async (withNetplay = false, settingsMode = false, synchronizedStart = false) => {
     if (!game) return;
     if (Platform.OS === "web") { Alert.alert("Android APK required", "The native PSP player is available in the Android APK only."); return; }
     try {
       setLaunching(true);
-      const netplay = withNetplay && credential && assignedPlayer ? { serverUrl: getNetplayServiceUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system: "psp" as const, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION, player: assignedPlayer } : undefined;
+      const netplay = withNetplay && credential && assignedPlayer && (synchronizedStart || roomConnected) ? { serverUrl: getNetplayServiceUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system: "psp" as const, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION, player: assignedPlayer } : undefined;
       if (withNetplay && !netplay) throw new Error("PSP NetPlay needs an assigned player seat and a verified room session.");
       await MoudieEmulatorModule.launchNativeGame("psp", game.uri, game.name, { ...playerOptions, settingsMode }, netplay);
     } catch (error) { haptic.error(); const message = error instanceof Error ? error.message : "Try again."; Alert.alert("Could not start PSP", message); setStatus(message); }
     finally { setLaunching(false); }
   };
+  launchGameRef.current = launchGame;
 
   const host = snapshotQuery.data?.members.find((member) => member.id === credential?.memberId)?.role === "host";
   const canStart = Boolean(gameReady && assignedPlayer === 1 && remoteOnline && roomConnected && !startRequested);

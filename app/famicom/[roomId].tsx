@@ -2,13 +2,14 @@ import * as DocumentPicker from "expo-document-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
-import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, I18nManager, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, AppState, I18nManager, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import type { Socket } from "socket.io-client";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CustomizableController } from "@/components/customizable-controller";
+import { DraggableHudControls } from "@/components/draggable-hud-controls";
 import { FamicomNativePlayer, type FamicomNativePlayerHandle } from "@/components/famicom-native-player";
 import { RoomVoiceChat } from "@/components/room-voice-chat";
 import { ScreenContainer } from "@/components/screen-container";
@@ -50,6 +51,7 @@ type PeerInstance = {
 
 type ButtonName = "UP" | "DOWN" | "LEFT" | "RIGHT" | "A" | "B" | "START" | "SELECT";
 type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void> };
+type ScreenLayout = { x: number; y: number; scale: number };
 
 export default function FamicomScreen() {
   const { roomId: rawRoomId } = useLocalSearchParams<{ roomId: string }>();
@@ -92,6 +94,9 @@ export default function FamicomScreen() {
   const [focusControlEditor, setFocusControlEditor] = useState(false);
   const [startOrientation, setStartOrientation] = useState<"portrait" | "landscape">("landscape");
   const [screenAspect, setScreenAspect] = useState<"fit" | "4:3" | "16:9">("4:3");
+  const [screenLayout, setScreenLayout] = useState<ScreenLayout>({ x: 0, y: 0, scale: 1 });
+  const screenLayoutRef = useRef<ScreenLayout>({ x: 0, y: 0, scale: 1 });
+  const screenDragOriginRef = useRef<ScreenLayout>({ x: 0, y: 0, scale: 1 });
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -114,6 +119,44 @@ export default function FamicomScreen() {
       browserRef.current?.destroy();
     };
   }, [roomId]);
+
+  const screenStorageKey = `moudie.famicom.screen.v1.${startOrientation}`;
+  useEffect(() => { screenLayoutRef.current = screenLayout; }, [screenLayout]);
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(screenStorageKey).then((saved) => {
+      if (!mounted) return;
+      try {
+        const decoded = saved ? JSON.parse(saved) as Partial<ScreenLayout> : null;
+        setScreenLayout({
+          x: typeof decoded?.x === "number" ? decoded.x : 0,
+          y: typeof decoded?.y === "number" ? decoded.y : 0,
+          scale: typeof decoded?.scale === "number" ? Math.max(0.55, Math.min(1.5, decoded.scale)) : 1,
+        });
+      } catch { setScreenLayout({ x: 0, y: 0, scale: 1 }); }
+    }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, [screenStorageKey]);
+
+  const saveScreenLayout = useCallback((next: ScreenLayout) => {
+    screenLayoutRef.current = next;
+    setScreenLayout(next);
+    AsyncStorage.setItem(screenStorageKey, JSON.stringify(next)).catch(() => undefined);
+  }, [screenStorageKey]);
+  const adjustScreenScale = (delta: number) => saveScreenLayout({ ...screenLayout, scale: Math.max(0.55, Math.min(1.5, screenLayout.scale + delta)) });
+  const screenPanResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => focusControlEditor,
+    onMoveShouldSetPanResponder: () => focusControlEditor,
+    onPanResponderGrant: () => { screenDragOriginRef.current = screenLayout; },
+    onPanResponderMove: (_, gesture) => {
+      const origin = screenDragOriginRef.current;
+      const next = { ...origin, x: origin.x + gesture.dx, y: origin.y + gesture.dy };
+      screenLayoutRef.current = next;
+      setScreenLayout(next);
+    },
+    onPanResponderRelease: () => saveScreenLayout(screenLayoutRef.current),
+    onPanResponderTerminate: () => saveScreenLayout(screenLayoutRef.current),
+  }), [focusControlEditor, saveScreenLayout, screenLayout]);
 
 
   const snapshotQuery = useRealtimeRoomSnapshot(roomId, credential);
@@ -512,13 +555,14 @@ export default function FamicomScreen() {
         </View>
         {!focusMode && <><Text style={styles.eyebrow}>FAMICOM · NETPLAY</Text><Text style={styles.title}>GAME PLAYER</Text><Text style={styles.subtitle}>Choose the same .nes file on both devices. The file stays local and is never uploaded or shared by Moudie NetPlay.</Text></>}
 
-        <View style={[styles.emulatorFrame, focusMode && styles.focusFrame, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9, minHeight: undefined }]}>
+        <View {...screenPanResponder.panHandlers} style={[styles.emulatorFrame, focusMode && styles.focusFrame, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9, minHeight: undefined }, { transform: [{ translateX: screenLayout.x }, { translateY: screenLayout.y }, { scale: screenLayout.scale }] }]}>
           {Platform.OS === "web" ? <View ref={mountRef as never} style={[styles.webMount, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9 }]} /> : romBase64 ? <FamicomNativePlayer ref={nativePlayerRef} romBase64={romBase64} onStatus={setNetworkState} onReady={restoreLocalState} onState={(snapshotValue, requestId) => { if (localStateStorageKey) AsyncStorage.setItem(localStateStorageKey, snapshotValue).catch(() => undefined); if (requestId === "netplay" && assignedPlayer === 1) socketRef.current?.emit("netplay:state", { snapshot: snapshotValue, syncId: ++famicomSyncSequenceRef.current }); if (requestId === "local") setNetworkState("Game state saved locally."); }} /> : null}
           {!romName && <View style={styles.emptyScreen}><Text style={styles.emptyIcon}>▦</Text><Text style={styles.emptyText}>NO GAME SELECTED</Text></View>}
-          {Platform.OS !== "web" && gameActive && romName && <View style={styles.inGameOverlay}><Pressable onPress={() => setInGameChatOpen((open) => !open)} style={({ pressed }) => [styles.inGameOverlayButton, pressed && styles.pressed]}><Text style={styles.inGameOverlayText}>▣</Text></Pressable><Pressable onPress={() => { const muted = !inGameMicMuted; setInGameMicMuted(muted); voiceChatRef.current?.setMicrophoneEnabled(!muted); }} style={({ pressed }) => [styles.inGameOverlayButton, pressed && styles.pressed]}><Text style={styles.inGameOverlayText}>{inGameMicMuted ? "MIC×" : "MIC"}</Text></Pressable></View>}
+          {Platform.OS !== "web" && romName && (gameActive || localNativeGameActive || focusControlEditor) && <DraggableHudControls system="famicom" editable={focusControlEditor && !gameActive} microphoneMuted={inGameMicMuted} onToggleChat={() => setInGameChatOpen((open) => !open)} onToggleMicrophone={() => { const muted = !inGameMicMuted; setInGameMicMuted(muted); voiceChatRef.current?.setMicrophoneEnabled(!muted); }} onSave={saveLocalState} onLoad={() => { void loadLocalState(); }} onExit={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} />}
           {Platform.OS !== "web" && gameActive && inGameChatOpen && <View style={styles.inGameChatOverlay}><TextInput value={chatDraft} onChangeText={setChatDraft} placeholder="Message…" placeholderTextColor="#A7B7C7" style={styles.inGameChatInput} returnKeyType="send" onSubmitEditing={() => { sendChat(); setInGameChatOpen(false); }} /><Pressable onPress={() => { sendChat(); setInGameChatOpen(false); }} style={styles.inGameChatSend}><Text style={styles.inGameChatSendText}>SEND</Text></Pressable></View>}
         </View>
         {focusMode && romName && <View style={[styles.focusPortraitControls, !controlsEnabled && styles.controlsMuted]}>
+          {focusControlEditor && <View style={{ position: "absolute", top: 8, right: 8, zIndex: 6, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(8, 18, 31, 0.9)", borderWidth: 1, borderColor: "#4A7895", borderRadius: 11, padding: 5 }}><Text style={{ color: "#CFEAFF", fontSize: 9, fontWeight: "900", marginHorizontal: 2 }}>SCREEN</Text><Pressable onPress={() => adjustScreenScale(-0.05)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#1B4965", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>−</Text></Pressable><Pressable onPress={() => adjustScreenScale(0.05)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#1B4965", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>+</Text></Pressable></View>}
           <View style={styles.focusTelemetry}>
             <Text style={styles.focusMetric}>FPS —</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>{roomConnected ? "PING — ms" : "LOCAL"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>P{assignedPlayer ?? 1}</Text>
           </View>
