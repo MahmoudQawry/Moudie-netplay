@@ -11,9 +11,22 @@ export type PS1NetplayOptions = {
   player: 1 | 2;
 };
 
+export type UniversalNetplayOptions = {
+  serverUrl: string;
+  roomId: number;
+  memberId: number;
+  memberToken: string;
+  system: "psp" | "sega" | "arcade";
+  fingerprint: string;
+  coreVersion: string;
+  player: 1 | 2;
+};
+
 export type PlayerLaunchOptions = {
   orientation?: "portrait" | "landscape";
   aspectRatio?: "fit" | "4:3" | "16:9";
+  /** Opens controller calibration before gameplay; it never appears during normal play. */
+  settingsMode?: boolean;
 };
 
 declare class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEvents> {
@@ -23,7 +36,8 @@ declare class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEven
   getCoreCatalog(): EmulatorCoreCapability[];
   prepareLocalGame(system: EmulatorSystem, uri: string): PreparedLocalGame;
   launchPS1Game(uri: string, fileName: string, netplay?: PS1NetplayOptions, options?: PlayerLaunchOptions): Promise<void>;
-  launchNativeGame(system: EmulatorSystem, uri: string, fileName: string, options?: PlayerLaunchOptions): Promise<void>;
+  launchNativeGame(system: EmulatorSystem, uri: string, fileName: string, options?: PlayerLaunchOptions, netplay?: UniversalNetplayOptions): Promise<void>;
+  fingerprintNativeGame(system: EmulatorSystem, uri: string, fileName: string): Promise<string>;
   fingerprintPS1Game(uri: string, fileName: string): Promise<string>;
   launchFamicomCompatGame(uri: string, fileName: string, options?: PlayerLaunchOptions): Promise<void>;
   launchFamicomFocusGame(uri: string, fileName: string, options?: PlayerLaunchOptions): Promise<void>;
@@ -49,6 +63,7 @@ function unavailableModule(): MoudieEmulatorModule {
     prepareLocalGame: () => { throw new Error(unavailable); },
     launchPS1Game: reject,
     launchNativeGame: reject,
+    fingerprintNativeGame: reject,
     fingerprintPS1Game: reject,
     launchFamicomCompatGame: reject,
     launchFamicomFocusGame: reject,

@@ -58,6 +58,7 @@ class PS1PlayerActivity : ComponentActivity() {
     const val EXTRA_NETPLAY_PLAYER = "expo.modules.moudieemulator.NETPLAY_PLAYER"
     const val EXTRA_PLAYER_ORIENTATION = "expo.modules.moudieemulator.PLAYER_ORIENTATION"
     const val EXTRA_PLAYER_ASPECT_RATIO = "expo.modules.moudieemulator.PLAYER_ASPECT_RATIO"
+    const val EXTRA_PLAYER_SETTINGS_MODE = "expo.modules.moudieemulator.PLAYER_SETTINGS_MODE"
     private const val NETPLAY_CORE_VERSION = "pcsx-rearmed-0.13.2-lockstep-v1"
     private const val NETPLAY_INPUT_DELAY_FRAMES = 3L
     private const val NETPLAY_FRAME_INTERVAL_MS = 17L
@@ -79,10 +80,11 @@ class PS1PlayerActivity : ComponentActivity() {
   private lateinit var controlsContainer: FrameLayout
   private lateinit var controlPreferences: android.content.SharedPreferences
   private var controlEditMode = false
+  private var settingsMode = false
   private var selectedEditableControl: Pair<TextView, String>? = null
   private var aspectMode = "fit"
-  private var aspectButton: TextView? = null
-  private var editToggleButton: TextView? = null
+  private lateinit var topControls: FrameLayout
+  private var inGameOverlay: LinearLayout? = null
   private lateinit var stateFile: File
   private val controlProfile = EmulatorControlProfiles.PS1
   private var netplayClient: Ps1NetplayClient? = null
@@ -123,6 +125,8 @@ class PS1PlayerActivity : ComponentActivity() {
       )
 
     controlPreferences = getSharedPreferences("moudie-ps1-controls", Context.MODE_PRIVATE)
+    settingsMode = intent.getBooleanExtra(EXTRA_PLAYER_SETTINGS_MODE, false)
+    controlEditMode = settingsMode
     aspectMode = intent.getStringExtra(EXTRA_PLAYER_ASPECT_RATIO)
       ?.takeIf { it in setOf("fit", "4:3", "16:9") }
       ?: controlPreferences.getString("ps1.aspect", "fit") ?: "fit"
@@ -168,7 +172,8 @@ class PS1PlayerActivity : ComponentActivity() {
       addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
     }
     root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-    root.addView(createTopControls(), FrameLayout.LayoutParams(
+    topControls = createTopControls()
+    root.addView(topControls, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.TOP,
@@ -179,11 +184,7 @@ class PS1PlayerActivity : ComponentActivity() {
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.BOTTOM,
     ))
-    root.addView(createInGameOverlay(), FrameLayout.LayoutParams(
-      dp(52),
-      FrameLayout.LayoutParams.WRAP_CONTENT,
-      Gravity.RIGHT or Gravity.CENTER_VERTICAL,
-    ).apply { rightMargin = dp(12) })
+    if (!settingsMode) attachGameplayOverlay()
     setContentView(root)
     root.post { applyAspectRatio() }
     connectNetplayIfConfigured()
@@ -461,27 +462,31 @@ class PS1PlayerActivity : ComponentActivity() {
       setBackgroundColor(Color.argb(105, 4, 12, 22))
       addView(button("×", KeyEvent.KEYCODE_UNKNOWN, dp(38), onClick = { finish() }))
       addView(TextView(this@PS1PlayerActivity).apply {
-        text = "PS1 · LOCAL PLAY"
+        text = if (settingsMode) "PS1 · CONTROLLER SETTINGS" else "PS1 · ${if (lockstepNetplay) "NETPLAY" else "LOCAL PLAY"}"
         setTextColor(Color.rgb(210, 241, 255))
         textSize = 13f
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(12), 0, 0, 0)
       }, LinearLayout.LayoutParams(0, dp(38), 1f))
-      addView(button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { loadState() }))
-      addView(button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { saveState() }))
-      addView(button("−", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(-.1f) }))
-      addView(button("+", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(.1f) }))
-      aspectButton = button(aspectLabel(), KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { cycleAspectRatio() })
-      addView(aspectButton)
-      editToggleButton = button("EDIT", KeyEvent.KEYCODE_UNKNOWN, dp(46), onClick = { toggleControlEditing() })
-      addView(editToggleButton)
+      if (settingsMode) {
+        addView(button("−", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(-.1f) }))
+        addView(button("+", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(.1f) }))
+        addView(button("SAVE & PLAY", KeyEvent.KEYCODE_UNKNOWN, dp(92), onClick = { finishControlSetup() }))
+      } else {
+        addView(button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { loadState() }))
+        addView(button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { saveState() }))
+      }
     }
   }
 
-  private fun toggleControlEditing() {
-    controlEditMode = !controlEditMode
-    editToggleButton?.text = if (controlEditMode) "DONE" else "EDIT"
-    showToast(if (controlEditMode) "Edit mode: drag a button or pinch it to resize. Tap DONE to save." else "PS1 control layout saved for this orientation.")
+  private fun finishControlSetup() {
+    controlEditMode = false
+    settingsMode = false
+    selectedEditableControl = null
+    topControls.removeAllViews()
+    topControls.addView(createTopControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+    attachGameplayOverlay()
+    showToast("PS1 controls were saved for this orientation. You are ready to play.")
   }
 
   private fun resizeSelectedControl(delta: Float) {
@@ -498,17 +503,6 @@ class PS1PlayerActivity : ComponentActivity() {
     showToast("$controlId size ${(next * 100).toInt()}% saved.")
   }
 
-  private fun aspectLabel(): String = if (aspectMode == "fit") "FIT" else aspectMode
-
-  private fun cycleAspectRatio() {
-    val modes = listOf("fit", "4:3", "16:9")
-    aspectMode = modes[(modes.indexOf(aspectMode) + 1) % modes.size]
-    controlPreferences.edit().putString("ps1.aspect", aspectMode).apply()
-    aspectButton?.text = aspectLabel()
-    root.post { applyAspectRatio() }
-    showToast("Screen ratio: ${aspectLabel()}.")
-  }
-
   private fun applyAspectRatio() {
     if (!::gameFrame.isInitialized || root.width <= 0 || root.height <= 0) return
     if (aspectMode == "fit") {
@@ -522,13 +516,24 @@ class PS1PlayerActivity : ComponentActivity() {
     gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
   }
 
+  private fun attachGameplayOverlay() {
+    inGameOverlay?.let { root.removeView(it) }
+    inGameOverlay = createInGameOverlay().also { overlay ->
+      root.addView(overlay, FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams.WRAP_CONTENT,
+        dp(38),
+        Gravity.RIGHT or Gravity.TOP,
+      ).apply { rightMargin = dp(12); topMargin = dp(56) })
+    }
+  }
+
   private fun createInGameOverlay(): LinearLayout = LinearLayout(this).apply {
-    orientation = LinearLayout.VERTICAL
+    orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.CENTER
-    alpha = .9f
-    addView(button("▣", KeyEvent.KEYCODE_UNKNOWN, dp(48), dp(48), onClick = { showChatDialog() }), LinearLayout.LayoutParams(dp(48), dp(48)).apply { bottomMargin = dp(10) })
-    micOverlayButton = button("MIC×", KeyEvent.KEYCODE_UNKNOWN, dp(48), dp(48), onClick = { toggleOverlayMicrophone() })
-    addView(micOverlayButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+    alpha = .94f
+    addView(button("CHAT", KeyEvent.KEYCODE_UNKNOWN, dp(52), dp(38), onClick = { showChatDialog() }), LinearLayout.LayoutParams(dp(52), dp(38)).apply { rightMargin = dp(8) })
+    micOverlayButton = button("MIC×", KeyEvent.KEYCODE_UNKNOWN, dp(52), dp(38), onClick = { toggleOverlayMicrophone() })
+    addView(micOverlayButton, LinearLayout.LayoutParams(dp(52), dp(38)))
   }
 
   private fun toggleOverlayMicrophone() {
@@ -784,7 +789,7 @@ class PS1PlayerActivity : ComponentActivity() {
         when (event.actionMasked) {
           MotionEvent.ACTION_DOWN -> {
             selectedEditableControl = view to controlId
-            showToast("$controlId selected. Drag, pinch, or use − / +.")
+            showToast("$controlId selected. Drag or pinch to resize it for this orientation.")
             downX = event.rawX
             downY = event.rawY
             originX = view.translationX

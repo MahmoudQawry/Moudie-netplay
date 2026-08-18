@@ -19,9 +19,6 @@ export default function RoomScreen() {
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
   const [roomConnected, setRoomConnected] = useState(false);
   const [remoteOnline, setRemoteOnline] = useState(false);
-  const [playerSetupSystem, setPlayerSetupSystem] = useState<"nes" | "ps1" | "psp" | null>(null);
-  const [playerOrientation, setPlayerOrientation] = useState<"portrait" | "landscape">("landscape");
-  const [playerAspect, setPlayerAspect] = useState<"fit" | "4:3" | "16:9">("4:3");
 
   useEffect(() => {
     if (Number.isFinite(roomId)) getRoomCredential(roomId).then(setCredential);
@@ -109,19 +106,21 @@ export default function RoomScreen() {
           ))}
         </View>
 
-        {playerSetupSystem && <View style={styles.playerSetup}><Text style={styles.playerSetupTitle}>START PLAY SETUP</Text><Text style={styles.playerSetupLabel}>ORIENTATION</Text><View style={styles.setupRow}>{(["portrait", "landscape"] as const).map((option) => <Pressable key={option} onPress={() => setPlayerOrientation(option)} style={[styles.setupOption, playerOrientation === option && styles.setupOptionActive]}><Text style={styles.setupOptionText}>{option.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.playerSetupLabel}>SCREEN RATIO</Text><View style={styles.setupRow}>{(["fit", "4:3", "16:9"] as const).map((option) => <Pressable key={option} onPress={() => setPlayerAspect(option)} style={[styles.setupOption, playerAspect === option && styles.setupOptionActive]}><Text style={styles.setupOptionText}>{option === "fit" ? "FIT" : option}</Text></Pressable>)}</View><Pressable onPress={() => { const pathname = playerSetupSystem === "nes" ? "/famicom/[roomId]" : playerSetupSystem === "ps1" ? "/ps1/[roomId]" : "/psp/[roomId]"; router.push({ pathname: pathname as never, params: { roomId: String(roomId), orientation: playerOrientation, aspectRatio: playerAspect } } as never); setPlayerSetupSystem(null); }} style={styles.setupConfirm}><Text style={styles.setupConfirmText}>CONFIRM & CONTINUE</Text></Pressable></View>}
-
         {snapshot.room.system === "nes" ? (
-          <Pressable onPress={() => setPlayerSetupSystem("nes")} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
+          <Pressable onPress={() => router.push({ pathname: "/famicom/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
             <Text style={styles.playText}>START PLAY · FAMICOM</Text>
           </Pressable>
         ) : snapshot.room.system === "ps1" ? (
-          <Pressable onPress={() => setPlayerSetupSystem("ps1")} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
+          <Pressable onPress={() => router.push({ pathname: "/ps1/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
             <Text style={styles.playText}>START PLAY · PS1</Text>
           </Pressable>
         ) : snapshot.room.system === "psp" ? (
-          <Pressable onPress={() => setPlayerSetupSystem("psp")} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
+          <Pressable onPress={() => router.push({ pathname: "/psp/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
             <Text style={styles.playText}>START PLAY · PSP</Text>
+          </Pressable>
+        ) : snapshot.room.system === "sega" || snapshot.room.system === "arcade" ? (
+          <Pressable onPress={() => router.push({ pathname: "/native/[system]/[roomId]", params: { system: snapshot.room.system, roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
+            <Text style={styles.playText}>START PLAY · {SYSTEM_LABEL[snapshot.room.system].toUpperCase()}</Text>
           </Pressable>
         ) : (
           <>
@@ -175,15 +174,6 @@ const styles = StyleSheet.create({
   progress: { color: "#8BB7CF", fontSize: 12, fontWeight: "800", textAlign: "right", marginTop: 11 },
   playButton: { minHeight: 54, borderRadius: 16, backgroundColor: "#F26B5B", alignItems: "center", justifyContent: "center", marginTop: 20 },
   playText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
-  playerSetup: { marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: "#4A7895", backgroundColor: "#102236", padding: 14 },
-  playerSetupTitle: { color: "#D8F4FF", fontSize: 14, fontWeight: "900" },
-  playerSetupLabel: { color: "#83BFD9", fontSize: 10, fontWeight: "900", marginTop: 12 },
-  setupRow: { flexDirection: "row", gap: 8, marginTop: 7 },
-  setupOption: { flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: "#35546F", backgroundColor: "#172D43" },
-  setupOptionActive: { backgroundColor: "#146C94", borderColor: "#69E8FF" },
-  setupOptionText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
-  setupConfirm: { minHeight: 46, marginTop: 15, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: "#48C78E" },
-  setupConfirmText: { color: "#062817", fontSize: 12, fontWeight: "900" },
   errorTitle: { color: "#F3F7FB", fontSize: 23, fontWeight: "800", textAlign: "center" },
   errorText: { color: "#9BAFC4", fontSize: 15, lineHeight: 22, textAlign: "center", marginTop: 8 },
   outlineButton: { marginTop: 24, borderWidth: 1, borderColor: "#62C2EB", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14 },

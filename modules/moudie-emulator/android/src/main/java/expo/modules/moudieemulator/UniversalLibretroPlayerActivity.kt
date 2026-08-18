@@ -7,6 +7,9 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Base64
 import android.view.Choreographer
 import android.view.Gravity
 import android.view.KeyEvent
@@ -23,9 +26,15 @@ import androidx.lifecycle.lifecycleScope
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.ShaderConfig
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import java.util.TreeMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
@@ -43,6 +52,16 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     const val EXTRA_GAME_NAME = "expo.modules.moudieemulator.GAME_NAME"
     const val EXTRA_PLAYER_ORIENTATION = "expo.modules.moudieemulator.PLAYER_ORIENTATION"
     const val EXTRA_PLAYER_ASPECT_RATIO = "expo.modules.moudieemulator.PLAYER_ASPECT_RATIO"
+    const val EXTRA_PLAYER_SETTINGS_MODE = "expo.modules.moudieemulator.PLAYER_SETTINGS_MODE"
+    const val EXTRA_NETPLAY_SERVER_URL = "expo.modules.moudieemulator.NETPLAY_SERVER_URL"
+    const val EXTRA_NETPLAY_ROOM_ID = "expo.modules.moudieemulator.NETPLAY_ROOM_ID"
+    const val EXTRA_NETPLAY_MEMBER_ID = "expo.modules.moudieemulator.NETPLAY_MEMBER_ID"
+    const val EXTRA_NETPLAY_MEMBER_TOKEN = "expo.modules.moudieemulator.NETPLAY_MEMBER_TOKEN"
+    const val EXTRA_NETPLAY_FINGERPRINT = "expo.modules.moudieemulator.NETPLAY_FINGERPRINT"
+    const val EXTRA_NETPLAY_CORE_VERSION = "expo.modules.moudieemulator.NETPLAY_CORE_VERSION"
+    const val EXTRA_NETPLAY_PLAYER = "expo.modules.moudieemulator.NETPLAY_PLAYER"
+    private const val NETPLAY_INPUT_DELAY_FRAMES = 3L
+    private const val NETPLAY_FRAME_INTERVAL_MS = 17L
   }
 
   private lateinit var retroView: GLRetroView
@@ -52,13 +71,30 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private lateinit var stateFile: File
   private lateinit var preferences: android.content.SharedPreferences
   private var customizationEnabled = false
+  private var settingsMode = false
   private val controlButtons = mutableListOf<MovableControlButton>()
   private var selectedControl: MovableControlButton? = null
   private var aspectMode = "fit"
-  private var aspectButton: TextView? = null
   private var micMuted = true
   private var micOverlayButton: TextView? = null
+  private lateinit var headerView: LinearLayout
+  private var socialOverlay: LinearLayout? = null
   private var stateActionInProgress = false
+  private var universalNetplayClient: UniversalNetplayClient? = null
+  private var localPlayerIndex = 0
+  private var lockstepNetplay = false
+  @Volatile private var lastNetplaySyncId = -1L
+  private val lockstepActive = AtomicBoolean(false)
+  private val lockstepHandler = Handler(Looper.getMainLooper())
+  private val bootstrapHandler = Handler(Looper.getMainLooper())
+  private var bootstrapRequestAttempts = 0
+  private val remoteFrameMasks = TreeMap<Long, Int>()
+  private val localFrameMasks = TreeMap<Long, Int>()
+  private val localPressedKeys = mutableSetOf<Int>()
+  private var nextLockstepFrame = 0L
+  private var appliedLocalMask = 0
+  private var appliedRemoteMask = 0
+  private lateinit var netplayKeyCodes: IntArray
   private lateinit var metricPill: TextView
   private var frameWindowStartedAt = 0L
   private var framesInWindow = 0
@@ -69,7 +105,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       val elapsed = frameTimeNanos - frameWindowStartedAt
       if (elapsed >= 1_000_000_000L) {
         val fps = (framesInWindow * 1_000_000_000L / elapsed).coerceAtMost(120L)
-        if (::metricPill.isInitialized) metricPill.text = "FPS $fps   •   LOCAL PING   •   P1"
+        if (::metricPill.isInitialized) metricPill.text = if (lockstepNetplay) "FPS $fps   •   ROOM PING   •   P${localPlayerIndex + 1}" else "FPS $fps   •   LOCAL PING   •   P1"
         frameWindowStartedAt = frameTimeNanos
         framesInWindow = 0
       }
@@ -97,6 +133,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       showError("The requested emulator system is not supported.")
       return
     }
+    netplayKeyCodes = controlKeyCodes(definition.profile)
     val gameFile = File(intent.getStringExtra(EXTRA_GAME_PATH).orEmpty())
     val coreFile = File(intent.getStringExtra(EXTRA_CORE_PATH).orEmpty())
     if (!gameFile.isFile || !gameFile.canRead()) {
@@ -109,6 +146,8 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     }
 
     preferences = getSharedPreferences("moudie-controller-layouts", Context.MODE_PRIVATE)
+    settingsMode = intent.getBooleanExtra(EXTRA_PLAYER_SETTINGS_MODE, false)
+    customizationEnabled = settingsMode
     aspectMode = intent.getStringExtra(EXTRA_PLAYER_ASPECT_RATIO)
       ?.takeIf { it in setOf("fit", "4:3", "16:9") }
       ?: preferences.getString("${definition.system}.aspect", "fit") ?: "fit"
@@ -137,22 +176,24 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
     gameFrame = FrameLayout(this).apply { addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)) }
     root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-    root.addView(createHeader(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(48), Gravity.TOP))
+    headerView = createHeader().also { it.tag = "moudie-player-header" }
+    root.addView(headerView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(48), Gravity.TOP))
     metricPill = createMetricPill()
     root.addView(metricPill, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(32), Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = dp(54) })
     addController()
-    root.addView(createSocialOverlay(), FrameLayout.LayoutParams(dp(48), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(12) })
+    if (!settingsMode) attachGameplaySocialOverlay()
     setContentView(root)
     root.post { applyAspectRatio() }
+    if (!settingsMode) connectNetplayIfConfigured()
   }
 
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-    if (::retroView.isInitialized) retroView.sendKeyEvent(KeyEvent.ACTION_DOWN, keyCode, 0)
+    if (::retroView.isInitialized) sendLocalKey(KeyEvent.ACTION_DOWN, keyCode)
     return super.onKeyDown(keyCode, event)
   }
 
   override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-    if (::retroView.isInitialized) retroView.sendKeyEvent(KeyEvent.ACTION_UP, keyCode, 0)
+    if (::retroView.isInitialized) sendLocalKey(KeyEvent.ACTION_UP, keyCode)
     return super.onKeyUp(keyCode, event)
   }
 
@@ -176,26 +217,195 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     super.onPause()
   }
 
+  override fun onDestroy() {
+    stopLockstep()
+    stopBootstrapRetry()
+    universalNetplayClient?.close()
+    super.onDestroy()
+  }
+
+  private fun connectNetplayIfConfigured() {
+    val serverUrl = intent.getStringExtra(EXTRA_NETPLAY_SERVER_URL).orEmpty()
+    val roomId = intent.getIntExtra(EXTRA_NETPLAY_ROOM_ID, 0)
+    val memberId = intent.getIntExtra(EXTRA_NETPLAY_MEMBER_ID, 0)
+    val memberToken = intent.getStringExtra(EXTRA_NETPLAY_MEMBER_TOKEN).orEmpty()
+    val fingerprint = intent.getStringExtra(EXTRA_NETPLAY_FINGERPRINT).orEmpty()
+    val coreVersion = intent.getStringExtra(EXTRA_NETPLAY_CORE_VERSION).orEmpty()
+    val player = intent.getIntExtra(EXTRA_NETPLAY_PLAYER, 1)
+    if (definition.system !in setOf("psp", "sega", "arcade") || serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || coreVersion.isBlank() || player !in 1..2) return
+    localPlayerIndex = player - 1
+    lockstepNetplay = true
+    universalNetplayClient = UniversalNetplayClient(
+      UniversalNetplayConfig(serverUrl, roomId, memberId, memberToken, definition.system, fingerprint, coreVersion, localPlayerIndex),
+      onBootstrap = {
+        runOnUiThread {
+          showToast(if (localPlayerIndex == 0) "Readiness verified. Sending the shared initial state." else "Readiness verified. Waiting for the host's shared initial state.")
+          if (localPlayerIndex == 0) sendInitialNetplayState() else startBootstrapRetry()
+        }
+      },
+      onSessionGo = { startAt -> runOnUiThread { startLockstep(startAt) } },
+      onStateRequest = { if (localPlayerIndex == 0) sendInitialNetplayState() },
+      onRemoteInput = { frame, mask -> synchronized(remoteFrameMasks) { remoteFrameMasks[frame] = mask } },
+      onRemoteState = { encoded, syncId, encoding -> restoreNetplayState(encoded, syncId, encoding) },
+      onChat = { displayName, text -> runOnUiThread { showToast("$displayName: $text") } },
+      onStatus = { message -> runOnUiThread { showToast(message) } },
+    ).also { it.connect() }
+  }
+
+  private fun sendLocalKey(action: Int, keyCode: Int) {
+    if (!lockstepNetplay) {
+      retroView.sendKeyEvent(action, keyCode, 0)
+      return
+    }
+    if (keyCode !in netplayKeyCodes) return
+    if (action == KeyEvent.ACTION_DOWN) localPressedKeys.add(keyCode) else localPressedKeys.remove(keyCode)
+  }
+
+  private fun sendInitialNetplayState() {
+    Thread {
+      Thread.sleep(300)
+      if (!::retroView.isInitialized || localPlayerIndex != 0) return@Thread
+      runCatching { Base64.encodeToString(gzip(retroView.serializeState()), Base64.NO_WRAP) }
+        .onSuccess { encoded -> if (encoded.isNotBlank() && encoded.length <= 4_300_000) universalNetplayClient?.sendState(encoded, 0L, "gzip-base64") }
+    }.start()
+  }
+
+  private fun restoreNetplayState(encoded: String, syncId: Long, encoding: String) {
+    if (syncId <= lastNetplaySyncId) return
+    Thread {
+      runCatching {
+        val bytes = Base64.decode(encoded, Base64.NO_WRAP)
+        if (encoding == "gzip-base64") gunzip(bytes) else bytes
+      }.onSuccess { bytes -> runOnUiThread {
+        if (syncId <= lastNetplaySyncId) return@runOnUiThread
+        if (retroView.unserializeState(bytes)) {
+          lastNetplaySyncId = syncId
+          universalNetplayClient?.acknowledgeState(syncId)
+          stopBootstrapRetry()
+          if (syncId == 0L) showToast("Initial state synchronized. Waiting for the shared start signal.")
+        } else showToast("A room state could not be applied. Ask the host to start the session again.")
+      } }
+    }.start()
+  }
+
+  private fun gzip(source: ByteArray): ByteArray = ByteArrayOutputStream().use { output ->
+    GZIPOutputStream(output).use { it.write(source) }
+    output.toByteArray()
+  }
+
+  private fun gunzip(source: ByteArray): ByteArray = GZIPInputStream(ByteArrayInputStream(source)).use { it.readBytes() }
+
+  private fun startLockstep(startAt: Long) {
+    if (localPlayerIndex == 1 && lastNetplaySyncId < 0L) {
+      showToast("The initial state has not arrived yet; requesting it again before starting.")
+      startBootstrapRetry()
+      return
+    }
+    if (!lockstepActive.compareAndSet(false, true)) return
+    stopBootstrapRetry()
+    retroView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+    nextLockstepFrame = 0L
+    appliedLocalMask = 0
+    appliedRemoteMask = 0
+    synchronized(remoteFrameMasks) { remoteFrameMasks.clear() }
+    synchronized(localFrameMasks) {
+      localFrameMasks.clear()
+      repeat(NETPLAY_INPUT_DELAY_FRAMES.toInt()) { frame ->
+        localFrameMasks[frame.toLong()] = 0
+        universalNetplayClient?.sendInputFrame(frame.toLong(), 0)
+      }
+    }
+    lockstepHandler.postDelayed(lockstepTick, max(0L, startAt - System.currentTimeMillis()))
+    showToast("The shared ${definition.title} session is live.")
+  }
+
+  private fun stopLockstep() {
+    lockstepActive.set(false)
+    lockstepHandler.removeCallbacksAndMessages(null)
+  }
+
+  private val bootstrapRetry = object : Runnable {
+    override fun run() {
+      if (localPlayerIndex != 1 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
+      if (bootstrapRequestAttempts >= 20) {
+        showToast("Initial-state confirmation is delayed. Keep both devices in the player and ask the host to start again.")
+        return
+      }
+      bootstrapRequestAttempts += 1
+      universalNetplayClient?.requestState(-1L)
+      bootstrapHandler.postDelayed(this, 1_000L)
+    }
+  }
+
+  private fun startBootstrapRetry() {
+    if (localPlayerIndex != 1 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
+    bootstrapRequestAttempts = 0
+    bootstrapHandler.removeCallbacks(bootstrapRetry)
+    bootstrapHandler.post(bootstrapRetry)
+  }
+
+  private fun stopBootstrapRetry() {
+    bootstrapHandler.removeCallbacks(bootstrapRetry)
+  }
+
+  private val lockstepTick = object : Runnable {
+    override fun run() {
+      if (!lockstepActive.get() || !::retroView.isInitialized) return
+      val localMask = currentLocalMask()
+      val targetFrame = nextLockstepFrame + NETPLAY_INPUT_DELAY_FRAMES
+      synchronized(localFrameMasks) { localFrameMasks[targetFrame] = localMask }
+      universalNetplayClient?.sendInputFrame(targetFrame, localMask)
+      val scheduledLocalMask = synchronized(localFrameMasks) { localFrameMasks.remove(nextLockstepFrame) ?: 0 }
+      val remoteMask = synchronized(remoteFrameMasks) { remoteFrameMasks.remove(nextLockstepFrame) }
+      if (remoteMask == null) {
+        lockstepHandler.postDelayed(this, 4L)
+        return
+      }
+      appliedLocalMask = applyMask(scheduledLocalMask, localPlayerIndex, appliedLocalMask)
+      appliedRemoteMask = applyMask(remoteMask, 1 - localPlayerIndex, appliedRemoteMask)
+      retroView.requestRender()
+      nextLockstepFrame += 1L
+      lockstepHandler.postDelayed(this, NETPLAY_FRAME_INTERVAL_MS)
+    }
+  }
+
+  private fun currentLocalMask(): Int = netplayKeyCodes.take(16).foldIndexed(0) { index, mask, keyCode ->
+    if (keyCode in localPressedKeys) mask or (1 shl index) else mask
+  }
+
+  private fun applyMask(nextMask: Int, port: Int, previousMask: Int): Int {
+    netplayKeyCodes.take(16).forEachIndexed { index, keyCode ->
+      val previousDown = previousMask and (1 shl index) != 0
+      val nextDown = nextMask and (1 shl index) != 0
+      if (previousDown != nextDown) retroView.sendKeyEvent(if (nextDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP, keyCode, port)
+    }
+    return nextMask
+  }
+
+  private fun controlKeyCodes(profile: EmulatorControlProfile): IntArray = listOf(
+    profile.directions.up, profile.directions.down, profile.directions.left, profile.directions.right,
+  ).plus(profile.actionButtons).plus(profile.shoulderButtons).plus(profile.systemButtons)
+    .map { it.keyCode }.distinct().toIntArray()
+
   private fun createHeader(): LinearLayout = LinearLayout(this).apply {
     gravity = Gravity.CENTER_VERTICAL
     setPadding(dp(12), dp(4), dp(12), dp(4))
     setBackgroundColor(Color.argb(105, 3, 8, 18))
     addView(headerButton("×") { finish() }, LinearLayout.LayoutParams(dp(38), dp(38)))
     addView(TextView(this@UniversalLibretroPlayerActivity).apply {
-      text = "${definition.title} · ${definition.coreName}"
+      text = if (settingsMode) "${definition.title} · CONTROLLER SETTINGS" else "${definition.title} · ${definition.coreName}"
       setTextColor(Color.rgb(223, 244, 255))
       textSize = 12f
       gravity = Gravity.CENTER_VERTICAL
       setPadding(dp(12), 0, dp(8), 0)
       maxLines = 1
     }, LinearLayout.LayoutParams(0, dp(38), 1f))
-    addView(headerButton("LOAD") { loadState() }, LinearLayout.LayoutParams(dp(52), dp(38)))
-    addView(headerButton("SAVE") { saveState(silent = false) }, LinearLayout.LayoutParams(dp(52), dp(38)))
-    addView(headerButton("−") { resizeSelectedControl(-0.1f) }, LinearLayout.LayoutParams(dp(34), dp(38)))
-    addView(headerButton("+") { resizeSelectedControl(0.1f) }, LinearLayout.LayoutParams(dp(34), dp(38)))
-    aspectButton = headerButton(aspectLabel()) { cycleAspectRatio() }
-    addView(aspectButton, LinearLayout.LayoutParams(dp(62), dp(38)))
-    addView(headerButton(if (customizationEnabled) "DONE" else "EDIT") { toggleCustomization() }, LinearLayout.LayoutParams(dp(50), dp(38)))
+    if (settingsMode) {
+      addView(headerButton("SAVE & PLAY") { finishControlSetup() }, LinearLayout.LayoutParams(dp(98), dp(38)))
+    } else {
+      addView(headerButton("LOAD") { loadState() }, LinearLayout.LayoutParams(dp(52), dp(38)))
+      addView(headerButton("SAVE") { saveState(silent = false) }, LinearLayout.LayoutParams(dp(52), dp(38)))
+    }
   }
 
   private fun headerButton(label: String, action: () -> Unit): TextView = TextView(this).apply {
@@ -280,34 +490,15 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     return "${definition.system}.$orientation.$id"
   }
 
-  private fun toggleCustomization() {
-    customizationEnabled = !customizationEnabled
-    val label = if (customizationEnabled) "Edit mode: drag a control or pinch it to resize. Tap DONE to save." else "Control layout saved for this system and orientation."
-    showToast(label)
-  }
-
-  private fun resizeSelectedControl(delta: Float) {
-    val button = selectedControl
-    if (button == null) {
-      showToast("Tap a control in EDIT mode, then use − or + to resize that control only.")
-      return
-    }
-    val next = (button.scaleX + delta).coerceIn(.65f, 1.75f)
-    button.scaleX = next
-    button.scaleY = next
-    persistLayout(button, button.controlId())
-    showToast("${button.controlId()} size ${(next * 100).toInt()}% saved.")
-  }
-
-  private fun aspectLabel(): String = if (aspectMode == "fit") "FIT" else aspectMode
-
-  private fun cycleAspectRatio() {
-    val modes = listOf("fit", "4:3", "16:9")
-    aspectMode = modes[(modes.indexOf(aspectMode) + 1) % modes.size]
-    preferences.edit().putString("${definition.system}.aspect", aspectMode).apply()
-    aspectButton?.text = aspectLabel()
-    root.post { applyAspectRatio() }
-    showToast("Screen ratio: ${if (aspectMode == "fit") "FIT" else aspectMode}.")
+  private fun finishControlSetup() {
+    customizationEnabled = false
+    settingsMode = false
+    selectedControl = null
+    root.removeView(headerView)
+    headerView = createHeader().also { it.tag = "moudie-player-header" }
+    root.addView(headerView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(48), Gravity.TOP))
+    attachGameplaySocialOverlay()
+    showToast("Controller layouts saved separately for this orientation. You are ready to play.")
   }
 
   private fun applyAspectRatio() {
@@ -326,18 +517,30 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
   }
 
+  private fun attachGameplaySocialOverlay() {
+    socialOverlay?.let { root.removeView(it) }
+    socialOverlay = createSocialOverlay().also { overlay ->
+      overlay.tag = "moudie-social-overlay"
+      val landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+      root.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(38), if (landscape) Gravity.RIGHT or Gravity.TOP else Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply {
+        rightMargin = dp(12)
+        if (landscape) topMargin = dp(54)
+      })
+    }
+  }
+
   private fun createSocialOverlay(): LinearLayout = LinearLayout(this).apply {
-    orientation = LinearLayout.VERTICAL
+    orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.CENTER
-    alpha = .92f
-    addView(headerButton("CHAT") { showToast("Text chat is available in an online room.") }, LinearLayout.LayoutParams(dp(48), dp(44)).apply { bottomMargin = dp(10) })
+    alpha = .94f
+    addView(headerButton("CHAT") { showToast("Open room chat from the player setup screen.") }, LinearLayout.LayoutParams(dp(52), dp(38)).apply { rightMargin = dp(8) })
     micOverlayButton = headerButton(if (micMuted) "MIC×" else "MIC") {
       micMuted = !micMuted
       micOverlayButton?.text = if (micMuted) "MIC×" else "MIC"
       val status = if (micMuted) "Microphone muted." else "Microphone enabled."
-      showToast("$status Voice is connected when you join a room.")
+      showToast("$status Voice is managed in the room.")
     }
-    addView(micOverlayButton, LinearLayout.LayoutParams(dp(48), dp(44)))
+    addView(micOverlayButton, LinearLayout.LayoutParams(dp(52), dp(38)))
   }
 
   private fun saveState(silent: Boolean) {
@@ -455,8 +658,8 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
           dragging = false
           if (customizationEnabled) {
             selectedControl = this
-            showToast("${control.id} selected. Drag, pinch, or use − / +.")
-          } else retroView.sendKeyEvent(KeyEvent.ACTION_DOWN, control.keyCode, 0)
+            showToast("${control.id} selected. Drag or pinch to resize it; this layout is saved for the current orientation.")
+          } else sendLocalKey(KeyEvent.ACTION_DOWN, control.keyCode)
           return true
         }
         MotionEvent.ACTION_MOVE -> {
@@ -471,7 +674,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
         }
         MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
           if (customizationEnabled) persistLayout(this, control.id)
-          else retroView.sendKeyEvent(KeyEvent.ACTION_UP, control.keyCode, 0)
+          else sendLocalKey(KeyEvent.ACTION_UP, control.keyCode)
           return true
         }
       }

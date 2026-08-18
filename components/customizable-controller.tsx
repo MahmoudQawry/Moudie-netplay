@@ -1,19 +1,24 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PanResponder, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 
 type SystemId = "famicom" | "ps1" | "psp" | "sega" | "arcade";
 type ControlId = "UP" | "DOWN" | "LEFT" | "RIGHT" | "A" | "B" | "C" | "X" | "O" | "TRIANGLE" | "SQUARE" | "L" | "R" | "L1" | "R1" | "START" | "SELECT" | "ONE" | "TWO" | "THREE" | "FOUR";
+type Orientation = "portrait" | "landscape";
 type Position = { x: number; y: number; size: number };
 type ControllerLayout = Partial<Record<ControlId, Position>>;
 
 type Props = {
   system: SystemId;
+  /** Only settings screens enable editing; gameplay always renders a clean controller. */
   editable: boolean;
+  /** Explicitly select the profile being configured, otherwise infer it from the viewport. */
+  orientation?: Orientation;
   onButtonChange?: (button: ControlId, isDown: boolean) => void;
 };
 
-const STORAGE_PREFIX = "moudie.controller-layout.v3.";
+const STORAGE_PREFIX = "moudie.controller-layout.v4.";
+const LEGACY_STORAGE_PREFIX = "moudie.controller-layout.v3.";
 const MIN_BUTTON_SIZE = 32;
 const MAX_BUTTON_SIZE = 104;
 
@@ -54,10 +59,27 @@ function cloneLayout(layout: ControllerLayout): ControllerLayout {
   return Object.fromEntries(Object.entries(layout).map(([key, value]) => [key, { ...value }])) as ControllerLayout;
 }
 
-export function CustomizableController({ system, editable, onButtonChange }: Props) {
+function normalizeLayout(defaults: ControllerLayout, value: unknown): ControllerLayout {
+  if (!value || typeof value !== "object") return cloneLayout(defaults);
+  const source = value as ControllerLayout;
+  const result = cloneLayout(defaults);
+  for (const [control, position] of Object.entries(source)) {
+    if (!position || typeof position.x !== "number" || typeof position.y !== "number" || typeof position.size !== "number") continue;
+    result[control as ControlId] = {
+      x: Math.max(0, Math.min(100, position.x)),
+      y: Math.max(30, Math.min(94, position.y)),
+      size: Math.max(MIN_BUTTON_SIZE, Math.min(MAX_BUTTON_SIZE, position.size)),
+    };
+  }
+  return result;
+}
+
+export function CustomizableController({ system, editable, orientation, onButtonChange }: Props) {
   const profile = profiles[system];
+  const viewport = useWindowDimensions();
+  const layoutOrientation: Orientation = orientation ?? (viewport.width >= viewport.height ? "landscape" : "portrait");
+  const storageKey = `${STORAGE_PREFIX}${system}.${layoutOrientation}`;
   const [layout, setLayout] = useState<ControllerLayout>(() => cloneLayout(profile.defaults));
-  const [scale, setScale] = useState(1);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [selectedControl, setSelectedControl] = useState<ControlId | null>(null);
   const currentLayoutRef = useRef(layout);
@@ -66,28 +88,33 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
   useEffect(() => { currentLayoutRef.current = layout; }, [layout]);
   useEffect(() => {
     let active = true;
-    AsyncStorage.getItem(`${STORAGE_PREFIX}${system}`).then((saved) => {
-      if (!active || !saved) return;
+    setSelectedControl(null);
+    setLayout(cloneLayout(profile.defaults));
+    AsyncStorage.getItem(storageKey).then(async (saved) => {
+      if (!active) return;
+      if (saved) {
+        try { setLayout(normalizeLayout(profile.defaults, JSON.parse(saved))); } catch { /* Use defaults. */ }
+        return;
+      }
+      // One-time migration: retain the previous layout for the first orientation opened,
+      // then save independent copies per orientation from this point forward.
+      const legacy = await AsyncStorage.getItem(`${LEGACY_STORAGE_PREFIX}${system}`);
+      if (!active || !legacy) return;
       try {
-        const decoded = JSON.parse(saved) as { scale?: number; layout?: ControllerLayout };
-        if (decoded.layout) setLayout({ ...cloneLayout(profile.defaults), ...decoded.layout });
-        if (typeof decoded.scale === "number" && decoded.scale >= 0.65 && decoded.scale <= 1.5) setScale(decoded.scale);
-      } catch { /* Keep safe defaults. */ }
-    });
+        const decoded = JSON.parse(legacy) as { scale?: number; layout?: ControllerLayout };
+        const legacyScale = typeof decoded.scale === "number" ? Math.max(0.65, Math.min(1.5, decoded.scale)) : 1;
+        const migrated = normalizeLayout(profile.defaults, Object.fromEntries(Object.entries(decoded.layout ?? {}).map(([key, value]) => [key, value ? { ...value, size: value.size * legacyScale } : value])));
+        setLayout(migrated);
+        await AsyncStorage.setItem(storageKey, JSON.stringify({ layout: migrated }));
+      } catch { /* Use defaults. */ }
+    }).catch(() => undefined);
     return () => { active = false; };
-  }, [profile.defaults, system]);
+  }, [profile.defaults, storageKey, system]);
 
-  const save = useCallback((nextLayout = currentLayoutRef.current, nextScale = scale) => {
-    AsyncStorage.setItem(`${STORAGE_PREFIX}${system}`, JSON.stringify({ layout: nextLayout, scale: nextScale })).catch(() => undefined);
-  }, [scale, system]);
-
-  const resizeLayout = (delta: number) => {
-    setScale((value) => {
-      const next = Math.max(0.65, Math.min(1.5, Math.round((value + delta) * 100) / 100));
-      save(currentLayoutRef.current, next);
-      return next;
-    });
-  };
+  const save = useCallback((nextLayout = currentLayoutRef.current) => {
+    currentLayoutRef.current = nextLayout;
+    AsyncStorage.setItem(storageKey, JSON.stringify({ layout: nextLayout })).catch(() => undefined);
+  }, [storageKey]);
 
   const resizeSelectedControl = (delta: number) => {
     if (!selectedControl) return;
@@ -104,9 +131,8 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
   const reset = () => {
     const restored = cloneLayout(profile.defaults);
     setLayout(restored);
-    setScale(1);
     setSelectedControl(null);
-    save(restored, 1);
+    save(restored);
   };
 
   const onSurfaceLayout = (event: LayoutChangeEvent) => setSize(event.nativeEvent.layout);
@@ -138,14 +164,14 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
     return { id, gesture };
   }), [editable, profile.controls, profile.defaults, save, size.height, size.width]);
 
-  const selectedLabel = selectedControl ? (profile.labels[selectedControl] ?? selectedControl) : "LAYOUT";
+  const selectedLabel = selectedControl ? (profile.labels[selectedControl] ?? selectedControl) : "A CONTROL";
 
   return (
-    <View style={styles.root} onLayout={onSurfaceLayout}>
+    <View style={styles.root} onLayout={onSurfaceLayout} accessibilityLabel={`${system} ${layoutOrientation} controller`}>
       {controls.map(({ id, gesture }) => {
         const position = layout[id] ?? profile.defaults[id];
         if (!position) return null;
-        const controlSize = position.size * scale;
+        const controlSize = position.size;
         const isMeta = id === "START" || id === "SELECT" || id === "L" || id === "R" || id === "L1" || id === "R1";
         const selected = selectedControl === id && editable;
         return (
@@ -161,23 +187,13 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
           </View>
         );
       })}
-      <View style={styles.customizeBar}>
-        {editable ? (
-          <>
-            <Text style={styles.modeText}>EDIT {selectedLabel}</Text>
-            <Pressable onPress={() => resizeSelectedControl(-4)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]} accessibilityLabel="Make selected button smaller"><Text style={styles.utilityText}>−</Text></Pressable>
-            <Text style={styles.scaleText}>SIZE</Text>
-            <Pressable onPress={() => resizeSelectedControl(4)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]} accessibilityLabel="Make selected button larger"><Text style={styles.utilityText}>+</Text></Pressable>
-            <Pressable onPress={reset} style={({ pressed }) => [styles.resetButton, pressed && styles.utilityPressed]}><Text style={styles.resetText}>RESET</Text></Pressable>
-          </>
-        ) : (
-          <>
-            <Pressable onPress={() => resizeLayout(-0.1)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]} accessibilityLabel="Make all controls smaller"><Text style={styles.utilityText}>−</Text></Pressable>
-            <Text style={styles.scaleText}>{Math.round(scale * 100)}%</Text>
-            <Pressable onPress={() => resizeLayout(0.1)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]} accessibilityLabel="Make all controls larger"><Text style={styles.utilityText}>+</Text></Pressable>
-          </>
-        )}
-      </View>
+      {editable && <View style={styles.customizeBar}>
+        <Text style={styles.modeText}>{selectedControl ? `EDIT ${selectedLabel}` : "TAP A CONTROL"}</Text>
+        <Pressable onPress={() => resizeSelectedControl(-4)} disabled={!selectedControl} style={({ pressed }) => [styles.utilityButton, !selectedControl && styles.utilityDisabled, pressed && styles.utilityPressed]} accessibilityLabel="Make selected button smaller"><Text style={styles.utilityText}>−</Text></Pressable>
+        <Text style={styles.scaleText}>SIZE</Text>
+        <Pressable onPress={() => resizeSelectedControl(4)} disabled={!selectedControl} style={({ pressed }) => [styles.utilityButton, !selectedControl && styles.utilityDisabled, pressed && styles.utilityPressed]} accessibilityLabel="Make selected button larger"><Text style={styles.utilityText}>+</Text></Pressable>
+        <Pressable onPress={reset} style={({ pressed }) => [styles.resetButton, pressed && styles.utilityPressed]}><Text style={styles.resetText}>RESET</Text></Pressable>
+      </View>}
     </View>
   );
 }
@@ -192,10 +208,11 @@ const styles = StyleSheet.create({
   buttonPressed: { transform: [{ scale: 0.92 }], backgroundColor: "rgba(255,255,255,0.2)" },
   editButton: { borderStyle: "dashed", backgroundColor: "rgba(255,255,255,0.10)" },
   customizeBar: { position: "absolute", top: 8, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: "rgba(16, 13, 28, 0.82)", borderWidth: 1, borderColor: "#38304D", borderRadius: 16, paddingHorizontal: 8, paddingVertical: 5 },
-  modeText: { color: "#E7DFFF", fontSize: 9, fontWeight: "900", maxWidth: 72 },
+  modeText: { color: "#E7DFFF", fontSize: 9, fontWeight: "900", maxWidth: 90 },
   utilityButton: { height: 30, width: 30, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: "#252137" },
+  utilityDisabled: { opacity: 0.42 },
   utilityText: { color: "#FFFFFF", fontSize: 19, fontWeight: "800" },
-  scaleText: { minWidth: 38, color: "#E5E0F5", fontSize: 10, fontWeight: "900", textAlign: "center" },
+  scaleText: { minWidth: 30, color: "#E5E0F5", fontSize: 10, fontWeight: "900", textAlign: "center" },
   resetButton: { marginRight: 2, paddingHorizontal: 8, height: 30, justifyContent: "center", borderRadius: 10, backgroundColor: "#352852" },
   resetText: { color: "#D9C4FF", fontSize: 10, fontWeight: "800" },
   utilityPressed: { opacity: 0.7 },

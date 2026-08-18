@@ -7,12 +7,14 @@ import { createSessionBarrier, type ReadySessionPeer } from "../lib/netplay-sess
 import { normalizeSyncId } from "../lib/netplay-sync";
 import { hashAccessToken } from "./rooms";
 
+type NetplaySystem = "ps1" | "nes" | "psp" | "sega" | "arcade";
+
 type NetplaySession = {
   roomId: number;
   memberId: number;
   displayName: string;
   role: "host" | "player" | "spectator";
-  clientKind: "room-ui" | "ps1-player";
+  clientKind: "room-ui" | "ps1-player" | "universal-player";
 };
 
 type InputPayload = { button?: unknown; isDown?: unknown; frame?: unknown };
@@ -30,8 +32,9 @@ type StateRequestPayload = { minimumSyncId?: unknown };
 const ps1KeyCodes = new Set([19, 20, 21, 22, 96, 97, 99, 100, 102, 103, 104, 105, 106, 107, 108, 109]);
 type AuthoritativeSnapshot = { snapshot: string; syncId: number; updatedAt: number };
 type Ps1Snapshot = AuthoritativeSnapshot & { fingerprint: string; encoding: "gzip-base64" | "base64" };
-type ReadySessionData = ReadySessionPeer & { system: "ps1" | "nes" };
-type PendingSession = { system: "ps1" | "nes"; barrier: ReturnType<typeof createSessionBarrier> };
+type ReadySessionData = ReadySessionPeer & { system: NetplaySystem };
+type PendingSession = { system: NetplaySystem; barrier: NonNullable<ReturnType<typeof createSessionBarrier>> };
+type UniversalSnapshot = AuthoritativeSnapshot & { fingerprint: string; system: Exclude<NetplaySystem, "ps1" | "nes">; encoding: "gzip-base64" | "base64" };
 
 const roomChannel = (roomId: number) => `netplay:${roomId}`;
 const memberKey = (roomId: number, memberId: number, clientKind: NetplaySession["clientKind"]) => `${roomId}:${memberId}:${clientKind}`;
@@ -49,6 +52,7 @@ export function registerNetplayServer(server: HttpServer) {
   const activeMemberSockets = new Map<string, string>();
   const ps1Snapshots = new Map<number, Ps1Snapshot>();
   const famicomSnapshots = new Map<number, AuthoritativeSnapshot>();
+  const universalSnapshots = new Map<string, UniversalSnapshot>();
   const pendingSessions = new Map<number, PendingSession>();
 
   io.use(async (socket, next) => {
@@ -56,7 +60,7 @@ export function registerNetplayServer(server: HttpServer) {
     const roomId = Number(auth?.roomId);
     const memberId = Number(auth?.memberId);
     const memberToken = typeof auth?.memberToken === "string" ? auth.memberToken : "";
-    const clientKind = auth?.clientKind === "ps1-player" ? "ps1-player" : "room-ui";
+    const clientKind = auth?.clientKind === "ps1-player" ? "ps1-player" : auth?.clientKind === "universal-player" ? "universal-player" : "room-ui";
     if (!Number.isInteger(roomId) || !Number.isInteger(memberId) || memberToken.length < 20) {
       next(new Error("بيانات دخول الغرفة غير مكتملة."));
       return;
@@ -141,7 +145,7 @@ export function registerNetplayServer(server: HttpServer) {
 
     socket.on("netplay:session-ready", (payload: SessionReadyPayload) => {
       if (session.clientKind !== "room-ui" || session.role === "spectator") return;
-      const system = payload?.system === "ps1" || payload?.system === "nes" ? payload.system : null;
+      const system = payload?.system === "ps1" || payload?.system === "nes" || payload?.system === "psp" || payload?.system === "sega" || payload?.system === "arcade" ? payload.system : null;
       const fingerprint = typeof payload?.fingerprint === "string" ? payload.fingerprint.toLowerCase() : "";
       const coreVersion = typeof payload?.coreVersion === "string" ? payload.coreVersion.trim() : "";
       if (!system || !/^[a-f0-9]{64}$/.test(fingerprint) || !coreVersion) return;
@@ -152,7 +156,7 @@ export function registerNetplayServer(server: HttpServer) {
 
     socket.on("netplay:session-start-request", (payload: SessionStartPayload) => {
       if (session.clientKind !== "room-ui" || session.role !== "host") return;
-      const system = payload?.system === "ps1" || payload?.system === "nes" ? payload.system : null;
+      const system = payload?.system === "ps1" || payload?.system === "nes" || payload?.system === "psp" || payload?.system === "sega" || payload?.system === "arcade" ? payload.system : null;
       if (!system) return;
       const readyPeers = Array.from(io.sockets.adapter.rooms.get(channel) ?? [])
         .map((socketId) => io.sockets.sockets.get(socketId))
@@ -169,6 +173,7 @@ export function registerNetplayServer(server: HttpServer) {
       }
       ps1Snapshots.delete(session.roomId);
       famicomSnapshots.delete(session.roomId);
+      universalSnapshots.delete(`${session.roomId}:${system}`);
       pendingSessions.set(session.roomId, { system, barrier });
       io.to(channel).emit("netplay:session-start", { system, ...barrier });
     });
@@ -277,6 +282,83 @@ export function registerNetplayServer(server: HttpServer) {
       const pending = pendingSessions.get(session.roomId);
       if (syncId === 0 && pending?.system === "ps1" && session.role === "player") {
         io.to(channel).emit("netplay:ps1-session-go", { fingerprint: socket.data.ps1Fingerprint, startAt: Date.now() + 1200 });
+        pendingSessions.delete(session.roomId);
+      }
+    });
+
+    socket.on("netplay:universal-ready", (payload: SessionReadyPayload) => {
+      const system = payload?.system === "psp" || payload?.system === "sega" || payload?.system === "arcade" ? payload.system : null;
+      const fingerprint = typeof payload?.fingerprint === "string" ? payload.fingerprint.toLowerCase() : "";
+      const coreVersion = typeof payload?.coreVersion === "string" ? payload.coreVersion.trim() : "";
+      const pending = pendingSessions.get(session.roomId);
+      if (!system || !/^[a-f0-9]{64}$/.test(fingerprint) || !coreVersion || pending?.system !== system || pending.barrier.fingerprint !== fingerprint || pending.barrier.coreVersion !== coreVersion) return;
+      socket.data.universalSystem = system;
+      socket.data.universalFingerprint = fingerprint;
+      socket.data.universalCoreVersion = coreVersion;
+      const peers = Array.from(io.sockets.adapter.rooms.get(channel) ?? []).map((socketId) => io.sockets.sockets.get(socketId));
+      const host = peers.find((peer) => {
+        const peerSession = peer?.data.session as NetplaySession | undefined;
+        return peerSession?.role === "host" && peerSession.clientKind === "universal-player" && peer?.data.universalSystem === system && peer?.data.universalFingerprint === fingerprint && peer?.data.universalCoreVersion === coreVersion;
+      });
+      const guest = peers.find((peer) => {
+        const peerSession = peer?.data.session as NetplaySession | undefined;
+        return peerSession?.role === "player" && peerSession.clientKind === "universal-player" && peer?.data.universalSystem === system && peer?.data.universalFingerprint === fingerprint && peer?.data.universalCoreVersion === coreVersion;
+      });
+      if (!host || !guest) {
+        socket.emit("netplay:universal-waiting", { message: "Waiting for the other player to choose the same game file." });
+        return;
+      }
+      io.to(channel).emit("netplay:universal-session-bootstrap", { system, fingerprint, hostMemberId: (host.data.session as NetplaySession).memberId });
+    });
+
+    socket.on("netplay:universal-input", (payload: Ps1InputPayload) => {
+      const frame = Number(payload?.frame);
+      const mask = Number(payload?.mask);
+      if (!Number.isSafeInteger(frame) || frame < 0 || !Number.isSafeInteger(mask) || mask < 0 || mask > 0xffff || typeof socket.data.universalFingerprint !== "string") return;
+      socket.to(channel).emit("netplay:universal-input", { memberId: session.memberId, frame, mask });
+    });
+
+    socket.on("netplay:universal-state", (payload: Ps1StatePayload) => {
+      const system = socket.data.universalSystem as Exclude<NetplaySystem, "ps1" | "nes"> | undefined;
+      const fingerprint = socket.data.universalFingerprint as string | undefined;
+      const snapshot = typeof payload?.snapshot === "string" ? payload.snapshot : "";
+      if (session.role !== "host" || !system || !fingerprint || snapshot.length === 0 || snapshot.length > 4_300_000) return;
+      const syncId = normalizeSyncId(payload.syncId);
+      const encoding = payload.encoding === "base64" ? "base64" : payload.encoding === "gzip-base64" ? "gzip-base64" : null;
+      if (syncId === null || !encoding) return;
+      const key = `${session.roomId}:${system}`;
+      const previous = universalSnapshots.get(key);
+      if (previous && syncId <= previous.syncId) return;
+      const authoritative = { system, fingerprint, snapshot, syncId, encoding, updatedAt: Date.now() } satisfies UniversalSnapshot;
+      universalSnapshots.set(key, authoritative);
+      socket.to(channel).emit("netplay:universal-state", authoritative);
+    });
+
+    socket.on("netplay:universal-state-request", (payload: StateRequestPayload) => {
+      const system = socket.data.universalSystem as Exclude<NetplaySystem, "ps1" | "nes"> | undefined;
+      const fingerprint = socket.data.universalFingerprint as string | undefined;
+      if (!system || !fingerprint) return;
+      const requestedAfter = normalizeSyncId(payload?.minimumSyncId) ?? -1;
+      const cached = universalSnapshots.get(`${session.roomId}:${system}`);
+      if (cached?.fingerprint === fingerprint && cached.syncId > requestedAfter && Date.now() - cached.updatedAt < 120_000) socket.emit("netplay:universal-state", cached);
+      for (const peerId of io.sockets.adapter.rooms.get(channel) ?? []) {
+        const peer = io.sockets.sockets.get(peerId);
+        const peerSession = peer?.data.session as NetplaySession | undefined;
+        if (peerSession?.role === "host" && peerSession.clientKind === "universal-player" && peer?.data.universalSystem === system && peer?.data.universalFingerprint === fingerprint) {
+          peer.emit("netplay:universal-state-request", { fromMemberId: session.memberId });
+          break;
+        }
+      }
+    });
+
+    socket.on("netplay:universal-sync-ack", (payload: Ps1SyncAckPayload) => {
+      const syncId = normalizeSyncId(payload?.syncId);
+      const system = socket.data.universalSystem as Exclude<NetplaySystem, "ps1" | "nes"> | undefined;
+      if (syncId === null || !system || typeof socket.data.universalFingerprint !== "string") return;
+      socket.to(channel).emit("netplay:universal-sync-ack", { memberId: session.memberId, syncId, appliedAt: Date.now() });
+      const pending = pendingSessions.get(session.roomId);
+      if (syncId === 0 && pending?.system === system && session.role === "player") {
+        io.to(channel).emit("netplay:universal-session-go", { system, fingerprint: socket.data.universalFingerprint, startAt: Date.now() + 1200 });
         pendingSessions.delete(session.roomId);
       }
     });

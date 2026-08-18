@@ -124,7 +124,7 @@ class MoudieEmulatorModule : Module() {
       }
     }
 
-    AsyncFunction("launchNativeGame") { system: String, uri: String, fileName: String, playerOptions: Map<String, Any>? ->
+    AsyncFunction("launchNativeGame") { system: String, uri: String, fileName: String, playerOptions: Map<String, Any>?, netplay: Map<String, Any>? ->
       val definition = NativeCoreCatalog.forSystem(system)
       require(uri.isNotBlank()) { "Choose a local game file first." }
       val extension = fileName.substringAfterLast('.', "").lowercase()
@@ -149,31 +149,39 @@ class MoudieEmulatorModule : Module() {
           putExtra(UniversalLibretroPlayerActivity.EXTRA_GAME_PATH, gamePath)
           putExtra(UniversalLibretroPlayerActivity.EXTRA_GAME_NAME, fileName)
           applyPlayerOptions(playerOptions)
+          netplay?.let { config ->
+            val serverUrl = config["serverUrl"] as? String
+            val roomId = (config["roomId"] as? Number)?.toInt()
+            val memberId = (config["memberId"] as? Number)?.toInt()
+            val memberToken = config["memberToken"] as? String
+            val sessionSystem = config["system"] as? String
+            val fingerprint = config["fingerprint"] as? String
+            val player = (config["player"] as? Number)?.toInt()
+            val coreVersion = config["coreVersion"] as? String
+            if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && sessionSystem == definition.system && !fingerprint.isNullOrBlank() && !coreVersion.isNullOrBlank() && player in 1..2) {
+              putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_SERVER_URL, serverUrl)
+              putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_ROOM_ID, roomId)
+              putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_MEMBER_ID, memberId)
+              putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_MEMBER_TOKEN, memberToken)
+              putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_FINGERPRINT, fingerprint)
+              putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_CORE_VERSION, coreVersion)
+              putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_PLAYER, player)
+            }
+          }
         })
       }
     }
 
+    AsyncFunction("fingerprintNativeGame") { system: String, uri: String, fileName: String ->
+      val definition = NativeCoreCatalog.forSystem(system)
+      val extension = fileName.substringAfterLast('.', "").lowercase()
+      require(extension in definition.extensions) { "Choose a supported ${definition.title} game file." }
+      fingerprintGameUri(uri)
+    }
+
     AsyncFunction("fingerprintPS1Game") { uri: String, fileName: String ->
       require(fileName.substringAfterLast('.', "").lowercase() in ps1GameExtensions) { "Choose a PS1 BIN, CUE, ISO, CHD, or PBP file." }
-      val parsedUri = Uri.parse(uri)
-      val digest = MessageDigest.getInstance("SHA-256")
-      val input = if (parsedUri.scheme == "file") {
-        val local = File(requireNotNull(parsedUri.path) { "Could not read the game file." })
-        require(local.isFile() && local.canRead()) { "Could not read the game file." }
-        local.inputStream()
-      } else {
-        val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("Could not open device storage.")
-        resolver.openInputStream(parsedUri) ?: throw IllegalArgumentException("Could not read the game file.")
-      }
-      input.use { stream ->
-        val buffer = ByteArray(1024 * 128)
-        while (true) {
-          val bytesRead = stream.read(buffer)
-          if (bytesRead <= 0) break
-          digest.update(buffer, 0, bytesRead)
-        }
-      }
-      digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+      fingerprintGameUri(uri)
     }
 
     AsyncFunction("launchFamicomCompatGame") { uri: String, fileName: String, playerOptions: Map<String, Any>? ->
@@ -193,6 +201,28 @@ class MoudieEmulatorModule : Module() {
       require(destination.length() > 0) { "The BIOS file is empty or unreadable." }
       getBiosStatus()
     }
+  }
+
+  private fun fingerprintGameUri(uri: String): String {
+    val parsedUri = Uri.parse(uri)
+    val digest = MessageDigest.getInstance("SHA-256")
+    val input = if (parsedUri.scheme == "file") {
+      val local = File(requireNotNull(parsedUri.path) { "Could not read the game file." })
+      require(local.isFile() && local.canRead()) { "Could not read the game file." }
+      local.inputStream()
+    } else {
+      val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("Could not open device storage.")
+      resolver.openInputStream(parsedUri) ?: throw IllegalArgumentException("Could not read the game file.")
+    }
+    input.use { stream ->
+      val buffer = ByteArray(1024 * 128)
+      while (true) {
+        val bytesRead = stream.read(buffer)
+        if (bytesRead <= 0) break
+        digest.update(buffer, 0, bytesRead)
+      }
+    }
+    return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
   }
 
   private val supportedSystems = setOf("nes", "sega", "ps1", "psp", "arcade")
@@ -217,8 +247,10 @@ class MoudieEmulatorModule : Module() {
   private fun Intent.applyPlayerOptions(playerOptions: Map<String, Any>?) {
     val orientation = playerOptions?.get("orientation") as? String
     val aspectRatio = playerOptions?.get("aspectRatio") as? String
+    val settingsMode = playerOptions?.get("settingsMode") as? Boolean
     if (orientation in setOf("portrait", "landscape")) putExtra("expo.modules.moudieemulator.PLAYER_ORIENTATION", orientation)
     if (aspectRatio in setOf("fit", "4:3", "16:9")) putExtra("expo.modules.moudieemulator.PLAYER_ASPECT_RATIO", aspectRatio)
+    if (settingsMode == true) putExtra("expo.modules.moudieemulator.PLAYER_SETTINGS_MODE", true)
   }
 
   private fun getPs1LaunchStatus(): Map<String, Any> {
