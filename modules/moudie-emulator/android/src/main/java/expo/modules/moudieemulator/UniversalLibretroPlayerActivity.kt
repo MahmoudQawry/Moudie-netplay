@@ -88,12 +88,14 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private val lockstepHandler = Handler(Looper.getMainLooper())
   private val bootstrapHandler = Handler(Looper.getMainLooper())
   private var bootstrapRequestAttempts = 0
-  private val remoteFrameMasks = TreeMap<Long, Int>()
+  private val remoteFrameMasks = TreeMap<Long, MutableMap<Int, Int>>()
   private val localFrameMasks = TreeMap<Long, Int>()
   private val localPressedKeys = mutableSetOf<Int>()
   private var nextLockstepFrame = 0L
   private var appliedLocalMask = 0
-  private var appliedRemoteMask = 0
+  private val appliedMasksByPort = mutableMapOf<Int, Int>()
+  private var localMemberId = 0
+  private var sessionPlayerMemberIds: List<Int> = emptyList()
   private lateinit var netplayKeyCodes: IntArray
   private lateinit var metricPill: TextView
   private var frameWindowStartedAt = 0L
@@ -183,7 +185,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     addController()
     if (!settingsMode) attachGameplaySocialOverlay()
     setContentView(root)
-    root.post { applyAspectRatio() }
+    root.post { applyAspectRatio(); restoreScreenLayout(); enableScreenEditor() }
     if (!settingsMode) connectNetplayIfConfigured()
   }
 
@@ -232,20 +234,22 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     val fingerprint = intent.getStringExtra(EXTRA_NETPLAY_FINGERPRINT).orEmpty()
     val coreVersion = intent.getStringExtra(EXTRA_NETPLAY_CORE_VERSION).orEmpty()
     val player = intent.getIntExtra(EXTRA_NETPLAY_PLAYER, 1)
-    if (definition.system !in setOf("psp", "sega", "arcade") || serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || coreVersion.isBlank() || player !in 1..2) return
+    if (definition.system !in setOf("psp", "sega", "arcade") || serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || coreVersion.isBlank() || player !in 1..8) return
+    localMemberId = memberId
     localPlayerIndex = player - 1
     lockstepNetplay = true
     universalNetplayClient = UniversalNetplayClient(
       UniversalNetplayConfig(serverUrl, roomId, memberId, memberToken, definition.system, fingerprint, coreVersion, localPlayerIndex),
-      onBootstrap = {
+      onBootstrap = { playerMemberIds ->
         runOnUiThread {
+          sessionPlayerMemberIds = playerMemberIds
           showToast(if (localPlayerIndex == 0) "Readiness verified. Sending the shared initial state." else "Readiness verified. Waiting for the host's shared initial state.")
           if (localPlayerIndex == 0) sendInitialNetplayState() else startBootstrapRetry()
         }
       },
-      onSessionGo = { startAt -> runOnUiThread { startLockstep(startAt) } },
+      onSessionGo = { startAt, playerMemberIds -> runOnUiThread { startLockstep(startAt, playerMemberIds) } },
       onStateRequest = { if (localPlayerIndex == 0) sendInitialNetplayState() },
-      onRemoteInput = { frame, mask -> synchronized(remoteFrameMasks) { remoteFrameMasks[frame] = mask } },
+      onRemoteInput = { remoteMemberId, frame, mask -> synchronized(remoteFrameMasks) { remoteFrameMasks.getOrPut(frame) { mutableMapOf() }[remoteMemberId] = mask } },
       onRemoteState = { encoded, syncId, encoding -> restoreNetplayState(encoded, syncId, encoding) },
       onChat = { displayName, text -> runOnUiThread { showToast("$displayName: $text") } },
       onStatus = { message -> runOnUiThread { showToast(message) } },
@@ -295,8 +299,14 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   private fun gunzip(source: ByteArray): ByteArray = GZIPInputStream(ByteArrayInputStream(source)).use { it.readBytes() }
 
-  private fun startLockstep(startAt: Long) {
-    if (localPlayerIndex == 1 && lastNetplaySyncId < 0L) {
+  private fun startLockstep(startAt: Long, playerMemberIds: List<Int>) {
+    if (localMemberId !in playerMemberIds || playerMemberIds.size !in 2..8) {
+      showToast("This device is not assigned to the verified room player set.")
+      return
+    }
+    sessionPlayerMemberIds = playerMemberIds
+    localPlayerIndex = playerMemberIds.indexOf(localMemberId)
+    if (localPlayerIndex != 0 && lastNetplaySyncId < 0L) {
       showToast("The initial state has not arrived yet; requesting it again before starting.")
       startBootstrapRetry()
       return
@@ -306,7 +316,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     retroView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
     nextLockstepFrame = 0L
     appliedLocalMask = 0
-    appliedRemoteMask = 0
+    appliedMasksByPort.clear()
     synchronized(remoteFrameMasks) { remoteFrameMasks.clear() }
     synchronized(localFrameMasks) {
       localFrameMasks.clear()
@@ -356,13 +366,17 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       synchronized(localFrameMasks) { localFrameMasks[targetFrame] = localMask }
       universalNetplayClient?.sendInputFrame(targetFrame, localMask)
       val scheduledLocalMask = synchronized(localFrameMasks) { localFrameMasks.remove(nextLockstepFrame) ?: 0 }
-      val remoteMask = synchronized(remoteFrameMasks) { remoteFrameMasks.remove(nextLockstepFrame) }
-      if (remoteMask == null) {
+      val remoteMasks = synchronized(remoteFrameMasks) { remoteFrameMasks.remove(nextLockstepFrame) }
+      val expectedRemoteMembers = sessionPlayerMemberIds.filter { it != localMemberId }
+      if (remoteMasks == null || expectedRemoteMembers.any { it !in remoteMasks }) {
         lockstepHandler.postDelayed(this, 4L)
         return
       }
-      appliedLocalMask = applyMask(scheduledLocalMask, localPlayerIndex, appliedLocalMask)
-      appliedRemoteMask = applyMask(remoteMask, 1 - localPlayerIndex, appliedRemoteMask)
+      appliedMasksByPort[localPlayerIndex] = applyMask(scheduledLocalMask, localPlayerIndex, appliedMasksByPort[localPlayerIndex] ?: 0)
+      expectedRemoteMembers.forEach { remoteMemberId ->
+        val port = sessionPlayerMemberIds.indexOf(remoteMemberId)
+        appliedMasksByPort[port] = applyMask(remoteMasks.getValue(remoteMemberId), port, appliedMasksByPort[port] ?: 0)
+      }
       retroView.requestRender()
       nextLockstepFrame += 1L
       lockstepHandler.postDelayed(this, NETPLAY_FRAME_INTERVAL_MS)
@@ -517,6 +531,47 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
   }
 
+  private fun screenLayoutKey(): String {
+    val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+    return "${definition.system}.$orientation.screen"
+  }
+
+  private fun restoreScreenLayout() {
+    val key = screenLayoutKey()
+    gameFrame.translationX = preferences.getFloat("$key.x", 0f)
+    gameFrame.translationY = preferences.getFloat("$key.y", 0f)
+    val scale = preferences.getFloat("$key.scale", 1f)
+    gameFrame.scaleX = scale
+    gameFrame.scaleY = scale
+  }
+
+  private fun persistScreenLayout() {
+    val key = screenLayoutKey()
+    preferences.edit().putFloat("$key.x", gameFrame.translationX).putFloat("$key.y", gameFrame.translationY).putFloat("$key.scale", gameFrame.scaleX).apply()
+  }
+
+  private fun enableScreenEditor() {
+    var downX = 0f; var downY = 0f; var originX = 0f; var originY = 0f
+    val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+      override fun onScale(detector: ScaleGestureDetector): Boolean {
+        if (!settingsMode) return false
+        val next = (gameFrame.scaleX * detector.scaleFactor).coerceIn(.55f, 1.5f)
+        gameFrame.scaleX = next; gameFrame.scaleY = next
+        return true
+      }
+    })
+    gameFrame.setOnTouchListener { _, event ->
+      if (!settingsMode) return@setOnTouchListener false
+      scaler.onTouchEvent(event)
+      when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> { downX = event.rawX; downY = event.rawY; originX = gameFrame.translationX; originY = gameFrame.translationY; showToast("Screen selected. Drag or pinch to resize it for this orientation.") }
+        MotionEvent.ACTION_MOVE -> if (!scaler.isInProgress) { gameFrame.translationX = originX + event.rawX - downX; gameFrame.translationY = originY + event.rawY - downY }
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> persistScreenLayout()
+      }
+      true
+    }
+  }
+
   private fun attachGameplaySocialOverlay() {
     socialOverlay?.let { root.removeView(it) }
     socialOverlay = createSocialOverlay().also { overlay ->
@@ -641,7 +696,8 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       textSize = if (control.label.length == 1) 20f else 9f
       gravity = Gravity.CENTER
       setTextColor(Color.WHITE)
-      background = roundedBackground(Color.argb(44, 9, 20, 38), Color.argb(215, 196, 237, 255), 28)
+      val isDirection = control.id in setOf("up", "down", "left", "right")
+      background = roundedBackground(Color.argb(44, 9, 20, 38), Color.argb(215, 196, 237, 255), if (isDirection) 10 else 28)
       isClickable = true
       setPadding(dp(3), 0, dp(3), 0)
       setOnTouchListener { _, event -> handleTouch(event) }

@@ -29,11 +29,9 @@ function isPs1GameFile(name: string) {
 export default function PS1Screen() {
   const { roomId, orientation, aspectRatio } = useLocalSearchParams<{ roomId: string; orientation?: string; aspectRatio?: string }>();
   const numericRoomId = Number(roomId);
-  const playerAspect: "fit" | "4:3" | "16:9" = aspectRatio === "fit" || aspectRatio === "4:3" || aspectRatio === "16:9" ? aspectRatio : "4:3";
-  const playerOptions = {
-    orientation: orientation === "portrait" ? "portrait" as const : "landscape" as const,
-    aspectRatio: playerAspect,
-  };
+  const [playerOrientation, setPlayerOrientation] = useState<"portrait" | "landscape">(orientation === "portrait" ? "portrait" : "landscape");
+  const [playerAspect, setPlayerAspect] = useState<"fit" | "4:3" | "16:9">(aspectRatio === "fit" || aspectRatio === "4:3" || aspectRatio === "16:9" ? aspectRatio : "4:3");
+  const playerOptions = { orientation: playerOrientation, aspectRatio: playerAspect };
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
   const voiceChatRef = useRef<RoomVoiceChatHandle | null>(null);
@@ -89,7 +87,7 @@ export default function PS1Screen() {
     };
     const start = (payload: { system?: string }) => {
       if (payload.system !== "ps1" || !game || !credential) return;
-      setStatus("Both devices are ready. Opening the PS1 player at the shared start time…");
+      setStatus("All active players are ready. Opening the PS1 player at the shared start time…");
       launchGame(true);
     };
     socket.on("connect", connected);
@@ -128,7 +126,7 @@ export default function PS1Screen() {
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false);
       setStartRequested(false);
-      setStatus("The file and its fingerprint are ready. Tap READY after the other player selects the same file.");
+      setStatus("The file and its fingerprint are ready. Tap READY after all active players select the same file.");
       haptic.success();
     } catch (error) {
       haptic.error();
@@ -151,7 +149,7 @@ export default function PS1Screen() {
       });
       socketRef.current?.emit("netplay:session-ready", { system: "ps1", fingerprint: game.fingerprint, coreVersion: PS1_NETPLAY_CORE_VERSION });
       setGameReady(true);
-      setStatus("Your game is marked ready. Wait for the other player, then the host can start the session.");
+      setStatus("Your game is marked ready. Wait for all active players, then the host can start the session.");
       haptic.success();
     } catch (error) {
       haptic.error();
@@ -163,10 +161,10 @@ export default function PS1Screen() {
     if (!gameReady || assignedPlayer !== 1 || !ps1NetplayReady) return;
     socketRef.current?.emit("netplay:session-start-request", { system: "ps1" });
     setStartRequested(true);
-    setStatus("Checking both game files and the core before sending the start signal…");
+    setStatus("Checking every active player's game file and core before sending the start signal…");
   };
 
-  const launchGame = async (withNetplay = false) => {
+  const launchGame = async (withNetplay = false, settingsMode = false) => {
     if (!game) return;
     if (Platform.OS === "web") {
       Alert.alert("Android APK required", "The native PS1 player runs in the Android APK and is not available in the web preview.");
@@ -184,7 +182,7 @@ export default function PS1Screen() {
       } : undefined;
       if (withNetplay && !netplay) throw new Error("PS1 NetPlay requires every active player (2–8) to select the same complete game file and core.");
       setStatus(netplay ? "Preparing PS1 NetPlay and assigning this device inside the room…" : "Preparing the game file and opening PCSX-ReARMed…");
-      await MoudieEmulatorModule.launchPS1Game(game.uri, game.name, netplay, playerOptions);
+      await MoudieEmulatorModule.launchPS1Game(game.uri, game.name, netplay, { ...playerOptions, settingsMode });
       setStatus(netplay ? "The PS1 player is open and linked to the room. Wait for the in-game verification message." : "The local player is open. Returning from the game brings you back to this room.");
     } catch (error) {
       haptic.error();
@@ -242,9 +240,17 @@ export default function PS1Screen() {
           {isPicking ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{game ? "CHANGE PS1 GAME FILE" : "1. CHOOSE PS1 GAME FILE"}</Text>}
         </Pressable>
 
+        {game && <View style={styles.statusCard}>
+          <Text style={styles.statusTitle}>SCREEN & CONTROLLER SETTINGS</Text>
+          <Text style={styles.statusText}>Choose the layout first, then open controller calibration. Each direction, action button, chat, microphone, and screen profile is saved separately for portrait and landscape.</Text>
+          <View style={styles.settingRow}>{(["portrait", "landscape"] as const).map((value) => <Pressable key={value} onPress={() => setPlayerOrientation(value)} style={[styles.settingOption, playerOrientation === value && styles.settingOptionActive]}><Text style={styles.settingText}>{value.toUpperCase()}</Text></Pressable>)}</View>
+          <View style={styles.settingRow}>{(["fit", "4:3", "16:9"] as const).map((value) => <Pressable key={value} onPress={() => setPlayerAspect(value)} style={[styles.settingOption, playerAspect === value && styles.settingOptionActive]}><Text style={styles.settingText}>{value === "fit" ? "FIT" : value}</Text></Pressable>)}</View>
+          <Pressable onPress={() => launchGame(false, true)} disabled={isLaunching || isPicking} style={({ pressed }) => [styles.netplayButton, (pressed || isLaunching || isPicking) && styles.netplayDisabled]}><Text style={styles.launchText}>CONFIGURE CONTROLS & SCREEN</Text></Pressable>
+        </View>}
+
         {game && (
           <Pressable onPress={() => launchGame(false)} disabled={isLaunching || isPicking || runtimeStatus?.available === false} style={({ pressed }) => [styles.launchButton, (pressed || isLaunching || isPicking || runtimeStatus?.available === false) && styles.pressed]}>
-            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>2. START LOCAL PLAY · PORTRAIT OR LANDSCAPE</Text>}
+            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>OPEN LOCAL PS1 PLAYER</Text>}
           </Pressable>
         )}
 
@@ -308,6 +314,10 @@ const styles = StyleSheet.create({
   netplayCard: { backgroundColor: "#102A34", borderWidth: 1, borderColor: "#2E7890", borderRadius: 16, padding: 15, marginTop: 18 },
   netplayButton: { minHeight: 49, borderRadius: 14, backgroundColor: "#247F9E", justifyContent: "center", alignItems: "center", marginTop: 12 },
   netplayDisabled: { opacity: 0.45 },
+  settingRow: { flexDirection: "row", gap: 8, marginTop: 11 },
+  settingOption: { flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: "#39566D", backgroundColor: "#14293A" },
+  settingOptionActive: { borderColor: "#62C2EB", backgroundColor: "#14516B" },
+  settingText: { color: "#EFF8FD", fontSize: 10, fontWeight: "900" },
   statusCard: { backgroundColor: "#162235", borderColor: "#29415B", borderWidth: 1, borderRadius: 16, padding: 15, marginTop: 18 },
   statusTitle: { color: "#F4C662", fontSize: 13, fontWeight: "900", textAlign: "right" },
   statusText: { color: "#D5E1EB", fontSize: 13, lineHeight: 20, textAlign: "right", marginTop: 5 },

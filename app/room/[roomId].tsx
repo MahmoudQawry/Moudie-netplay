@@ -104,21 +104,24 @@ export default function RoomScreen() {
           ))}
         </View>
 
+        {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title={`${SYSTEM_LABEL[snapshot.room.system]} ROOM CHAT`} />
+        <RoomVoiceChat socket={roomConnected ? socketRef.current : null} isHost={Boolean(roomIsHost)} remoteOnline={remoteOnline} memberId={credential.memberId} members={snapshot.members} /></>}
+
         {snapshot.room.system === "nes" ? (
           <Pressable onPress={() => router.push({ pathname: "/famicom/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
-            <Text style={styles.playText}>START PLAY · FAMICOM</Text>
+            <Text style={styles.playText}>ENTER FAMICOM SETTINGS</Text>
           </Pressable>
         ) : snapshot.room.system === "ps1" ? (
           <Pressable onPress={() => router.push({ pathname: "/ps1/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
-            <Text style={styles.playText}>START PLAY · PS1</Text>
+            <Text style={styles.playText}>ENTER PS1 SETTINGS</Text>
           </Pressable>
         ) : snapshot.room.system === "psp" ? (
           <Pressable onPress={() => router.push({ pathname: "/psp/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
-            <Text style={styles.playText}>START PLAY · PSP</Text>
+            <Text style={styles.playText}>ENTER PSP SETTINGS</Text>
           </Pressable>
         ) : snapshot.room.system === "sega" || snapshot.room.system === "arcade" ? (
           <Pressable onPress={() => router.push({ pathname: "/native/[system]/[roomId]", params: { system: snapshot.room.system, roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
-            <Text style={styles.playText}>START PLAY · {SYSTEM_LABEL[snapshot.room.system].toUpperCase()}</Text>
+            <Text style={styles.playText}>ENTER {SYSTEM_LABEL[snapshot.room.system].toUpperCase()} SETTINGS</Text>
           </Pressable>
         ) : (
           <>
@@ -127,8 +130,6 @@ export default function RoomScreen() {
               <Text style={styles.nextText}>Text chat and voice are available while the {SYSTEM_LABEL[snapshot.room.system]} room player is prepared.</Text>
               <Text style={styles.progress}>{readyCount} READY PLAYERS OUT OF {playerCount}</Text>
             </View>
-            {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title={`${SYSTEM_LABEL[snapshot.room.system]} ROOM CHAT`} />
-            <RoomVoiceChat socket={roomConnected ? socketRef.current : null} isHost={Boolean(roomIsHost)} remoteOnline={remoteOnline} memberId={credential.memberId} members={snapshot.members} /></>}
           </>
         )}
       </ScrollView>

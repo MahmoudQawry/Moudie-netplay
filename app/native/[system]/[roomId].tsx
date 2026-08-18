@@ -16,6 +16,8 @@ import type { EmulatorSystem } from "@/modules/moudie-emulator/src/MoudieEmulato
 
 type RoomSystem = "sega" | "arcade";
 type Game = { name: string; uri: string; fingerprint: string };
+type PlayerSeat = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+const isPlayerSeat = (value: unknown): value is PlayerSeat => typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 8;
 const SYSTEM_META: Record<RoomSystem, { title: string; color: string }> = { sega: { title: "Sega Genesis", color: "#70E39B" }, arcade: { title: "Arcade", color: "#FF886D" } };
 
 export default function NativeRoomScreen() {
@@ -29,7 +31,7 @@ export default function NativeRoomScreen() {
   const [aspectRatio, setAspectRatio] = useState<"fit" | "4:3" | "16:9">("4:3");
   const [connected, setConnected] = useState(false);
   const [remoteOnline, setRemoteOnline] = useState(false);
-  const [assignedPlayer, setAssignedPlayer] = useState<1 | 2 | null>(null);
+  const [assignedPlayer, setAssignedPlayer] = useState<PlayerSeat | null>(null);
   const [ready, setReady] = useState(false);
   const [starting, setStarting] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -44,7 +46,7 @@ export default function NativeRoomScreen() {
     if (!credential || Platform.OS === "web") return;
     const socket = createNetplaySocket({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken });
     socketRef.current = socket;
-    const joined = (payload: { onlineMemberIds?: number[]; assignedPlayer?: number }) => { setConnected(true); setRemoteOnline(Boolean(payload.onlineMemberIds?.some((id) => id !== credential.memberId))); setAssignedPlayer(payload.assignedPlayer === 1 || payload.assignedPlayer === 2 ? payload.assignedPlayer : null); };
+    const joined = (payload: { onlineMemberIds?: number[]; assignedPlayer?: number }) => { setConnected(true); setRemoteOnline(Boolean(payload.onlineMemberIds?.some((id) => id !== credential.memberId))); setAssignedPlayer(isPlayerSeat(payload.assignedPlayer) ? payload.assignedPlayer : null); };
     const disconnected = () => { setConnected(false); setRemoteOnline(false); setStatus("Room channel disconnected. Reconnecting automatically…"); };
     const presence = (payload: { memberId?: number; online?: boolean }) => { if (payload.memberId !== credential.memberId) setRemoteOnline(Boolean(payload.online)); };
     const start = (payload: { system?: string }) => { if (payload.system === system && game) launch(true); };
@@ -68,7 +70,7 @@ export default function NativeRoomScreen() {
       setStatus("Checking the local game fingerprint…");
       const fingerprint = await MoudieEmulatorModule.fingerprintNativeGame(system as EmulatorSystem, asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint }); setReady(false);
-      setStatus("File verified. Tap READY after the other player chooses the same file.");
+      setStatus("File verified. Tap READY after every active player chooses the same file.");
     } catch (error) { const message = error instanceof Error ? error.message : "Try again."; Alert.alert("Could not choose game", message); setStatus(message); }
     finally { setPicking(false); }
   };
@@ -77,16 +79,16 @@ export default function NativeRoomScreen() {
     if (!credential || !game || !assignedPlayer || !connected) return;
     try {
       await setRealtimeRoomReady({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, isReady: true, fingerprint: game.fingerprint, coreVersion });
-      socketRef.current?.emit("netplay:session-ready", { system, fingerprint: game.fingerprint, coreVersion }); setReady(true); setStatus("READY confirmed. The host starts once both players verify the same file.");
+      socketRef.current?.emit("netplay:session-ready", { system, fingerprint: game.fingerprint, coreVersion }); setReady(true); setStatus("READY confirmed. The host starts once all active players verify the same file.");
     } catch (error) { Alert.alert("Could not mark ready", error instanceof Error ? error.message : "Try again."); }
   };
 
-  const requestStart = () => { socketRef.current?.emit("netplay:session-start-request", { system }); setStarting(true); setStatus("Checking both files and the matching core before synchronized start…"); };
+  const requestStart = () => { socketRef.current?.emit("netplay:session-start-request", { system }); setStarting(true); setStatus("Checking every active player's file and matching core before synchronized start…"); };
   const launch = async (netplay = false, settingsMode = false) => {
     if (!game || Platform.OS === "web") return;
     try {
       const session = netplay && credential && assignedPlayer ? { serverUrl: getNetplayServiceUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system, fingerprint: game.fingerprint, coreVersion, player: assignedPlayer } : undefined;
-      if (netplay && !session) throw new Error("This room needs two ready players using the same file.");
+      if (netplay && !session) throw new Error("This room needs an assigned player seat and a verified multiplayer session.");
       await MoudieEmulatorModule.launchNativeGame(system as EmulatorSystem, game.uri, game.name, { orientation, aspectRatio, settingsMode }, session);
     } catch (error) { const message = error instanceof Error ? error.message : "Try again."; Alert.alert(`Could not start ${meta.title}`, message); setStatus(message); }
   };

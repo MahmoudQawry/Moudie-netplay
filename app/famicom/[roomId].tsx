@@ -74,7 +74,6 @@ export default function FamicomScreen() {
   const lastFamicomSyncRef = useRef(-1);
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
   const [romName, setRomName] = useState<string | null>(null);
-  const [romUri, setRomUri] = useState<string | null>(null);
   const [romBase64, setRomBase64] = useState<string | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [gameReady, setGameReady] = useState(false);
@@ -91,7 +90,6 @@ export default function FamicomScreen() {
   const [inGameMicMuted, setInGameMicMuted] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [focusControlEditor, setFocusControlEditor] = useState(false);
-  const [startOptionsOpen, setStartOptionsOpen] = useState(false);
   const [startOrientation, setStartOrientation] = useState<"portrait" | "landscape">("landscape");
   const [screenAspect, setScreenAspect] = useState<"fit" | "4:3" | "16:9">("4:3");
 
@@ -181,34 +179,14 @@ export default function FamicomScreen() {
     haptic.success();
   };
 
-  const launchCompatibilityPlayer = async () => {
-    if (Platform.OS === "web" || !romUri || !romName) return;
+  const openFamicomControllerSetup = async () => {
+    if (!romName) return;
     try {
       setIsCompatLaunching(true);
-      setNetworkState("Opening extended compatibility mode locally…");
-      await MoudieEmulatorModule.launchFamicomCompatGame(romUri, romName, { orientation: startOrientation, aspectRatio: screenAspect });
-      setNetworkState("Extended compatibility mode is running locally. Return here for NetPlay.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not open extended compatibility mode.";
-      setNetworkState(message);
-      Alert.alert("Could not open compatibility mode", message);
-      haptic.error();
-    } finally {
-      setIsCompatLaunching(false);
-    }
-  };
-
-  const launchNativeFocusPlayer = async () => {
-    if (Platform.OS === "web") {
+      if (Platform.OS !== "web") await MoudieEmulatorModule.setFamicomFocusLandscape(startOrientation === "landscape");
+      setFocusControlEditor(true);
       setFocusMode(true);
-      return;
-    }
-    if (!romUri || !romName) return;
-    try {
-      setIsCompatLaunching(true);
-      setNetworkState("Opening native focus mode with Famicom audio and graphics…");
-      await MoudieEmulatorModule.launchFamicomFocusGame(romUri, romName, { orientation: startOrientation, aspectRatio: screenAspect });
-      setNetworkState("Native focus mode is open. The NetPlay channel remains in the room; native play is currently local.");
+      setNetworkState("Controller setup is open for this orientation. Drag or resize every control, then save and return to READY.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not open native focus mode.";
       setNetworkState(message);
@@ -361,7 +339,6 @@ export default function FamicomScreen() {
         fingerprintRef.current = localFingerprint;
         setFingerprint(localFingerprint);
         setRomName(asset.name);
-        setRomUri(asset.uri);
         setRomBase64(base64);
         setGameReady(false);
         setRemoteVerified(false);
@@ -381,7 +358,6 @@ export default function FamicomScreen() {
       fingerprintRef.current = localFingerprint;
       setFingerprint(localFingerprint);
       setRomName(asset.name);
-      setRomUri(asset.uri);
       setGameReady(false);
       setRemoteVerified(false);
       setNetworkState("The game is running locally. Connect the other player after they choose the same game.");
@@ -531,8 +507,8 @@ export default function FamicomScreen() {
       <StatusBar style="light" hidden={focusMode} animated />
       <ScrollView contentContainerStyle={[styles.content, focusMode && styles.focusContent]}>
         <View style={styles.topActions}>
-          <Pressable onPress={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>{focusMode ? "EXIT FOCUS MODE" : "‹ BACK TO ROOM"}</Text></Pressable>
-          {focusMode ? (!gameActive && <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={({ pressed }) => [styles.focusButton, focusControlEditor && styles.focusButtonActive, pressed && styles.pressed]}><Text style={styles.focusButtonText}>{focusControlEditor ? "SAVE CONTROLS" : "CONFIGURE CONTROLS"}</Text></Pressable>) : romName && <Pressable onPress={launchNativeFocusPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.focusButton, (pressed || isCompatLaunching) && styles.pressed]}><Text style={styles.focusButtonText}>{isCompatLaunching ? "OPENING FOCUS MODE…" : "OPEN CONTROLLER SETTINGS"}</Text></Pressable>}
+          <Pressable onPress={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>{focusMode ? "SAVE & RETURN TO EMULATOR SETTINGS" : "‹ BACK TO ROOM"}</Text></Pressable>
+          {focusMode ? (!gameActive && <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={({ pressed }) => [styles.focusButton, focusControlEditor && styles.focusButtonActive, pressed && styles.pressed]}><Text style={styles.focusButtonText}>{focusControlEditor ? "SAVE CONTROLS" : "CONFIGURE CONTROLS"}</Text></Pressable>) : romName && <Pressable onPress={openFamicomControllerSetup} disabled={isCompatLaunching} style={({ pressed }) => [styles.focusButton, (pressed || isCompatLaunching) && styles.pressed]}><Text style={styles.focusButtonText}>{isCompatLaunching ? "OPENING SETTINGS…" : "CONTROLLER SETTINGS"}</Text></Pressable>}
         </View>
         {!focusMode && <><Text style={styles.eyebrow}>FAMICOM · NETPLAY</Text><Text style={styles.title}>GAME PLAYER</Text><Text style={styles.subtitle}>Choose the same .nes file on both devices. The file stays local and is never uploaded or shared by Moudie NetPlay.</Text></>}
 
@@ -555,14 +531,13 @@ export default function FamicomScreen() {
             }}
           />
         </View>}
-        {!focusMode && <><Pressable onPress={pickRom} disabled={loading || isCompatLaunching} style={({ pressed }) => [styles.pickButton, (pressed || loading || isCompatLaunching) && styles.pressed]}>{loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.pickText}>{romName ? "CHANGE GAME FILE" : "1. CHOOSE .NES FILE"}</Text>}</Pressable>{romName && <Text style={styles.romName}>LOCAL FILE: {romName}</Text>}{romName && Platform.OS !== "web" && <View style={[styles.utilityRow, physicalHorizontalRow]}><Pressable onPress={saveLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>LOCAL SAVE</Text></Pressable><Pressable onPress={loadLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>LOAD SAVE</Text></Pressable></View>}{romName && Platform.OS !== "web" && <Pressable onPress={launchCompatibilityPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.connectButton, (pressed || isCompatLaunching) && styles.pressed]}>{isCompatLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.connectText}>GAME NOT WORKING? OPEN EXTENDED COMPATIBILITY</Text>}</Pressable>}</>}
+        {!focusMode && <><Pressable onPress={pickRom} disabled={loading || isCompatLaunching} style={({ pressed }) => [styles.pickButton, (pressed || loading || isCompatLaunching) && styles.pressed]}>{loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.pickText}>{romName ? "CHANGE GAME FILE" : "1. CHOOSE .NES FILE"}</Text>}</Pressable>{romName && <Text style={styles.romName}>LOCAL FILE: {romName}</Text>}{romName && <View style={styles.startOptions}><Text style={styles.startOptionsTitle}>EMULATOR SCREEN & CONTROLS</Text><Text style={styles.startOptionsLabel}>ORIENTATION</Text><View style={styles.optionRow}>{(["portrait", "landscape"] as const).map((option) => <Pressable key={option} onPress={() => setStartOrientation(option)} style={[styles.optionButton, startOrientation === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.startOptionsLabel}>SCREEN RATIO</Text><View style={styles.optionRow}>{(["fit", "4:3", "16:9"] as const).map((option) => <Pressable key={option} onPress={() => setScreenAspect(option)} style={[styles.optionButton, screenAspect === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option === "fit" ? "FIT" : option}</Text></Pressable>)}</View><Pressable onPress={openFamicomControllerSetup} style={styles.confirmStartButton}><Text style={styles.confirmStartText}>CONFIGURE CONTROLS & SCREEN</Text></Pressable></View>}{romName && Platform.OS !== "web" && <View style={[styles.utilityRow, physicalHorizontalRow]}><Pressable onPress={saveLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>LOCAL SAVE</Text></Pressable><Pressable onPress={loadLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>LOAD SAVE</Text></Pressable></View>}</>}
 
         {!focusMode && <><View style={styles.statusCard}><Text style={styles.statusTitle}>NETPLAY STATUS</Text><Text style={styles.statusText}>{networkState}</Text><Text style={styles.progress}>{readyCount} READY OUT OF {snapshot?.members.length ?? 0}</Text></View>
         {romName && (Platform.OS === "web" ? !remoteVerified : !roomConnected) && <Pressable onPress={connectNetPlay} style={({ pressed }) => [styles.connectButton, pressed && styles.pressed]}><Text style={styles.connectText}>{Platform.OS === "web" ? (isHost ? "2. PREPARE ROOM CONNECTION" : "2. CONNECT TO OTHER PLAYER") : "2. CONNECT NETPLAY CHANNEL"}</Text></Pressable>}
         {Platform.OS !== "web" && romName && roomConnected && <Text style={styles.connectionLine}>{remoteOnline ? "● OTHER PLAYER CONNECTED" : "○ WAITING FOR OTHER PLAYER"}</Text>}
         {Platform.OS !== "web" && romName && roomConnected && <Pressable onPress={markGameReady} disabled={gameReady} style={({ pressed }) => [styles.startButton, (pressed || gameReady) && styles.pressed]}><Text style={styles.startText}>{gameReady ? "READY CONFIRMED" : "3. READY"}</Text></Pressable>}
-        {canStart && <Pressable onPress={() => setStartOptionsOpen(true)} style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}><Text style={styles.startText}>4. START PLAY</Text></Pressable>}
-        {startOptionsOpen && <View style={styles.startOptions}><Text style={styles.startOptionsTitle}>START PLAY SETUP</Text><Text style={styles.startOptionsLabel}>ORIENTATION</Text><View style={styles.optionRow}>{(["portrait", "landscape"] as const).map((option) => <Pressable key={option} onPress={() => setStartOrientation(option)} style={[styles.optionButton, startOrientation === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.startOptionsLabel}>SCREEN RATIO</Text><View style={styles.optionRow}>{(["fit", "4:3", "16:9"] as const).map((option) => <Pressable key={option} onPress={() => setScreenAspect(option)} style={[styles.optionButton, screenAspect === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option === "fit" ? "FIT" : option}</Text></Pressable>)}</View><Pressable onPress={async () => { if (Platform.OS !== "web") await MoudieEmulatorModule.setFamicomFocusLandscape(startOrientation === "landscape"); setStartOptionsOpen(false); startSession(); }} style={styles.confirmStartButton}><Text style={styles.confirmStartText}>CONFIRM & START</Text></Pressable></View>}
+        {canStart && <Pressable onPress={startSession} style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}><Text style={styles.startText}>4. START SYNCHRONIZED SESSION</Text></Pressable>}
         {gameReady && remoteVerified && (Platform.OS === "web" ? !isHost : assignedPlayer === 2) && <Text style={styles.waitText}>VERIFIED. WAIT FOR THE HOST TO START THE SESSION.</Text>}</>}
 
         {!focusMode && Platform.OS !== "web" && romName && <View style={styles.chatCard}><Text style={styles.chatTitle}>ROOM CHAT</Text><View style={styles.chatMessages}>{chatMessages.length ? chatMessages.slice(-4).map((message) => <Text key={message.id} style={styles.chatMessage}><Text style={styles.chatSender}>{message.displayName}: </Text>{message.text}</Text>) : <Text style={styles.chatEmpty}>{roomConnected ? "Write a message to the other player." : "Connect the NetPlay channel to enable chat."}</Text>}</View><View style={styles.chatComposer}><TextInput value={chatDraft} onChangeText={setChatDraft} editable={roomConnected} placeholder="Write a message…" placeholderTextColor="#71839A" style={styles.chatInput} textAlign="left" returnKeyType="send" onSubmitEditing={sendChat} /><Pressable onPress={sendChat} disabled={!roomConnected || !chatDraft.trim()} style={({ pressed }) => [styles.chatSend, (pressed || !roomConnected || !chatDraft.trim()) && styles.chatSendDisabled]}><Text style={styles.chatSendText}>SEND</Text></Pressable></View></View>}

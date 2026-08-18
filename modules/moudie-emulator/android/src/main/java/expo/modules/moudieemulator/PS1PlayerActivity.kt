@@ -3,10 +3,8 @@ package expo.modules.moudieemulator
 import android.content.Context
 import android.app.AlertDialog
 import android.content.pm.ActivityInfo
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.graphics.Paint
 import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.os.Handler
@@ -41,7 +39,6 @@ import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sqrt
 
 /**
  * Full-screen native PS1 player. The game file arrives from the system picker and stays in
@@ -188,7 +185,7 @@ class PS1PlayerActivity : ComponentActivity() {
     ))
     if (!settingsMode) attachGameplayOverlay()
     setContentView(root)
-    root.post { applyAspectRatio() }
+    root.post { applyAspectRatio(); restoreScreenLayout(); enableScreenEditor() }
     connectNetplayIfConfigured()
   }
 
@@ -540,6 +537,47 @@ class PS1PlayerActivity : ComponentActivity() {
     gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
   }
 
+  private fun screenLayoutKey(): String {
+    val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+    return "ps1.$orientation.screen"
+  }
+
+  private fun restoreScreenLayout() {
+    val key = screenLayoutKey()
+    gameFrame.translationX = controlPreferences.getFloat("$key.x", 0f)
+    gameFrame.translationY = controlPreferences.getFloat("$key.y", 0f)
+    val scale = controlPreferences.getFloat("$key.scale", 1f)
+    gameFrame.scaleX = scale
+    gameFrame.scaleY = scale
+  }
+
+  private fun persistScreenLayout() {
+    val key = screenLayoutKey()
+    controlPreferences.edit().putFloat("$key.x", gameFrame.translationX).putFloat("$key.y", gameFrame.translationY).putFloat("$key.scale", gameFrame.scaleX).apply()
+  }
+
+  private fun enableScreenEditor() {
+    var downX = 0f; var downY = 0f; var originX = 0f; var originY = 0f
+    val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+      override fun onScale(detector: ScaleGestureDetector): Boolean {
+        if (!settingsMode) return false
+        val next = (gameFrame.scaleX * detector.scaleFactor).coerceIn(.55f, 1.5f)
+        gameFrame.scaleX = next; gameFrame.scaleY = next
+        return true
+      }
+    })
+    gameFrame.setOnTouchListener { _, event ->
+      if (!settingsMode) return@setOnTouchListener false
+      scaler.onTouchEvent(event)
+      when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> { downX = event.rawX; downY = event.rawY; originX = gameFrame.translationX; originY = gameFrame.translationY; showToast("Screen selected. Drag or pinch to resize it for this orientation.") }
+        MotionEvent.ACTION_MOVE -> if (!scaler.isInProgress) { gameFrame.translationX = originX + event.rawX - downX; gameFrame.translationY = originY + event.rawY - downY }
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> persistScreenLayout()
+      }
+      true
+    }
+  }
+
   private fun attachGameplayOverlay() {
     inGameOverlay?.let { root.removeView(it) }
     inGameOverlay = createInGameOverlay().also { overlay ->
@@ -623,101 +661,19 @@ class PS1PlayerActivity : ComponentActivity() {
       setBackgroundColor(Color.argb(25, 4, 12, 22))
     }
     val padSize = dp(58)
-    wrapper.addView(createAnalogStick(padSize * 3), FrameLayout.LayoutParams(padSize * 3, padSize * 3, Gravity.LEFT or Gravity.BOTTOM))
+    wrapper.addView(createDirectionalPad(padSize), FrameLayout.LayoutParams(padSize * 3, padSize * 3, Gravity.LEFT or Gravity.BOTTOM))
     wrapper.addView(createMiddleControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM))
     wrapper.addView(createActionButtons(padSize), FrameLayout.LayoutParams(padSize * 3, padSize * 3, Gravity.RIGHT or Gravity.BOTTOM))
     return wrapper
   }
 
-  /** Smooth left analog stick; motion is sent continuously to the libretro analog-left source. */
-  private fun createAnalogStick(size: Int): View = AnalogStickView(this).apply {
-    layoutParams = FrameLayout.LayoutParams(size, size)
-  }
-
-  private inner class AnalogStickView(context: Context) : View(context) {
-    private val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      style = Paint.Style.FILL
-      color = Color.argb(44, 7, 22, 35)
-    }
-    private val outerStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      style = Paint.Style.STROKE
-      strokeWidth = dp(2).toFloat()
-      color = Color.argb(214, 202, 235, 255)
-    }
-    private val knobPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      style = Paint.Style.FILL
-      color = Color.argb(116, 74, 143, 184)
-    }
-    private val knobStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      style = Paint.Style.STROKE
-      strokeWidth = dp(2).toFloat()
-      color = Color.argb(230, 220, 243, 255)
-    }
-    private var knobX = 0f
-    private var knobY = 0f
-    private var activeDirections = emptySet<Int>()
-
-    override fun onDraw(canvas: Canvas) {
-      super.onDraw(canvas)
-      val centerX = width / 2f
-      val centerY = height / 2f
-      val radius = min(width, height) * .38f
-      val knobRadius = radius * .42f
-      canvas.drawCircle(centerX, centerY, radius, outerPaint)
-      canvas.drawCircle(centerX, centerY, radius, outerStroke)
-      canvas.drawCircle(centerX + knobX, centerY + knobY, knobRadius, knobPaint)
-      canvas.drawCircle(centerX + knobX, centerY + knobY, knobRadius, knobStroke)
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-      val centerX = width / 2f
-      val centerY = height / 2f
-      val radius = min(width, height) * .38f
-      when (event.actionMasked) {
-        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-          var deltaX = event.x - centerX
-          var deltaY = event.y - centerY
-          val distance = sqrt(deltaX * deltaX + deltaY * deltaY)
-          if (distance > radius && distance > 0f) {
-            val factor = radius / distance
-            deltaX *= factor
-            deltaY *= factor
-          }
-          knobX = deltaX
-          knobY = deltaY
-          updateDigitalDirections(deltaX / radius, deltaY / radius)
-          invalidate()
-        }
-        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-          knobX = 0f
-          knobY = 0f
-          updateDigitalDirections(0f, 0f)
-          invalidate()
-        }
-      }
-      return true
-    }
-
-    /**
-     * PCSX ReARMed games commonly expect the digital D-pad. The visible analog stick therefore
-     * translates its position to the same key presses as the former arrow buttons.
-     */
-    private fun updateDigitalDirections(x: Float, y: Float) {
-      val threshold = .28f
-      val desired = buildSet {
-        if (x <= -threshold) add(KeyEvent.KEYCODE_DPAD_LEFT)
-        if (x >= threshold) add(KeyEvent.KEYCODE_DPAD_RIGHT)
-        if (y <= -threshold) add(KeyEvent.KEYCODE_DPAD_UP)
-        if (y >= threshold) add(KeyEvent.KEYCODE_DPAD_DOWN)
-      }
-      (activeDirections - desired).forEach { keyCode ->
-        sendLocalKey(KeyEvent.ACTION_UP, keyCode)
-      }
-      (desired - activeDirections).forEach { keyCode ->
-        sendLocalKey(KeyEvent.ACTION_DOWN, keyCode)
-      }
-      activeDirections = desired
-    }
+  /** A conventional four-way D-pad, matching the reference layout and editable per direction. */
+  private fun createDirectionalPad(size: Int): FrameLayout = FrameLayout(this).apply {
+    layoutDirection = View.LAYOUT_DIRECTION_LTR
+    addView(button(controlProfile.directions.up, size, size, TouchButtonShape.DIRECTION), FrameLayout.LayoutParams(size, size, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+    addView(button(controlProfile.directions.down, size, size, TouchButtonShape.DIRECTION), FrameLayout.LayoutParams(size, size, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+    addView(button(controlProfile.directions.left, size, size, TouchButtonShape.DIRECTION), FrameLayout.LayoutParams(size, size, Gravity.CENTER_VERTICAL or Gravity.LEFT))
+    addView(button(controlProfile.directions.right, size, size, TouchButtonShape.DIRECTION), FrameLayout.LayoutParams(size, size, Gravity.CENTER_VERTICAL or Gravity.RIGHT))
   }
 
   private fun createMiddleControls(): LinearLayout {
@@ -754,7 +710,7 @@ class PS1PlayerActivity : ComponentActivity() {
     }
   }
 
-  private enum class TouchButtonShape { CIRCLE }
+  private enum class TouchButtonShape { CIRCLE, DIRECTION }
 
   private fun button(control: EmulatorTouchButton, width: Int, height: Int = dp(40), shape: TouchButtonShape = TouchButtonShape.CIRCLE): TextView =
     button(control.label, control.keyCode, width, height, shape).also { view -> attachEditableControl(view, control.id, control.keyCode) }
@@ -850,7 +806,8 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   private fun controlBackground(shape: TouchButtonShape): GradientDrawable = GradientDrawable().apply {
-    this.shape = GradientDrawable.OVAL
+    this.shape = if (shape == TouchButtonShape.CIRCLE) GradientDrawable.OVAL else GradientDrawable.RECTANGLE
+    if (shape == TouchButtonShape.DIRECTION) cornerRadius = dp(12).toFloat()
     setColor(Color.argb(38, 4, 12, 22))
     setStroke(dp(2), Color.argb(205, 218, 239, 255))
   }

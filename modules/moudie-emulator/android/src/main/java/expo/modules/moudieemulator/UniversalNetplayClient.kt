@@ -21,10 +21,10 @@ data class UniversalNetplayConfig(
  */
 class UniversalNetplayClient(
   private val config: UniversalNetplayConfig,
-  private val onBootstrap: () -> Unit,
-  private val onSessionGo: (startAt: Long) -> Unit,
+  private val onBootstrap: (playerMemberIds: List<Int>) -> Unit,
+  private val onSessionGo: (startAt: Long, playerMemberIds: List<Int>) -> Unit,
   private val onStateRequest: () -> Unit,
-  private val onRemoteInput: (frame: Long, mask: Int) -> Unit,
+  private val onRemoteInput: (remoteMemberId: Int, frame: Long, mask: Int) -> Unit,
   private val onRemoteState: (encodedState: String, syncId: Long, encoding: String) -> Unit,
   private val onChat: (displayName: String, text: String) -> Unit,
   private val onStatus: (String) -> Unit,
@@ -54,18 +54,22 @@ class UniversalNetplayClient(
           .put("coreVersion", config.coreVersion))
         onStatus("${config.system.uppercase()} room channel connected. Waiting for both devices to verify the same game.")
       }
-      on("netplay:universal-session-bootstrap") { onBootstrap() }
+      on("netplay:universal-session-bootstrap") { args ->
+        val payload = args.firstOrNull() as? JSONObject ?: return@on
+        onBootstrap(payload.playerMemberIds())
+      }
       on("netplay:universal-session-go") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val startAt = payload.optLong("startAt", -1L)
-        if (startAt > 0L) onSessionGo(startAt)
+        if (startAt > 0L) onSessionGo(startAt, payload.playerMemberIds())
       }
       on("netplay:universal-state-request") { onStateRequest() }
       on("netplay:universal-input") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
+        val remoteMemberId = payload.optInt("memberId", 0)
         val frame = payload.optLong("frame", -1L)
         val mask = payload.optInt("mask", -1)
-        if (frame >= 0L && mask >= 0) onRemoteInput(frame, mask)
+        if (remoteMemberId > 0 && frame >= 0L && mask >= 0) onRemoteInput(remoteMemberId, frame, mask)
       }
       on("netplay:universal-state") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
@@ -105,5 +109,15 @@ class UniversalNetplayClient(
     socket?.off()
     socket?.disconnect()
     socket = null
+  }
+
+  private fun JSONObject.playerMemberIds(): List<Int> {
+    val values = optJSONArray("playerMemberIds") ?: return emptyList()
+    return buildList {
+      for (index in 0 until values.length()) {
+        val memberId = values.optInt(index, 0)
+        if (memberId > 0) add(memberId)
+      }
+    }
   }
 }

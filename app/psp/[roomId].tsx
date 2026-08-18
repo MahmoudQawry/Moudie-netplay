@@ -18,6 +18,8 @@ const PSP_EXTENSIONS = [".iso", ".cso", ".chd", ".pbp"];
 const PSP_NETPLAY_CORE_VERSION = "ppsspp-libretro-lockstep-v1";
 
 type RoomGame = { name: string; uri: string; fingerprint: string };
+type PlayerSeat = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+const isPlayerSeat = (value: unknown): value is PlayerSeat => typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 8;
 
 export default function PSPRoomScreen() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
@@ -28,7 +30,7 @@ export default function PSPRoomScreen() {
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
   const [roomConnected, setRoomConnected] = useState(false);
   const [remoteOnline, setRemoteOnline] = useState(false);
-  const [assignedPlayer, setAssignedPlayer] = useState<1 | 2 | null>(null);
+  const [assignedPlayer, setAssignedPlayer] = useState<PlayerSeat | null>(null);
   const [game, setGame] = useState<RoomGame | null>(null);
   const [picking, setPicking] = useState(false);
   const [launching, setLaunching] = useState(false);
@@ -47,12 +49,12 @@ export default function PSPRoomScreen() {
     const disconnected = () => { setRoomConnected(false); setRemoteOnline(false); setStatus("Room channel disconnected. Reconnecting automatically…"); };
     const joined = (payload: { onlineMemberIds?: number[]; assignedPlayer?: number }) => {
       setRemoteOnline(Boolean(payload.onlineMemberIds?.some((id) => id !== credential.memberId)));
-      setAssignedPlayer(payload.assignedPlayer === 1 || payload.assignedPlayer === 2 ? payload.assignedPlayer : null);
+      setAssignedPlayer(isPlayerSeat(payload.assignedPlayer) ? payload.assignedPlayer : null);
     };
     const presence = (payload: { memberId?: number; online?: boolean }) => { if (payload.memberId !== credential.memberId) setRemoteOnline(Boolean(payload.online)); };
     const start = (payload: { system?: string }) => {
       if (payload.system !== "psp" || !game || !credential) return;
-      setStatus("Both devices are ready. Opening the synchronized PSP player…");
+      setStatus("All active players are ready. Opening the synchronized PSP player…");
       launchGame(true);
     };
     const refused = (payload: { message?: string }) => setStatus(payload.message || "Waiting for the other player to verify the same file.");
@@ -75,7 +77,7 @@ export default function PSPRoomScreen() {
       const fingerprint = await MoudieEmulatorModule.fingerprintNativeGame("psp", asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false); setStartRequested(false);
-      setStatus("File verified. Tap READY after the other player selects the same file."); haptic.success();
+      setStatus("File verified. Tap READY after every active player selects the same file."); haptic.success();
     } catch (error) { haptic.error(); Alert.alert("Could not choose PSP game", error instanceof Error ? error.message : "Try again."); setStatus("Choose a supported legal PSP file from this device."); }
     finally { setPicking(false); }
   };
@@ -85,7 +87,7 @@ export default function PSPRoomScreen() {
     try {
       await setRealtimeRoomReady({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, isReady: true, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
       socketRef.current?.emit("netplay:session-ready", { system: "psp", fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
-      setGameReady(true); setStatus("READY confirmed. The host can start when both players use the same file."); haptic.success();
+      setGameReady(true); setStatus("READY confirmed. The host can start when all active players use the same file."); haptic.success();
     } catch (error) { Alert.alert("Could not mark ready", error instanceof Error ? error.message : "Try again."); }
   };
 
@@ -101,7 +103,7 @@ export default function PSPRoomScreen() {
     try {
       setLaunching(true);
       const netplay = withNetplay && credential && assignedPlayer ? { serverUrl: getNetplayServiceUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system: "psp" as const, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION, player: assignedPlayer } : undefined;
-      if (withNetplay && !netplay) throw new Error("PSP NetPlay needs exactly two ready players with the same game file.");
+      if (withNetplay && !netplay) throw new Error("PSP NetPlay needs an assigned player seat and a verified room session.");
       await MoudieEmulatorModule.launchNativeGame("psp", game.uri, game.name, { ...playerOptions, settingsMode }, netplay);
     } catch (error) { haptic.error(); const message = error instanceof Error ? error.message : "Try again."; Alert.alert("Could not start PSP", message); setStatus(message); }
     finally { setLaunching(false); }

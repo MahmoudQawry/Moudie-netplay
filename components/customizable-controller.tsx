@@ -173,6 +173,7 @@ export function CustomizableController({ system, editable, orientation, onButton
         if (!position) return null;
         const controlSize = position.size;
         const isMeta = id === "START" || id === "SELECT" || id === "L" || id === "R" || id === "L1" || id === "R1";
+        const isDirection = id === "UP" || id === "DOWN" || id === "LEFT" || id === "RIGHT";
         const selected = selectedControl === id && editable;
         return (
           <View key={id} {...gesture.panHandlers} style={[styles.position, { left: `${position.x}%`, top: `${position.y}%`, marginLeft: -controlSize / 2, marginTop: -controlSize / 2 }]}>
@@ -180,7 +181,7 @@ export function CustomizableController({ system, editable, orientation, onButton
               disabled={editable}
               onPressIn={() => onButtonChange?.(id, true)}
               onPressOut={() => onButtonChange?.(id, false)}
-              style={({ pressed }) => [styles.button, isMeta && styles.metaButton, { width: controlSize, height: controlSize, borderRadius: controlSize / 2, borderColor: profile.accent }, pressed && styles.buttonPressed, editable && styles.editButton, selected && { borderColor: "#FFFFFF", borderWidth: 3 }]}
+              style={({ pressed }) => [styles.button, isMeta && styles.metaButton, isDirection && styles.directionButton, { width: controlSize, height: controlSize, borderRadius: isDirection ? Math.max(9, controlSize * 0.18) : controlSize / 2, borderColor: profile.accent }, pressed && styles.buttonPressed, editable && styles.editButton, selected && { borderColor: "#FFFFFF", borderWidth: 3 }]}
             >
               <Text style={[styles.buttonText, isMeta && styles.metaText, { color: profile.accent }]}>{profile.labels[id] ?? id}</Text>
             </Pressable>
@@ -203,6 +204,7 @@ const styles = StyleSheet.create({
   position: { position: "absolute" },
   button: { alignItems: "center", justifyContent: "center", backgroundColor: "rgba(13, 13, 21, 0.62)", borderWidth: 2, shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 8, elevation: 5 },
   metaButton: { backgroundColor: "rgba(13, 13, 21, 0.82)", borderWidth: 1.5 },
+  directionButton: { backgroundColor: "rgba(6, 18, 30, 0.74)", borderWidth: 2.2 },
   buttonText: { fontSize: 19, fontWeight: "900" },
   metaText: { fontSize: 9, letterSpacing: 0.4 },
   buttonPressed: { transform: [{ scale: 0.92 }], backgroundColor: "rgba(255,255,255,0.2)" },
