@@ -20,6 +20,7 @@ const env = {
 // Native APKs do not have a browser origin from which to derive the backend URL.
 // Keep this deployed project URL as a safe fallback while allowing build-time override.
 const NATIVE_API_FALLBACK_URL = "https://moudienet-huy5wdcy.manus.space";
+const NATIVE_NETPLAY_SERVICE_URL = "https://moudienet-7h7tawvf.manus.space";
 
 export const OAUTH_PORTAL_URL = env.portal;
 export const OAUTH_SERVER_URL = env.server;
@@ -58,6 +59,11 @@ export function getApiBaseUrl(): string {
 
   // React Native cannot make a reliable relative API request. Use the deployed backend.
   return NATIVE_API_FALLBACK_URL;
+}
+
+/** Production room relay. Kept separate from the app's OAuth/API gateway. */
+export function getNetplayServiceUrl(): string {
+  return NATIVE_NETPLAY_SERVICE_URL;
 }
 
 export const SESSION_TOKEN_KEY = "app_session_token";

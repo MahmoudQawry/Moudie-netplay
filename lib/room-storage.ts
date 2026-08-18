@@ -5,7 +5,6 @@ export type RoomCredential = {
   roomId: number;
   memberId: number;
   memberToken: string;
-  hostToken?: string;
 };
 
 const profileKey = "moudie.profile.name";

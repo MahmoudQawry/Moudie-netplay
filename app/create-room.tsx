@@ -7,7 +7,8 @@ import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
 import { getProfileName, saveProfileName, saveRoomCredential } from "@/lib/room-storage";
-import { trpc } from "@/lib/trpc";
+import { createRealtimeRoom } from "@/lib/realtime-room-service";
+import { MAX_ACTIVE_PLAYERS, MAX_SPECTATORS } from "@/shared/room-capacity";
 
 type SystemId = "psp" | "nes" | "sega" | "ps1" | "arcade";
 
@@ -23,8 +24,7 @@ export default function CreateRoomScreen() {
   const [system, setSystem] = useState<SystemId>("ps1");
   const [name, setName] = useState("Friends Session");
   const [hostName, setHostName] = useState("");
-  const [maxPlayers, setMaxPlayers] = useState(10);
-  const createRoom = trpc.rooms.create.useMutation();
+  const [creating, setCreating] = useState(false);
 
   const create = async () => {
     const normalizedHost = hostName.trim() || (await getProfileName())?.trim() || "Player";
@@ -34,14 +34,17 @@ export default function CreateRoomScreen() {
       return;
     }
     try {
-      const room = await createRoom.mutateAsync({ name: name.trim(), system, hostName: normalizedHost, maxPlayers });
+      setCreating(true);
+      const room = await createRealtimeRoom({ name: name.trim(), system, hostName: normalizedHost });
       await saveProfileName(normalizedHost);
-      await saveRoomCredential({ roomId: room.roomId, memberId: room.memberId, memberToken: room.memberToken, hostToken: room.hostToken });
+      await saveRoomCredential({ roomId: room.roomId, memberId: room.memberId, memberToken: room.memberToken });
       haptic.success();
       router.replace({ pathname: "/room/[roomId]", params: { roomId: String(room.roomId) } });
     } catch (error) {
       haptic.error();
       Alert.alert("Could not create room", error instanceof Error ? error.message : "Try again.");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -76,12 +79,7 @@ export default function CreateRoomScreen() {
           <Text style={styles.label}>DISPLAY NAME</Text>
           <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="Visible to your friends" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
 
-          <View style={styles.capacityHeading}><Text style={styles.labelInline}>ROOM CAPACITY</Text><Text style={styles.capacityHint}>UP TO 10 MEMBERS</Text></View>
-          <View style={styles.capacityRow}>
-            {[2, 4, 6, 8, 10].map((value) => (
-              <Pressable key={value} onPress={() => { haptic.selection(); setMaxPlayers(value); }} style={({ pressed }) => [styles.capacity, maxPlayers === value && styles.capacitySelected, pressed && styles.pressed]}><Text style={[styles.capacityText, maxPlayers === value && styles.capacityTextSelected]}>{value}</Text></Pressable>
-            ))}
-          </View>
+          <View style={styles.capacityCard}><Text style={styles.capacityTitle}>ROOM CAPACITY · 16 MEMBERS</Text><Text style={styles.capacityText}>{MAX_ACTIVE_PLAYERS} ACTIVE PLAYERS · {MAX_SPECTATORS} SPECTATORS</Text><Text style={styles.capacityNote}>Active seats join the ready check. Spectators can watch, talk, and chat without occupying a controller seat.</Text></View>
 
           <View style={styles.featureRow}>
             <View style={styles.feature}><MaterialCommunityIcons name="microphone-outline" size={16} color="#69E8FF" /><Text style={styles.featureText}>VOICE</Text></View>
@@ -89,8 +87,8 @@ export default function CreateRoomScreen() {
             <View style={styles.feature}><MaterialCommunityIcons name="eye-outline" size={16} color="#FFD16A" /><Text style={styles.featureText}>SPECTATE</Text></View>
           </View>
 
-          <Pressable onPress={create} disabled={createRoom.isPending} style={({ pressed }) => [styles.primaryButton, (pressed || createRoom.isPending) && styles.buttonPressed]}>
-            {createRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>CREATE ROOM & ENTER PLAYER</Text><MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" /></>}
+          <Pressable onPress={create} disabled={creating} style={({ pressed }) => [styles.primaryButton, (pressed || creating) && styles.buttonPressed]}>
+            {creating ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>CREATE ROOM & ENTER PLAYER</Text><MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" /></>}
           </Pressable>
         </View>
       </ScrollView>
@@ -117,14 +115,10 @@ const styles = StyleSheet.create({
   selectedDot: { width: 8, height: 8, borderRadius: 4, position: "absolute", top: 10, left: 10 },
   label: { color: "#ECE7F9", fontSize: 13, fontWeight: "900", textAlign: "right", marginTop: 17, marginBottom: 7 },
   input: { minHeight: 51, backgroundColor: "#0E091A", borderRadius: 14, borderWidth: 1, borderColor: "#302144", paddingHorizontal: 14, color: "#F8F4FF", fontSize: 15 },
-  capacityHeading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 17, marginBottom: 7 },
-  labelInline: { color: "#ECE7F9", fontSize: 13, fontWeight: "900" },
-  capacityHint: { color: "#67E1FF", fontSize: 10, fontWeight: "800" },
-  capacityRow: { flexDirection: "row", gap: 7 },
-  capacity: { flex: 1, minHeight: 39, borderRadius: 12, borderWidth: 1, borderColor: "#332349", backgroundColor: "#110A20", alignItems: "center", justifyContent: "center" },
-  capacitySelected: { borderColor: "#A955F7", backgroundColor: "#4B2377" },
-  capacityText: { color: "#A69DB8", fontSize: 13, fontWeight: "900" },
-  capacityTextSelected: { color: "#FFFFFF" },
+  capacityCard: { marginTop: 17, borderRadius: 14, borderWidth: 1, borderColor: "#3F6D88", backgroundColor: "#102236", padding: 13 },
+  capacityTitle: { color: "#71E7FF", fontSize: 12, fontWeight: "900" },
+  capacityText: { color: "#F5FBFF", fontSize: 12, fontWeight: "900", marginTop: 6 },
+  capacityNote: { color: "#B1C5D4", fontSize: 10, lineHeight: 16, marginTop: 6 },
   featureRow: { flexDirection: "row", justifyContent: "space-around", backgroundColor: "#100A1D", borderRadius: 14, marginTop: 16, paddingVertical: 10, borderWidth: 1, borderColor: "#29203B" },
   feature: { flexDirection: "row", alignItems: "center", gap: 5 },
   featureText: { color: "#BBB3C9", fontSize: 11, fontWeight: "800" },

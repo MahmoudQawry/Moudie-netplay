@@ -17,8 +17,9 @@ import { FamicomInputCoordinator } from "@/lib/famicom-input-coordinator";
 import { haptic } from "@/lib/haptics";
 import { createNetplaySocket, type RoomChatMessage } from "@/lib/netplay-socket";
 import { shouldApplyAuthoritativeState } from "@/lib/netplay-sync";
+import { setRealtimeRoomReady } from "@/lib/realtime-room-service";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
-import { trpc } from "@/lib/trpc";
+import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
 import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorModule";
 
 type JsNesModule = {
@@ -117,12 +118,7 @@ export default function FamicomScreen() {
   }, [roomId]);
 
 
-  const snapshotQuery = trpc.rooms.snapshot.useQuery(
-    { roomId, memberId: credential?.memberId ?? 0, memberToken: credential?.memberToken ?? "" },
-    { enabled: Boolean(credential && roomId), refetchInterval: 3000 },
-  );
-  const setReady = trpc.rooms.setReady.useMutation({ onSuccess: () => snapshotQuery.refetch() });
-  const startRoom = trpc.rooms.start.useMutation({ onSuccess: () => snapshotQuery.refetch() });
+  const snapshotQuery = useRealtimeRoomSnapshot(roomId, credential);
   const snapshot = snapshotQuery.data;
   const membership = snapshot?.members.find((member) => member.id === credential?.memberId);
   const isHost = membership?.role === "host";
@@ -130,10 +126,11 @@ export default function FamicomScreen() {
 
   useEffect(() => {
     if (Platform.OS === "web" || !fingerprint || !snapshot) return;
-    const matchingPlayers = snapshot.members.filter(
+    const activePlayers = snapshot.members.filter((member) => member.role !== "spectator");
+    const matchingPlayers = activePlayers.filter(
       (member) => member.isReady && member.gameFingerprint === fingerprint && member.coreVersion === FAMICOM_CORE_VERSION,
     );
-    const verified = matchingPlayers.length >= 2;
+    const verified = activePlayers.length >= 2 && matchingPlayers.length === activePlayers.length;
     setRemoteVerified(verified);
     if (verified && roomConnected) setNetworkState("The other player verified the game file. The host can start the session.");
   }, [fingerprint, roomConnected, snapshot]);
@@ -315,11 +312,6 @@ export default function FamicomScreen() {
       socket.on("netplay:session-start", (payload: { system?: string }) => {
         if (payload.system !== "nes") return;
         setNetworkState("Game compatibility confirmed. Both players now start from the same local state.");
-        if (assignedPlayerRef.current === 1 && credential.hostToken) {
-          startRoom.mutateAsync({ roomId, hostToken: credential.hostToken }).catch((error) => {
-            setNetworkState(error instanceof Error ? error.message : "Could not confirm the session start.");
-          });
-        }
       });
       socket.on("netplay:session-start-refused", (payload: { message?: string }) => {
         setNetworkState(payload.message ?? "Waiting for the other player to confirm the game file and core.");
@@ -374,15 +366,6 @@ export default function FamicomScreen() {
         setGameReady(false);
         setRemoteVerified(false);
         setNetworkState("Loading the game locally on this device…");
-        if (credential) {
-          await setReady.mutateAsync({
-            memberId: credential.memberId,
-            memberToken: credential.memberToken,
-            isReady: false,
-            gameFingerprint: localFingerprint,
-            coreVersion: FAMICOM_CORE_VERSION,
-          });
-        }
         haptic.success();
         return;
       }
@@ -402,9 +385,6 @@ export default function FamicomScreen() {
       setGameReady(false);
       setRemoteVerified(false);
       setNetworkState("The game is running locally. Connect the other player after they choose the same game.");
-      if (credential) {
-        await setReady.mutateAsync({ memberId: credential.memberId, memberToken: credential.memberToken, isReady: false, gameFingerprint: localFingerprint, coreVersion: FAMICOM_CORE_VERSION });
-      }
       haptic.success();
     } catch (error) {
       setNetworkState("Could not run this file. Try another compatible .nes file.");
@@ -449,11 +429,12 @@ export default function FamicomScreen() {
   const markGameReady = async () => {
     if (!credential || !fingerprint || !roomConnected) return;
     try {
-      await setReady.mutateAsync({
+      await setRealtimeRoomReady({
+        roomId,
         memberId: credential.memberId,
         memberToken: credential.memberToken,
         isReady: true,
-        gameFingerprint: fingerprint,
+        fingerprint,
         coreVersion: FAMICOM_CORE_VERSION,
       });
       socketRef.current?.emit("netplay:session-ready", { system: "nes", fingerprint, coreVersion: FAMICOM_CORE_VERSION });
@@ -468,7 +449,7 @@ export default function FamicomScreen() {
 
   const startSession = async () => {
     const isAuthoritativeHost = Platform.OS === "web" ? isHost : assignedPlayer === 1;
-    if (!isAuthoritativeHost || !credential?.hostToken || !remoteVerified) return;
+    if (!isAuthoritativeHost || !remoteVerified) return;
     try {
       if (Platform.OS !== "web") {
         if (!socketRef.current?.connected || !remoteOnline) throw new Error("Wait until the other player connects to the room channel.");
@@ -482,7 +463,6 @@ export default function FamicomScreen() {
         throw new Error("The connection between both devices is not complete yet.");
       }
       connectionRef.current.send({ type: "state", snapshot: JSON.stringify(initialState), syncId: ++famicomSyncSequenceRef.current });
-      await startRoom.mutateAsync({ roomId, hostToken: credential.hostToken });
       setNetworkState("The two-player session is active. The host is Player 1 and the guest is Player 2.");
       haptic.success();
     } catch (error) {
@@ -581,7 +561,7 @@ export default function FamicomScreen() {
         {romName && (Platform.OS === "web" ? !remoteVerified : !roomConnected) && <Pressable onPress={connectNetPlay} style={({ pressed }) => [styles.connectButton, pressed && styles.pressed]}><Text style={styles.connectText}>{Platform.OS === "web" ? (isHost ? "2. PREPARE ROOM CONNECTION" : "2. CONNECT TO OTHER PLAYER") : "2. CONNECT NETPLAY CHANNEL"}</Text></Pressable>}
         {Platform.OS !== "web" && romName && roomConnected && <Text style={styles.connectionLine}>{remoteOnline ? "● OTHER PLAYER CONNECTED" : "○ WAITING FOR OTHER PLAYER"}</Text>}
         {Platform.OS !== "web" && romName && roomConnected && <Pressable onPress={markGameReady} disabled={gameReady} style={({ pressed }) => [styles.startButton, (pressed || gameReady) && styles.pressed]}><Text style={styles.startText}>{gameReady ? "READY CONFIRMED" : "3. READY"}</Text></Pressable>}
-        {canStart && <Pressable onPress={() => setStartOptionsOpen(true)} disabled={startRoom.isPending} style={({ pressed }) => [styles.startButton, (pressed || startRoom.isPending) && styles.pressed]}>{startRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.startText}>4. START PLAY</Text>}</Pressable>}
+        {canStart && <Pressable onPress={() => setStartOptionsOpen(true)} style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}><Text style={styles.startText}>4. START PLAY</Text></Pressable>}
         {startOptionsOpen && <View style={styles.startOptions}><Text style={styles.startOptionsTitle}>START PLAY SETUP</Text><Text style={styles.startOptionsLabel}>ORIENTATION</Text><View style={styles.optionRow}>{(["portrait", "landscape"] as const).map((option) => <Pressable key={option} onPress={() => setStartOrientation(option)} style={[styles.optionButton, startOrientation === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.startOptionsLabel}>SCREEN RATIO</Text><View style={styles.optionRow}>{(["fit", "4:3", "16:9"] as const).map((option) => <Pressable key={option} onPress={() => setScreenAspect(option)} style={[styles.optionButton, screenAspect === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option === "fit" ? "FIT" : option}</Text></Pressable>)}</View><Pressable onPress={async () => { if (Platform.OS !== "web") await MoudieEmulatorModule.setFamicomFocusLandscape(startOrientation === "landscape"); setStartOptionsOpen(false); startSession(); }} style={styles.confirmStartButton}><Text style={styles.confirmStartText}>CONFIRM & START</Text></Pressable></View>}
         {gameReady && remoteVerified && (Platform.OS === "web" ? !isHost : assignedPlayer === 2) && <Text style={styles.waitText}>VERIFIED. WAIT FOR THE HOST TO START THE SESSION.</Text>}</>}
 

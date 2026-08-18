@@ -8,7 +8,8 @@ import { RoomVoiceChat } from "@/components/room-voice-chat";
 import { haptic } from "@/lib/haptics";
 import { createNetplaySocket } from "@/lib/netplay-socket";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
-import { trpc } from "@/lib/trpc";
+import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
+import { MAX_ACTIVE_PLAYERS, MAX_SPECTATORS } from "@/shared/room-capacity";
 
 const SYSTEM_LABEL: Record<string, string> = { psp: "PSP", nes: "Famicom / NES", sega: "Sega Genesis", ps1: "PlayStation 1", arcade: "Arcade" };
 
@@ -49,10 +50,7 @@ export default function RoomScreen() {
     };
   }, [credential, roomId]);
 
-  const snapshotQuery = trpc.rooms.snapshot.useQuery(
-    { roomId, memberId: credential?.memberId ?? 0, memberToken: credential?.memberToken ?? "" },
-    { enabled: Boolean(credential && roomId), refetchInterval: 4000 },
-  );
+  const snapshotQuery = useRealtimeRoomSnapshot(roomId, credential, 4_000);
   const snapshot = snapshotQuery.data;
   const roomIsHost = snapshot?.members.find((member) => member.id === credential?.memberId)?.role === "host";
 
@@ -87,7 +85,7 @@ export default function RoomScreen() {
         </View>
         <Text style={styles.system}>{SYSTEM_LABEL[snapshot.room.system]}</Text>
         <Text style={styles.title}>{snapshot.room.name}</Text>
-        <Text style={styles.caption}>PRIVATE ROOM · {playerCount}/{snapshot.room.maxPlayers} PLAYERS{spectatorCount ? ` · ${spectatorCount} SPECTATORS` : ""}</Text>
+        <Text style={styles.caption}>PRIVATE ROOM · {playerCount}/{MAX_ACTIVE_PLAYERS} PLAYERS · {spectatorCount}/{MAX_SPECTATORS} SPECTATORS</Text>
 
         <View style={styles.codeCard}>
           <Text style={styles.codeLabel}>INVITE CODE</Text>
@@ -95,12 +93,12 @@ export default function RoomScreen() {
           <Pressable onPress={share} style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}><Text style={styles.shareText}>SHARE CODE</Text></Pressable>
         </View>
 
-        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ROOM MEMBERS</Text><Text style={styles.counter}>{playerCount}/{snapshot.room.maxPlayers} PLAYERS</Text></View>
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ROOM MEMBERS</Text><Text style={styles.counter}>{playerCount}/{MAX_ACTIVE_PLAYERS} PLAYERS · {spectatorCount}/{MAX_SPECTATORS} SPECTATORS</Text></View>
         <View style={styles.memberList}>
           {snapshot.members.map((member) => (
             <View key={member.id} style={styles.member}>
               <View style={[styles.avatar, member.role === "host" && styles.avatarHost]}><Text style={styles.avatarText}>{member.displayName.slice(0, 1).toUpperCase()}</Text></View>
-              <View style={styles.memberText}><Text style={styles.memberName}>{member.displayName}{member.role === "host" ? " · HOST" : member.role === "spectator" ? " · SPECTATOR" : ""}</Text><Text style={styles.memberStatus}>{member.role === "spectator" ? "Watching and talking in the room" : member.isReady ? "READY" : "Checking emulator"}</Text></View>
+              <View style={styles.memberText}><Text style={styles.memberName}>{member.displayName}{member.role === "host" ? " · PLAYER 1 · HOST" : member.role === "spectator" ? " · SPECTATOR" : ` · PLAYER ${snapshot.members.filter((entry) => entry.role !== "spectator").sort((left, right) => (left.role === "host" ? -1 : right.role === "host" ? 1 : left.id - right.id)).findIndex((entry) => entry.id === member.id) + 1}`}</Text><Text style={styles.memberStatus}>{member.role === "spectator" ? "Watching and talking in the room" : member.isReady ? "READY" : "Checking emulator"}</Text></View>
               <View style={[styles.readyDot, member.isReady ? styles.ready : styles.pending]} />
             </View>
           ))}

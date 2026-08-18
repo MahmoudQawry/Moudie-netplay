@@ -110,7 +110,7 @@ class MoudieEmulatorModule : Module() {
               val memberToken = config["memberToken"] as? String
               val fingerprint = config["fingerprint"] as? String
               val player = (config["player"] as? Number)?.toInt()
-              if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && !fingerprint.isNullOrBlank() && player in 1..2) {
+              if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && !fingerprint.isNullOrBlank() && player in 1..8) {
                 putExtra(PS1PlayerActivity.EXTRA_NETPLAY_SERVER_URL, serverUrl)
                 putExtra(PS1PlayerActivity.EXTRA_NETPLAY_ROOM_ID, roomId)
                 putExtra(PS1PlayerActivity.EXTRA_NETPLAY_MEMBER_ID, memberId)
@@ -158,7 +158,7 @@ class MoudieEmulatorModule : Module() {
             val fingerprint = config["fingerprint"] as? String
             val player = (config["player"] as? Number)?.toInt()
             val coreVersion = config["coreVersion"] as? String
-            if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && sessionSystem == definition.system && !fingerprint.isNullOrBlank() && !coreVersion.isNullOrBlank() && player in 1..2) {
+            if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && sessionSystem == definition.system && !fingerprint.isNullOrBlank() && !coreVersion.isNullOrBlank() && player in 1..8) {
               putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_SERVER_URL, serverUrl)
               putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_ROOM_ID, roomId)
               putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_MEMBER_ID, memberId)

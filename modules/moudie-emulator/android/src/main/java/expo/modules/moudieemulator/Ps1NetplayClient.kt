@@ -18,9 +18,9 @@ data class Ps1NetplayConfig(
 class Ps1NetplayClient(
   private val config: Ps1NetplayConfig,
   private val onBootstrap: () -> Unit,
-  private val onSessionGo: (startAt: Long) -> Unit,
+  private val onSessionGo: (startAt: Long, playerMemberIds: List<Int>) -> Unit,
   private val onStateRequest: () -> Unit,
-  private val onRemoteInput: (frame: Long, mask: Int) -> Unit,
+  private val onRemoteInput: (memberId: Int, frame: Long, mask: Int) -> Unit,
   private val onRemoteState: (encodedState: String, syncId: Long, encoding: String) -> Unit,
   private val onChat: (displayName: String, text: String) -> Unit,
   private val onStatus: (String) -> Unit,
@@ -51,14 +51,22 @@ class Ps1NetplayClient(
       on("netplay:ps1-session-go") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val startAt = payload.optLong("startAt", -1L)
-        if (startAt > 0L) onSessionGo(startAt)
+        val members = payload.optJSONArray("playerMemberIds")
+        val playerMemberIds = buildList {
+          if (members != null) for (index in 0 until members.length()) {
+            val memberId = members.optInt(index, -1)
+            if (memberId > 0) add(memberId)
+          }
+        }
+        if (startAt > 0L && playerMemberIds.size in 2..8) onSessionGo(startAt, playerMemberIds)
       }
       on("netplay:ps1-state-request") { onStateRequest() }
       on("netplay:ps1-input") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
+        val memberId = payload.optInt("memberId", -1)
         val frame = payload.optLong("frame", -1L)
         val mask = payload.optInt("mask", -1)
-        if (frame >= 0L && mask in 0..0xffff) onRemoteInput(frame, mask)
+        if (memberId > 0 && frame >= 0L && mask in 0..0xffff) onRemoteInput(memberId, frame, mask)
       }
       on("netplay:ps1-state") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on

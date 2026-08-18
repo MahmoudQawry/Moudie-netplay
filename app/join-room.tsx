@@ -7,7 +7,7 @@ import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
 import { getProfileName, saveProfileName, saveRoomCredential } from "@/lib/room-storage";
-import { trpc } from "@/lib/trpc";
+import { joinRealtimeRoom } from "@/lib/realtime-room-service";
 
 type JoinAs = "player" | "spectator";
 
@@ -15,7 +15,7 @@ export default function JoinRoomScreen() {
   const [joinCode, setJoinCode] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [joinAs, setJoinAs] = useState<JoinAs>("player");
-  const joinRoom = trpc.rooms.join.useMutation();
+  const [joining, setJoining] = useState(false);
 
   useEffect(() => { getProfileName().then((saved) => saved && setDisplayName(saved)); }, []);
 
@@ -31,7 +31,8 @@ export default function JoinRoomScreen() {
       return;
     }
     try {
-      const result = await joinRoom.mutateAsync({ joinCode: joinCode.trim().toUpperCase(), displayName: displayName.trim(), joinAs });
+      setJoining(true);
+      const result = await joinRealtimeRoom({ joinCode: joinCode.trim().toUpperCase(), displayName: displayName.trim(), joinAs });
       await saveProfileName(displayName.trim());
       await saveRoomCredential({ roomId: result.roomId, memberId: result.memberId, memberToken: result.memberToken });
       haptic.success();
@@ -39,6 +40,8 @@ export default function JoinRoomScreen() {
     } catch (error) {
       haptic.error();
       Alert.alert("Could not join", error instanceof Error ? error.message : "Check the room code and try again.");
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -71,8 +74,8 @@ export default function JoinRoomScreen() {
             </Pressable>
           </View>
 
-          <Pressable onPress={join} disabled={joinRoom.isPending} style={({ pressed }) => [styles.primaryButton, (pressed || joinRoom.isPending) && styles.buttonPressed]}>
-            {joinRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>JOIN ROOM</Text><MaterialCommunityIcons name="login-variant" size={20} color="#FFFFFF" /></>}
+          <Pressable onPress={join} disabled={joining} style={({ pressed }) => [styles.primaryButton, (pressed || joining) && styles.buttonPressed]}>
+            {joining ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>JOIN ROOM</Text><MaterialCommunityIcons name="login-variant" size={20} color="#FFFFFF" /></>}
           </Pressable>
         </View>
         <View style={styles.helper}><MaterialCommunityIcons name="shield-lock-outline" size={18} color="#69E8FF" /><Text style={styles.helperText}>Your room code and membership stay on this device. Game files are never sent to the room.</Text></View>

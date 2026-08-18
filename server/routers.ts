@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "../shared/const.js";
+import { MAX_ACTIVE_PLAYERS, MAX_ROOM_MEMBERS, MAX_SPECTATORS } from "../shared/room-capacity.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
@@ -30,12 +31,12 @@ export const appRouter = router({
           name: z.string().trim().min(2).max(64),
           system: z.enum(["psp", "nes", "sega", "ps1", "arcade"]),
           hostName: z.string().trim().min(2).max(32),
-          maxPlayers: z.number().int().min(2).max(10),
+          maxPlayers: z.literal(MAX_ACTIVE_PLAYERS).default(MAX_ACTIVE_PLAYERS),
         }),
       )
       .mutation(async ({ input }) => {
         const capability = EMULATOR_ROOM_CAPABILITIES[input.system];
-        if (input.maxPlayers > capability.maxRoomMembers) throw new Error("الحد الأقصى للغرفة هو عشرة أعضاء.");
+        if (capability.maxRoomMembers < MAX_ROOM_MEMBERS) throw new Error("هذا المحاكي لا يدعم سعة الغرفة المطلوبة.");
         const hostToken = createAccessToken();
         const memberToken = createAccessToken();
         const created = await db.createRoom({
@@ -55,10 +56,15 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const room = await db.findRoomByCode(input.joinCode.toUpperCase());
         if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
+        const totalMembers = await db.getRoomMemberCount(room.id);
+        if (totalMembers >= MAX_ROOM_MEMBERS) throw new Error("الغرفة مكتملة: 8 لاعبين و8 مشاهدين كحد أقصى.");
         if (input.joinAs === "player") {
           const playerCount = await db.getRoomMemberCount(room.id, "player");
-          // The host always occupies a player seat, so playerCount excludes that one host seat.
-          if (playerCount + 1 >= room.maxPlayers) throw new Error("مقاعد اللعب في الغرفة مكتملة. يمكنك الدخول كمشاهد.");
+          // The host always occupies one active seat, so playerCount excludes the host.
+          if (playerCount + 1 >= MAX_ACTIVE_PLAYERS) throw new Error("مقاعد اللعب الثمانية مكتملة. يمكنك الدخول كمشاهد.");
+        } else {
+          const spectatorCount = await db.getRoomMemberCount(room.id, "spectator");
+          if (spectatorCount >= MAX_SPECTATORS) throw new Error("مقاعد المشاهدة الثمانية مكتملة.");
         }
         const memberToken = createAccessToken();
         const memberId = await db.addRoomMember({
@@ -114,8 +120,8 @@ export const appRouter = router({
           throw new Error("لا تملك صلاحية بدء هذه الجلسة.");
         }
         const players = snapshot.members.filter((member) => member.role !== "spectator");
-        if (players.length < 2 || players.some((member) => !member.isReady)) {
-          throw new Error("يجب أن يكون لاعبان على الأقل جاهزين قبل البدء.");
+        if (players.length < 2 || players.length > MAX_ACTIVE_PLAYERS || players.some((member) => !member.isReady)) {
+          throw new Error("يجب أن يكون لاعبان إلى ثمانية لاعبين نشطين جاهزين قبل البدء.");
         }
         const fingerprints = new Set(players.map((member) => member.gameFingerprint));
         const versions = new Set(players.map((member) => member.coreVersion));

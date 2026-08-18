@@ -6,11 +6,12 @@ import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, 
 import { ScreenContainer } from "@/components/screen-container";
 import { RoomChat } from "@/components/room-chat";
 import { RoomVoiceChat } from "@/components/room-voice-chat";
-import { getApiBaseUrl } from "@/constants/oauth";
+import { getNetplayServiceUrl } from "@/constants/oauth";
 import { haptic } from "@/lib/haptics";
 import { createNetplaySocket } from "@/lib/netplay-socket";
+import { setRealtimeRoomReady } from "@/lib/realtime-room-service";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
-import { trpc } from "@/lib/trpc";
+import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
 import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorModule";
 
 const PSP_EXTENSIONS = [".iso", ".cso", ".chd", ".pbp"];
@@ -34,9 +35,7 @@ export default function PSPRoomScreen() {
   const [gameReady, setGameReady] = useState(false);
   const [startRequested, setStartRequested] = useState(false);
   const [status, setStatus] = useState("Choose the same legal PSP file on both devices.");
-  const snapshotQuery = trpc.rooms.snapshot.useQuery({ roomId: numericRoomId, memberId: credential?.memberId ?? 0, memberToken: credential?.memberToken ?? "" }, { enabled: Boolean(credential && Number.isFinite(numericRoomId)), refetchInterval: 4000 });
-  const setReady = trpc.rooms.setReady.useMutation({ onSuccess: () => snapshotQuery.refetch() });
-  const startRoom = trpc.rooms.start.useMutation({ onSuccess: () => snapshotQuery.refetch() });
+  const snapshotQuery = useRealtimeRoomSnapshot(numericRoomId, credential, 4_000);
   const playerOptions = { orientation, aspectRatio };
 
   useEffect(() => { if (Number.isFinite(numericRoomId)) getRoomCredential(numericRoomId).then(setCredential); }, [numericRoomId]);
@@ -76,7 +75,6 @@ export default function PSPRoomScreen() {
       const fingerprint = await MoudieEmulatorModule.fingerprintNativeGame("psp", asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false); setStartRequested(false);
-      if (credential) await setReady.mutateAsync({ memberId: credential.memberId, memberToken: credential.memberToken, isReady: false, gameFingerprint: fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
       setStatus("File verified. Tap READY after the other player selects the same file."); haptic.success();
     } catch (error) { haptic.error(); Alert.alert("Could not choose PSP game", error instanceof Error ? error.message : "Try again."); setStatus("Choose a supported legal PSP file from this device."); }
     finally { setPicking(false); }
@@ -85,7 +83,7 @@ export default function PSPRoomScreen() {
   const markGameReady = async () => {
     if (!game || !credential || !roomConnected || !assignedPlayer) return;
     try {
-      await setReady.mutateAsync({ memberId: credential.memberId, memberToken: credential.memberToken, isReady: true, gameFingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
+      await setRealtimeRoomReady({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, isReady: true, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
       socketRef.current?.emit("netplay:session-ready", { system: "psp", fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
       setGameReady(true); setStatus("READY confirmed. The host can start when both players use the same file."); haptic.success();
     } catch (error) { Alert.alert("Could not mark ready", error instanceof Error ? error.message : "Try again."); }
@@ -102,10 +100,9 @@ export default function PSPRoomScreen() {
     if (Platform.OS === "web") { Alert.alert("Android APK required", "The native PSP player is available in the Android APK only."); return; }
     try {
       setLaunching(true);
-      const netplay = withNetplay && credential && assignedPlayer ? { serverUrl: getApiBaseUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system: "psp" as const, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION, player: assignedPlayer } : undefined;
+      const netplay = withNetplay && credential && assignedPlayer ? { serverUrl: getNetplayServiceUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system: "psp" as const, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION, player: assignedPlayer } : undefined;
       if (withNetplay && !netplay) throw new Error("PSP NetPlay needs exactly two ready players with the same game file.");
       await MoudieEmulatorModule.launchNativeGame("psp", game.uri, game.name, { ...playerOptions, settingsMode }, netplay);
-      if (withNetplay && credential?.hostToken && assignedPlayer === 1) startRoom.mutate({ roomId: numericRoomId, hostToken: credential.hostToken });
     } catch (error) { haptic.error(); const message = error instanceof Error ? error.message : "Try again."; Alert.alert("Could not start PSP", message); setStatus(message); }
     finally { setLaunching(false); }
   };

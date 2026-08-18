@@ -6,11 +6,12 @@ import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, 
 import { ScreenContainer } from "@/components/screen-container";
 import { RoomChat } from "@/components/room-chat";
 import { RoomVoiceChat } from "@/components/room-voice-chat";
-import { getApiBaseUrl } from "@/constants/oauth";
+import { getNetplayServiceUrl } from "@/constants/oauth";
 import { haptic } from "@/lib/haptics";
 import { createNetplaySocket } from "@/lib/netplay-socket";
+import { setRealtimeRoomReady } from "@/lib/realtime-room-service";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
-import { trpc } from "@/lib/trpc";
+import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
 import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorModule";
 
 // Android's single-file picker cannot guarantee that a CUE's companion BIN remains beside it.
@@ -47,15 +48,12 @@ export default function PS1Screen() {
   const [biosStatus, setBiosStatus] = useState<BiosStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<{ available: boolean; message: string } | null>(null);
   const [status, setStatus] = useState("Choose a PS1 game file from your device. The file stays local and is never uploaded.");
-  const snapshotQuery = trpc.rooms.snapshot.useQuery(
-    { roomId: numericRoomId, memberId: credential?.memberId ?? 0, memberToken: credential?.memberToken ?? "" },
-    { enabled: Boolean(credential && Number.isFinite(numericRoomId)), refetchInterval: 3000 },
-  );
-  const setReady = trpc.rooms.setReady.useMutation({ onSuccess: () => snapshotQuery.refetch() });
+  const snapshotQuery = useRealtimeRoomSnapshot(numericRoomId, credential);
   const membership = snapshotQuery.data?.members.find((member) => member.id === credential?.memberId);
-  const assignedPlayer: 1 | 2 = membership?.role === "host" ? 1 : 2;
-  const matchingPlayers = game ? snapshotQuery.data?.members.filter((member) => member.isReady && member.gameFingerprint === game.fingerprint && member.coreVersion === PS1_NETPLAY_CORE_VERSION) ?? [] : [];
-  const ps1NetplayReady = Boolean(game && credential && matchingPlayers.length >= 2);
+  const activeMembers = (snapshotQuery.data?.members ?? []).filter((member) => member.role !== "spectator").sort((left, right) => left.role === "host" ? -1 : right.role === "host" ? 1 : left.id - right.id);
+  const assignedPlayer = membership?.role === "spectator" ? null : (activeMembers.findIndex((member) => member.id === credential?.memberId) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  const matchingPlayers = game ? activeMembers.filter((member) => member.isReady && member.gameFingerprint === game.fingerprint && member.coreVersion === PS1_NETPLAY_CORE_VERSION) : [];
+  const ps1NetplayReady = Boolean(game && credential && activeMembers.length >= 2 && matchingPlayers.length === activeMembers.length);
 
   const refreshBiosStatus = () => {
     if (Platform.OS === "web") return;
@@ -130,15 +128,6 @@ export default function PS1Screen() {
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false);
       setStartRequested(false);
-      if (credential) {
-        await setReady.mutateAsync({
-          memberId: credential.memberId,
-          memberToken: credential.memberToken,
-          isReady: false,
-          gameFingerprint: fingerprint,
-          coreVersion: PS1_NETPLAY_CORE_VERSION,
-        });
-      }
       setStatus("The file and its fingerprint are ready. Tap READY after the other player selects the same file.");
       haptic.success();
     } catch (error) {
@@ -152,11 +141,12 @@ export default function PS1Screen() {
   const markGameReady = async () => {
     if (!game || !credential || !roomConnected) return;
     try {
-      await setReady.mutateAsync({
+      await setRealtimeRoomReady({
+        roomId: numericRoomId,
         memberId: credential.memberId,
         memberToken: credential.memberToken,
         isReady: true,
-        gameFingerprint: game.fingerprint,
+        fingerprint: game.fingerprint,
         coreVersion: PS1_NETPLAY_CORE_VERSION,
       });
       socketRef.current?.emit("netplay:session-ready", { system: "ps1", fingerprint: game.fingerprint, coreVersion: PS1_NETPLAY_CORE_VERSION });
@@ -184,15 +174,15 @@ export default function PS1Screen() {
     }
     try {
       setIsLaunching(true);
-      const netplay = withNetplay && credential && game.fingerprint && ps1NetplayReady ? {
-        serverUrl: getApiBaseUrl(),
+      const netplay = withNetplay && credential && assignedPlayer && game.fingerprint && ps1NetplayReady ? {
+        serverUrl: getNetplayServiceUrl(),
         roomId: numericRoomId,
         memberId: credential.memberId,
         memberToken: credential.memberToken,
         fingerprint: game.fingerprint,
         player: assignedPlayer,
       } : undefined;
-      if (withNetplay && !netplay) throw new Error("PS1 NetPlay requires two room members who selected the same complete game file.");
+      if (withNetplay && !netplay) throw new Error("PS1 NetPlay requires every active player (2–8) to select the same complete game file and core.");
       setStatus(netplay ? "Preparing PS1 NetPlay and assigning this device inside the room…" : "Preparing the game file and opening PCSX-ReARMed…");
       await MoudieEmulatorModule.launchPS1Game(game.uri, game.name, netplay, playerOptions);
       setStatus(netplay ? "The PS1 player is open and linked to the room. Wait for the in-game verification message." : "The local player is open. Returning from the game brings you back to this room.");
@@ -260,7 +250,7 @@ export default function PS1Screen() {
 
         {game && <View style={styles.netplayCard}>
           <Text style={styles.statusTitle}>PS1 NetPlay</Text>
-          <Text style={styles.statusText}>{ps1NetplayReady ? `Both players selected the same game. You are Player ${assignedPlayer}.` : `Waiting for READY and a matching file (${matchingPlayers.length}/2 ready).`}</Text>
+          <Text style={styles.statusText}>{ps1NetplayReady ? `Every active player selected the same game. You are Player ${assignedPlayer}.` : `Waiting for READY and a matching file (${matchingPlayers.length}/${activeMembers.length} ready).`}</Text>
           <Pressable onPress={markGameReady} disabled={gameReady || isLaunching || isPicking || !roomConnected} style={({ pressed }) => [styles.netplayButton, (gameReady || pressed || isLaunching || isPicking || !roomConnected) && styles.netplayDisabled]}>
             <Text style={styles.launchText}>{gameReady ? "READY CONFIRMED" : "2. READY"}</Text>
           </Pressable>
@@ -291,7 +281,7 @@ export default function PS1Screen() {
 
         <View style={styles.noteCard}>
           <Text style={styles.noteTitle}>CURRENT BETA LIMIT</Text>
-          <Text style={styles.noteText}>PS1 NetPlay starts only when two players choose files with the same fingerprint. The game is never uploaded; the room transports controller input and a small initial state only.</Text>
+          <Text style={styles.noteText}>PS1 NetPlay starts only when every active player in the room uses a file with the same fingerprint. The game is never uploaded; the room transports controller input and a small initial state only.</Text>
         </View>
       </ScrollView>
     </ScreenContainer>

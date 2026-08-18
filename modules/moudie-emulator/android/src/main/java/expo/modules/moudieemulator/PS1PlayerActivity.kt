@@ -28,6 +28,7 @@ import androidx.lifecycle.lifecycleScope
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.ShaderConfig
+import com.swordfish.libretrodroid.Variable
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -94,12 +95,13 @@ class PS1PlayerActivity : ComponentActivity() {
   private val lockstepHandler = Handler(Looper.getMainLooper())
   private val bootstrapHandler = Handler(Looper.getMainLooper())
   private var bootstrapRequestAttempts = 0
-  private val remoteFrameMasks = TreeMap<Long, Int>()
+  private val remoteFrameMasks = TreeMap<Long, MutableMap<Int, Int>>()
   private val localFrameMasks = TreeMap<Long, Int>()
   private val localPressedKeys = mutableSetOf<Int>()
+  private var localMemberId = 0
+  private var sessionPlayerMemberIds: List<Int> = emptyList()
   private var nextLockstepFrame = 0L
-  private var appliedLocalMask = 0
-  private var appliedRemoteMask = 0
+  private val appliedMasksByPort = mutableMapOf<Int, Int>()
   private var lockstepNetplay = false
   private var micOverlayMuted = true
   private var micOverlayButton: TextView? = null
@@ -229,7 +231,8 @@ class PS1PlayerActivity : ComponentActivity() {
     val memberToken = intent.getStringExtra(EXTRA_NETPLAY_MEMBER_TOKEN).orEmpty()
     val fingerprint = intent.getStringExtra(EXTRA_NETPLAY_FINGERPRINT).orEmpty()
     val player = intent.getIntExtra(EXTRA_NETPLAY_PLAYER, 1)
-    if (serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || player !in 1..2) return
+    if (serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || player !in 1..8) return
+    localMemberId = memberId
     localPlayerIndex = player - 1
     lockstepNetplay = true
     retroView.requestRender()
@@ -241,10 +244,10 @@ class PS1PlayerActivity : ComponentActivity() {
           if (localPlayerIndex == 0) sendInitialNetplayState() else startBootstrapRetry()
         }
       },
-      onSessionGo = { startAt -> runOnUiThread { startLockstep(startAt) } },
+      onSessionGo = { startAt, playerMemberIds -> runOnUiThread { startLockstep(startAt, playerMemberIds) } },
       onStateRequest = { if (localPlayerIndex == 0) sendInitialNetplayState() },
-      onRemoteInput = { frame, mask ->
-        synchronized(remoteFrameMasks) { remoteFrameMasks[frame] = mask }
+      onRemoteInput = { remoteMemberId, frame, mask ->
+        synchronized(remoteFrameMasks) { remoteFrameMasks.getOrPut(frame) { mutableMapOf() }[remoteMemberId] = mask }
       },
       onRemoteState = { encoded, syncId, encoding -> restoreNetplayState(encoded, syncId, encoding) },
       onChat = { displayName, text -> runOnUiThread { showToast("$displayName: $text") } },
@@ -300,17 +303,23 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private fun gunzip(source: ByteArray): ByteArray = GZIPInputStream(ByteArrayInputStream(source)).use { it.readBytes() }
 
-  private fun startLockstep(startAt: Long) {
-    if (localPlayerIndex == 1 && lastNetplaySyncId < 0L) {
+  private fun startLockstep(startAt: Long, playerMemberIds: List<Int>) {
+    if (localMemberId !in playerMemberIds || playerMemberIds.size !in 2..8) {
+      showToast("This device is not assigned to the verified PS1 player set.")
+      return
+    }
+    sessionPlayerMemberIds = playerMemberIds
+    localPlayerIndex = playerMemberIds.indexOf(localMemberId)
+    if (localPlayerIndex != 0 && lastNetplaySyncId < 0L) {
       showToast("The initial state has not arrived yet; requesting it again before starting.")
       startBootstrapRetry()
       return
     }
     if (!lockstepActive.compareAndSet(false, true)) return
+    configureMultitapPorts(playerMemberIds.size)
     stopBootstrapRetry()
     nextLockstepFrame = 0L
-    appliedLocalMask = 0
-    appliedRemoteMask = 0
+    appliedMasksByPort.clear()
     synchronized(remoteFrameMasks) { remoteFrameMasks.clear() }
     synchronized(localFrameMasks) {
       localFrameMasks.clear()
@@ -323,6 +332,17 @@ class PS1PlayerActivity : ComponentActivity() {
     showToast("The shared session started without reloading stale frames.")
   }
 
+  private fun configureMultitapPorts(playerCount: Int) {
+    if (playerCount <= 2) return
+    val configuredValue = if (playerCount <= 5) "port 1 only" else "both"
+    runCatching {
+      val variable = retroView.getVariables().firstOrNull { it.key == "pcsx_rearmed_multitap" } ?: return@runCatching
+      retroView.updateVariables(Variable(variable.key, configuredValue, variable.description))
+    }.onFailure {
+      showToast("This PS1 core could not enable multitap automatically; reopen the session after checking the game supports multitap.")
+    }
+  }
+
   private fun stopLockstep() {
     lockstepActive.set(false)
     lockstepHandler.removeCallbacksAndMessages(null)
@@ -330,7 +350,7 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private val bootstrapRetry = object : Runnable {
     override fun run() {
-      if (localPlayerIndex != 1 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
+      if (localPlayerIndex == 0 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
       if (bootstrapRequestAttempts >= 20) {
         showToast("Initial-state confirmation is delayed. Keep both devices in-game and request session start again.")
         return
@@ -342,7 +362,7 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   private fun startBootstrapRetry() {
-    if (localPlayerIndex != 1 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
+    if (localPlayerIndex == 0 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
     bootstrapRequestAttempts = 0
     bootstrapHandler.removeCallbacks(bootstrapRetry)
     bootstrapHandler.post(bootstrapRetry)
@@ -360,13 +380,17 @@ class PS1PlayerActivity : ComponentActivity() {
       synchronized(localFrameMasks) { localFrameMasks[targetFrame] = localMask }
       netplayClient?.sendInputFrame(targetFrame, localMask)
       val scheduledLocalMask = synchronized(localFrameMasks) { localFrameMasks.remove(nextLockstepFrame) ?: 0 }
-      val remoteMask = synchronized(remoteFrameMasks) { remoteFrameMasks.remove(nextLockstepFrame) }
-      if (remoteMask == null) {
+      val remoteMasks = synchronized(remoteFrameMasks) { remoteFrameMasks.remove(nextLockstepFrame) }
+      val expectedRemoteMembers = sessionPlayerMemberIds.filter { it != localMemberId }
+      if (remoteMasks == null || expectedRemoteMembers.any { it !in remoteMasks }) {
         lockstepHandler.postDelayed(this, 4L)
         return
       }
-      appliedLocalMask = applyMask(scheduledLocalMask, localPlayerIndex, appliedLocalMask)
-      appliedRemoteMask = applyMask(remoteMask, 1 - localPlayerIndex, appliedRemoteMask)
+      appliedMasksByPort[localPlayerIndex] = applyMask(scheduledLocalMask, localPlayerIndex, appliedMasksByPort[localPlayerIndex] ?: 0)
+      expectedRemoteMembers.forEach { remoteMemberId ->
+        val port = sessionPlayerMemberIds.indexOf(remoteMemberId)
+        appliedMasksByPort[port] = applyMask(remoteMasks.getValue(remoteMemberId), port, appliedMasksByPort[port] ?: 0)
+      }
       retroView.requestRender()
       nextLockstepFrame += 1L
       lockstepHandler.postDelayed(this, NETPLAY_FRAME_INTERVAL_MS)

@@ -1,6 +1,6 @@
 import { io, type Socket } from "socket.io-client";
 
-import { getApiBaseUrl } from "@/constants/oauth";
+import { getNetplayServiceUrl } from "@/constants/oauth";
 
 export type NetplayCredentials = {
   roomId: number;
@@ -31,7 +31,7 @@ export type VoiceStatus = {
 };
 
 export function createNetplaySocket(credentials: NetplayCredentials): Socket {
-  const baseUrl = getApiBaseUrl();
+  const baseUrl = getNetplayServiceUrl();
   if (!baseUrl) throw new Error("Could not determine the room server. Check the app's internet connection.");
   return io(baseUrl, {
     path: "/api/netplay",
