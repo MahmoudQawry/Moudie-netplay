@@ -48,6 +48,18 @@ class Ps1NetplayClient(
         onStatus("PS1 channel connected. Wait for room readiness confirmation before starting the player.")
       }
       on("netplay:ps1-session-bootstrap") { onBootstrap() }
+      on("netplay:ps1-waiting") { args ->
+        val payload = args.firstOrNull() as? JSONObject
+        onStatus(payload?.optString("message")?.ifBlank { "Waiting for the other active player to open the matching game." } ?: "Waiting for the other active player to open the matching game.")
+      }
+      on("netplay:session-start-refused") { args ->
+        val payload = args.firstOrNull() as? JSONObject
+        onStatus(payload?.optString("message")?.ifBlank { "The room refused this session start." } ?: "The room refused this session start.")
+      }
+      on("room:error") { args ->
+        val payload = args.firstOrNull() as? JSONObject
+        onStatus(payload?.optString("message")?.ifBlank { "The room reported an error." } ?: "The room reported an error.")
+      }
       on("netplay:ps1-session-go") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val startAt = payload.optLong("startAt", -1L)

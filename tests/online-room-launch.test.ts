@@ -26,6 +26,7 @@ describe("online room launch safeguards", () => {
     const controller = readProjectFile("components/customizable-controller.tsx");
     const nativeRoom = readProjectFile("app/native/[system]/[roomId].tsx");
     const module = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/MoudieEmulatorModule.kt");
+    const library = readProjectFile("app/library/[system].tsx");
 
     expect(hud).toContain("$systemId.$orientation.hud.$controlId");
     expect(hud).not.toContain("coerceIn(.65f, 1.75f)");
@@ -51,5 +52,11 @@ describe("online room launch safeguards", () => {
     expect(controller).not.toContain("Math.max(30, Math.min(94");
     expect(module).toContain('AsyncFunction("prepareNativeCore")');
     expect(nativeRoom).toContain("INSTALL MAME ARCADE CORE");
+    expect(ps1).toContain("createFreeControlCanvas()");
+    expect(ps1).toContain("retroView.setOnTouchListener");
+    expect(universal).toContain("retroView.setOnTouchListener");
+    expect(famicom).toContain("retroView.setOnTouchListener");
+    expect(library).not.toContain("CHOOSE FILE & CONFIGURE");
+    expect(famicomRoom).toContain('nativePlayerRef.current?.requestState("netplay")');
   });
 });

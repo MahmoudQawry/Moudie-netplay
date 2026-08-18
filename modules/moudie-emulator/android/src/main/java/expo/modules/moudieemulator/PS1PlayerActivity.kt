@@ -160,7 +160,7 @@ class PS1PlayerActivity : ComponentActivity() {
     }
 
     retroView = GLRetroView(this, gameData)
-    retroView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+    retroView.renderMode = if (settingsMode) GLSurfaceView.RENDERMODE_CONTINUOUSLY else GLSurfaceView.RENDERMODE_WHEN_DIRTY
     lifecycle.addObserver(retroView)
     lifecycleScope.launch {
       retroView.getGLRetroErrors().collect { errorCode ->
@@ -182,8 +182,8 @@ class PS1PlayerActivity : ComponentActivity() {
     controlsContainer = FrameLayout(this).apply { addView(createControls()) }
     root.addView(controlsContainer, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
-      FrameLayout.LayoutParams.WRAP_CONTENT,
-      Gravity.BOTTOM,
+      if (settingsMode) FrameLayout.LayoutParams.MATCH_PARENT else FrameLayout.LayoutParams.WRAP_CONTENT,
+      if (settingsMode) Gravity.FILL else Gravity.BOTTOM,
     ))
     attachGameplayOverlay()
     setContentView(root)
@@ -269,9 +269,11 @@ class PS1PlayerActivity : ComponentActivity() {
       runCatching {
         val compressed = gzip(retroView.serializeState())
         Base64.encodeToString(compressed, Base64.NO_WRAP)
-      }.onSuccess { encoded ->
-        if (encoded.isNotBlank() && encoded.length <= 4_300_000) netplayClient?.sendState(encoded, 0L, "gzip-base64")
-      }
+      }.onSuccess { encoded -> runOnUiThread {
+        if (encoded.isBlank()) showToast("Could not create the initial PS1 room state.")
+        else if (encoded.length > 16_000_000) showToast("The initial PS1 state is too large for this room. Try another game or restart both players.")
+        else netplayClient?.sendState(encoded, 0L, "gzip-base64")
+      } }.onFailure { runOnUiThread { showToast("Could not prepare the PS1 room state: ${it.message ?: "unknown error"}") } }
     }.start()
   }
 
@@ -483,7 +485,7 @@ class PS1PlayerActivity : ComponentActivity() {
       gravity = Gravity.CENTER_VERTICAL
       setPadding(dp(14), dp(8), dp(14), dp(8))
       setBackgroundColor(Color.argb(105, 4, 12, 22))
-      addView(button("×", KeyEvent.KEYCODE_UNKNOWN, dp(38), onClick = { finish() }))
+      addView(button(if (settingsMode) "✓" else "×", KeyEvent.KEYCODE_UNKNOWN, dp(38), onClick = { if (settingsMode) finishControlSetup() else finish() }))
       addView(TextView(this@PS1PlayerActivity).apply {
         text = if (settingsMode) "PS1 · CONTROLLER SETTINGS" else "PS1 · ${if (lockstepNetplay) "NETPLAY" else "LOCAL PLAY"}"
         setTextColor(Color.rgb(210, 241, 255))
@@ -491,11 +493,6 @@ class PS1PlayerActivity : ComponentActivity() {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(12), 0, 0, 0)
       }, LinearLayout.LayoutParams(0, dp(38), 1f))
-      if (settingsMode) {
-        addView(button("−", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(-.1f) }))
-        addView(button("+", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(.1f) }))
-        addView(button("SAVE & PLAY", KeyEvent.KEYCODE_UNKNOWN, dp(92), onClick = { finishControlSetup() }))
-      }
     }
   }
 
@@ -565,7 +562,7 @@ class PS1PlayerActivity : ComponentActivity() {
         return true
       }
     })
-    gameFrame.setOnTouchListener { _, event ->
+    retroView.setOnTouchListener { _, event ->
       if (!settingsMode) return@setOnTouchListener false
       scaler.onTouchEvent(event)
       when (event.actionMasked) {
@@ -647,13 +644,13 @@ class PS1PlayerActivity : ComponentActivity() {
   /** Matsu-style functional placement: shoulders above, gamepad controls along the lower edge. */
   private fun createTopControls(): FrameLayout = FrameLayout(this).apply {
     setPadding(dp(14), dp(8), dp(14), dp(4))
-    addView(createShoulderPair(controlProfile.shoulderButtons[0], controlProfile.shoulderButtons[1]), FrameLayout.LayoutParams(
+    if (!settingsMode) addView(createShoulderPair(controlProfile.shoulderButtons[0], controlProfile.shoulderButtons[1]), FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.LEFT or Gravity.TOP,
     ))
     addView(createHeader(), FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL or Gravity.TOP,
     ))
-    addView(createShoulderPair(controlProfile.shoulderButtons[3], controlProfile.shoulderButtons[2]), FrameLayout.LayoutParams(
+    if (!settingsMode) addView(createShoulderPair(controlProfile.shoulderButtons[3], controlProfile.shoulderButtons[2]), FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT or Gravity.TOP,
     ))
   }
@@ -668,6 +665,7 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   private fun createControls(): FrameLayout {
+    if (settingsMode) return createFreeControlCanvas()
     val wrapper = FrameLayout(this).apply {
       setPadding(dp(14), dp(6), dp(14), dp(12))
       setBackgroundColor(Color.argb(25, 4, 12, 22))
@@ -677,6 +675,29 @@ class PS1PlayerActivity : ComponentActivity() {
     wrapper.addView(createMiddleControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM))
     wrapper.addView(createActionButtons(padSize), FrameLayout.LayoutParams(padSize * 3, padSize * 3, Gravity.RIGHT or Gravity.BOTTOM))
     return wrapper
+  }
+
+  private fun createFreeControlCanvas(): FrameLayout = FrameLayout(this).apply {
+    val size = dp(58)
+    fun add(control: EmulatorTouchButton, gravity: Int, left: Int = 0, top: Int = 0, right: Int = 0, bottom: Int = 0, shape: TouchButtonShape = TouchButtonShape.CIRCLE) {
+      addView(button(control, size, size, shape), FrameLayout.LayoutParams(size, size, gravity).apply {
+        leftMargin = dp(left); topMargin = dp(top); rightMargin = dp(right); bottomMargin = dp(bottom)
+      })
+    }
+    add(controlProfile.shoulderButtons[0], Gravity.LEFT or Gravity.TOP, left = 16, top = 72)
+    add(controlProfile.shoulderButtons[1], Gravity.LEFT or Gravity.TOP, left = 82, top = 72)
+    add(controlProfile.shoulderButtons[3], Gravity.RIGHT or Gravity.TOP, right = 82, top = 72)
+    add(controlProfile.shoulderButtons[2], Gravity.RIGHT or Gravity.TOP, right = 16, top = 72)
+    add(controlProfile.directions.up, Gravity.LEFT or Gravity.BOTTOM, left = 74, bottom = 168, shape = TouchButtonShape.DIRECTION)
+    add(controlProfile.directions.left, Gravity.LEFT or Gravity.BOTTOM, left = 16, bottom = 110, shape = TouchButtonShape.DIRECTION)
+    add(controlProfile.directions.right, Gravity.LEFT or Gravity.BOTTOM, left = 132, bottom = 110, shape = TouchButtonShape.DIRECTION)
+    add(controlProfile.directions.down, Gravity.LEFT or Gravity.BOTTOM, left = 74, bottom = 52, shape = TouchButtonShape.DIRECTION)
+    add(controlProfile.actionButtons[0], Gravity.RIGHT or Gravity.BOTTOM, right = 74, bottom = 168)
+    add(controlProfile.actionButtons[2], Gravity.RIGHT or Gravity.BOTTOM, right = 132, bottom = 110)
+    add(controlProfile.actionButtons[1], Gravity.RIGHT or Gravity.BOTTOM, right = 16, bottom = 110)
+    add(controlProfile.actionButtons[3], Gravity.RIGHT or Gravity.BOTTOM, right = 74, bottom = 52)
+    add(controlProfile.systemButtons[0], Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM, right = 64, bottom = 40)
+    add(controlProfile.systemButtons[1], Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM, left = 64, bottom = 40)
   }
 
   /** A conventional four-way D-pad, matching the reference layout and editable per direction. */

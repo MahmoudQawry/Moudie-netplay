@@ -407,7 +407,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
         return true
       }
     })
-    gameFrame.setOnTouchListener { _, event ->
+    retroView.setOnTouchListener { _, event ->
       if (!controlEditMode) return@setOnTouchListener false
       scaler.onTouchEvent(event)
       when (event.actionMasked) {

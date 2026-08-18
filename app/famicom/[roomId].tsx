@@ -74,6 +74,7 @@ export default function FamicomScreen() {
   const directionReleaseTimersRef = useRef<Partial<Record<ButtonName, ReturnType<typeof setTimeout>>>>({});
   const famicomSyncSequenceRef = useRef(0);
   const lastFamicomSyncRef = useRef(-1);
+  const netplaySyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
   const [romName, setRomName] = useState<string | null>(null);
   const [romBase64, setRomBase64] = useState<string | null>(null);
@@ -117,6 +118,7 @@ export default function FamicomScreen() {
       connectionRef.current?.close();
       peerRef.current?.destroy();
       socketRef.current?.disconnect();
+      if (netplaySyncTimeoutRef.current) clearTimeout(netplaySyncTimeoutRef.current);
       browserRef.current?.destroy();
     };
   }, [roomId]);
@@ -132,7 +134,7 @@ export default function FamicomScreen() {
         setScreenLayout({
           x: typeof decoded?.x === "number" ? decoded.x : 0,
           y: typeof decoded?.y === "number" ? decoded.y : 0,
-          scale: typeof decoded?.scale === "number" ? Math.max(0.55, Math.min(1.5, decoded.scale)) : 1,
+          scale: typeof decoded?.scale === "number" ? Math.max(0.1, decoded.scale) : 1,
         });
       } catch { setScreenLayout({ x: 0, y: 0, scale: 1 }); }
     }).catch(() => undefined);
@@ -144,7 +146,7 @@ export default function FamicomScreen() {
     setScreenLayout(next);
     AsyncStorage.setItem(screenStorageKey, JSON.stringify(next)).catch(() => undefined);
   }, [screenStorageKey]);
-  const adjustScreenScale = (delta: number) => saveScreenLayout({ ...screenLayout, scale: Math.max(0.55, Math.min(1.5, screenLayout.scale + delta)) });
+  const adjustScreenScale = (delta: number) => saveScreenLayout({ ...screenLayout, scale: Math.max(0.1, screenLayout.scale + delta) });
   const screenPanResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => focusControlEditor,
     onMoveShouldSetPanResponder: () => focusControlEditor,
@@ -333,10 +335,22 @@ export default function FamicomScreen() {
       });
       socket.on("netplay:session-start", (payload: { system?: string }) => {
         if (payload.system !== "nes") return;
-        setNetworkState("Game compatibility confirmed. Both players now start from the same local state.");
+        if (netplaySyncTimeoutRef.current) clearTimeout(netplaySyncTimeoutRef.current);
+        if (assignedPlayerRef.current === 1) nativePlayerRef.current?.requestState("netplay");
+        else socket.emit("netplay:state-request", { minimumSyncId: lastFamicomSyncRef.current });
+        setNetworkState("Game compatibility confirmed. Synchronizing the shared starting state…");
+        netplaySyncTimeoutRef.current = setTimeout(() => {
+          setNetworkState("The shared Famicom state is delayed. Keep both players in the game, verify the same .nes file, then restart the room session.");
+        }, 15_000);
       });
       socket.on("netplay:session-start-refused", (payload: { message?: string }) => {
         setNetworkState(payload.message ?? "Waiting for the other player to confirm the game file and core.");
+      });
+      socket.on("netplay:famicom-waiting", (payload: { message?: string }) => {
+        setNetworkState(payload.message ?? "Synchronizing the shared Famicom state from the host…");
+      });
+      socket.on("room:error", (payload: { message?: string }) => {
+        setNetworkState(payload.message ?? "The room reported an error while preparing Famicom NetPlay.");
       });
       socket.on("netplay:input", (payload: { player: 1 | 2; button: ButtonName; isDown: boolean }) => {
         applyButtonRef.current(payload.player, payload.button, payload.isDown);
@@ -347,6 +361,7 @@ export default function FamicomScreen() {
       socket.on("netplay:state", (payload: { snapshot: string; syncId?: number }) => {
         const syncId = Number(payload.syncId);
         if (!Number.isSafeInteger(syncId) || !shouldApplyAuthoritativeState(lastFamicomSyncRef.current, syncId)) return;
+        if (netplaySyncTimeoutRef.current) clearTimeout(netplaySyncTimeoutRef.current);
         lastFamicomSyncRef.current = syncId;
         nativePlayerRef.current?.applyState(payload.snapshot);
       });

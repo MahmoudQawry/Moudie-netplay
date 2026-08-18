@@ -273,7 +273,11 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       Thread.sleep(300)
       if (!::retroView.isInitialized || localPlayerIndex != 0) return@Thread
       runCatching { Base64.encodeToString(gzip(retroView.serializeState()), Base64.NO_WRAP) }
-        .onSuccess { encoded -> if (encoded.isNotBlank() && encoded.length <= 4_300_000) universalNetplayClient?.sendState(encoded, 0L, "gzip-base64") }
+        .onSuccess { encoded -> runOnUiThread {
+          if (encoded.isBlank()) showToast("Could not create the initial room state.")
+          else if (encoded.length > 16_000_000) showToast("The initial room state is too large. Try another game or restart both players.")
+          else universalNetplayClient?.sendState(encoded, 0L, "gzip-base64")
+        } }.onFailure { runOnUiThread { showToast("Could not prepare the room state: ${it.message ?: "unknown error"}") } }
     }.start()
   }
 
@@ -339,7 +343,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   private val bootstrapRetry = object : Runnable {
     override fun run() {
-      if (localPlayerIndex != 1 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
+      if (localPlayerIndex == 0 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
       if (bootstrapRequestAttempts >= 20) {
         showToast("Initial-state confirmation is delayed. Keep both devices in the player and ask the host to start again.")
         return
@@ -351,7 +355,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   }
 
   private fun startBootstrapRetry() {
-    if (localPlayerIndex != 1 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
+    if (localPlayerIndex == 0 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
     bootstrapRequestAttempts = 0
     bootstrapHandler.removeCallbacks(bootstrapRetry)
     bootstrapHandler.post(bootstrapRetry)
@@ -560,7 +564,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
         return true
       }
     })
-    gameFrame.setOnTouchListener { _, event ->
+    retroView.setOnTouchListener { _, event ->
       if (!settingsMode) return@setOnTouchListener false
       scaler.onTouchEvent(event)
       when (event.actionMasked) {

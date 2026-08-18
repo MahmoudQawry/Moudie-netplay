@@ -58,6 +58,18 @@ class UniversalNetplayClient(
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         onBootstrap(payload.playerMemberIds())
       }
+      on("netplay:universal-waiting") { args ->
+        val payload = args.firstOrNull() as? JSONObject
+        onStatus(payload?.optString("message")?.ifBlank { "Waiting for every active player to open the matching game." } ?: "Waiting for every active player to open the matching game.")
+      }
+      on("netplay:session-start-refused") { args ->
+        val payload = args.firstOrNull() as? JSONObject
+        onStatus(payload?.optString("message")?.ifBlank { "The room refused this session start." } ?: "The room refused this session start.")
+      }
+      on("room:error") { args ->
+        val payload = args.firstOrNull() as? JSONObject
+        onStatus(payload?.optString("message")?.ifBlank { "The room reported an error." } ?: "The room reported an error.")
+      }
       on("netplay:universal-session-go") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val startAt = payload.optLong("startAt", -1L)
