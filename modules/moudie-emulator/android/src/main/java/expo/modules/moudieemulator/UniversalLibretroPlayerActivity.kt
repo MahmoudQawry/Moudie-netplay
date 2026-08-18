@@ -49,6 +49,9 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private lateinit var stateFile: File
   private lateinit var preferences: android.content.SharedPreferences
   private var customizationEnabled = false
+  private val controlButtons = mutableListOf<MovableControlButton>()
+  private var micMuted = true
+  private var micOverlayButton: TextView? = null
   private var stateActionInProgress = false
   private lateinit var metricPill: TextView
   private var frameWindowStartedAt = 0L
@@ -60,7 +63,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       val elapsed = frameTimeNanos - frameWindowStartedAt
       if (elapsed >= 1_000_000_000L) {
         val fps = (framesInWindow * 1_000_000_000L / elapsed).coerceAtMost(120L)
-        if (::metricPill.isInitialized) metricPill.text = "FPS $fps   •   PING محلي   •   P1"
+        if (::metricPill.isInitialized) metricPill.text = "FPS $fps   •   LOCAL PING   •   P1"
         frameWindowStartedAt = frameTimeNanos
         framesInWindow = 0
       }
@@ -70,7 +73,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     @Suppress("DEPRECATION")
     window.decorView.systemUiVisibility = (
@@ -81,17 +84,17 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
     val system = intent.getStringExtra(EXTRA_SYSTEM).orEmpty()
     definition = runCatching { NativeCoreCatalog.forSystem(system) }.getOrElse {
-      showError("نظام المحاكاة المطلوب غير مدعوم.")
+      showError("The requested emulator system is not supported.")
       return
     }
     val gameFile = File(intent.getStringExtra(EXTRA_GAME_PATH).orEmpty())
     val coreFile = File(intent.getStringExtra(EXTRA_CORE_PATH).orEmpty())
     if (!gameFile.isFile || !gameFile.canRead()) {
-      showError("تعذر قراءة ملف اللعبة. اختر الملف مرة أخرى من المكتبة.")
+      showError("Could not read the game file. Choose it again from the library.")
       return
     }
     if (!coreFile.isFile || coreFile.length() == 0L) {
-      showError("تعذر تحميل محرك ${definition.coreName}. أعد تثبيت APK الكامل.")
+      showError("Could not load ${definition.coreName}. Reinstall the complete APK.")
       return
     }
 
@@ -124,6 +127,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     metricPill = createMetricPill()
     root.addView(metricPill, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(32), Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = dp(54) })
     addController()
+    root.addView(createSocialOverlay(), FrameLayout.LayoutParams(dp(48), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(12) })
     setContentView(root)
   }
 
@@ -170,9 +174,11 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       setPadding(dp(12), 0, dp(8), 0)
       maxLines = 1
     }, LinearLayout.LayoutParams(0, dp(38), 1f))
-    addView(headerButton("تحميل") { loadState() }, LinearLayout.LayoutParams(dp(58), dp(38)))
-    addView(headerButton("حفظ") { saveState(silent = false) }, LinearLayout.LayoutParams(dp(48), dp(38)))
-    addView(headerButton(if (customizationEnabled) "تم" else "ضبط") { toggleCustomization() }, LinearLayout.LayoutParams(dp(48), dp(38)))
+    addView(headerButton("LOAD") { loadState() }, LinearLayout.LayoutParams(dp(52), dp(38)))
+    addView(headerButton("SAVE") { saveState(silent = false) }, LinearLayout.LayoutParams(dp(52), dp(38)))
+    addView(headerButton("−") { resizeAllControls(-0.1f) }, LinearLayout.LayoutParams(dp(34), dp(38)))
+    addView(headerButton("+") { resizeAllControls(0.1f) }, LinearLayout.LayoutParams(dp(34), dp(38)))
+    addView(headerButton(if (customizationEnabled) "DONE" else "EDIT") { toggleCustomization() }, LinearLayout.LayoutParams(dp(50), dp(38)))
   }
 
   private fun headerButton(label: String, action: () -> Unit): TextView = TextView(this).apply {
@@ -186,7 +192,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   }
 
   private fun createMetricPill(): TextView = TextView(this).apply {
-    text = "FPS —   •   PING محلي   •   P1"
+    text = "FPS —   •   LOCAL PING   •   P1"
     textSize = 10f
     gravity = Gravity.CENTER
     setTextColor(Color.rgb(194, 243, 255))
@@ -228,6 +234,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       else leftMargin = horizontalOffset
       if (gravity and Gravity.TOP == Gravity.TOP) topMargin = bottomOrTopOffset else bottomMargin = bottomOrTopOffset
     }
+    controlButtons += button
     root.addView(button, params)
   }
 
@@ -258,8 +265,33 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   private fun toggleCustomization() {
     customizationEnabled = !customizationEnabled
-    val label = if (customizationEnabled) "وضع ترتيب الأزرار: اسحب أو كبّر أي زر، ثم اضغط تم." else "تم حفظ ترتيب الأزرار لهذا المحاكي."
+    val label = if (customizationEnabled) "Edit mode: drag a control or pinch it to resize. Tap DONE to save." else "Control layout saved for this system and orientation."
     showToast(label)
+  }
+
+  private fun resizeAllControls(delta: Float) {
+    if (controlButtons.isEmpty()) return
+    controlButtons.forEach { button ->
+      val next = (button.scaleX + delta).coerceIn(.65f, 1.75f)
+      button.scaleX = next
+      button.scaleY = next
+      persistLayout(button, button.controlId())
+    }
+    showToast("Control size ${if (delta > 0f) "increased" else "decreased"}.")
+  }
+
+  private fun createSocialOverlay(): LinearLayout = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    gravity = Gravity.CENTER
+    alpha = .92f
+    addView(headerButton("CHAT") { showToast("Text chat is available in an online room.") }, LinearLayout.LayoutParams(dp(48), dp(44)).apply { bottomMargin = dp(10) })
+    micOverlayButton = headerButton(if (micMuted) "MIC×" else "MIC") {
+      micMuted = !micMuted
+      micOverlayButton?.text = if (micMuted) "MIC×" else "MIC"
+      val status = if (micMuted) "Microphone muted." else "Microphone enabled."
+      showToast("$status Voice is connected when you join a room.")
+    }
+    addView(micOverlayButton, LinearLayout.LayoutParams(dp(48), dp(44)))
   }
 
   private fun saveState(silent: Boolean) {
@@ -268,7 +300,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     Thread {
       val result = runCatching {
         val state = retroView.serializeState()
-        require(state.isNotEmpty()) { "تعذر إنشاء حالة حفظ لهذه اللعبة." }
+        require(state.isNotEmpty()) { "Could not create a save state for this game." }
         val temporary = File(stateFile.parentFile, "${stateFile.name}.tmp")
         FileOutputStream(temporary).use { output ->
           output.write(state)
@@ -278,11 +310,11 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
           temporary.copyTo(stateFile, overwrite = true)
           temporary.delete()
         }
-        "تم حفظ الحالة محليًا."
+        "Save state stored locally."
       }
       runOnUiThread {
         stateActionInProgress = false
-        if (!silent) showToast(result.getOrElse { it.message ?: "تعذر حفظ الحالة." })
+        if (!silent) showToast(result.getOrElse { it.message ?: "Could not save the state." })
       }
     }.start()
   }
@@ -292,13 +324,13 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     stateActionInProgress = true
     Thread {
       val result = runCatching {
-        require(stateFile.isFile() && stateFile.length() > 0L) { "لا توجد حالة محفوظة لهذه اللعبة." }
-        require(retroView.unserializeState(stateFile.readBytes())) { "تعذر استرجاع حالة الحفظ؛ قد لا توافق إصدار المحرك." }
-        "تم تحميل الحالة المحفوظة."
+        require(stateFile.isFile() && stateFile.length() > 0L) { "No saved state exists for this game." }
+        require(retroView.unserializeState(stateFile.readBytes())) { "Could not load the save state; it may not match this core version." }
+        "Saved state loaded."
       }
       runOnUiThread {
         stateActionInProgress = false
-        showToast(result.getOrElse { it.message ?: "تعذر تحميل الحالة." })
+        showToast(result.getOrElse { it.message ?: "Could not load the state." })
       }
     }.start()
   }
@@ -310,10 +342,10 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   }
 
   private fun errorMessage(error: Int, fileName: String): String = when (error) {
-    GLRetroView.ERROR_LOAD_LIBRARY -> "تعذر تحميل ${definition.coreName}. أعد تثبيت APK الكامل."
-    GLRetroView.ERROR_LOAD_GAME -> "تعذر فتح $fileName. تحقق من توافق الملف مع ${definition.title}."
-    GLRetroView.ERROR_GL_NOT_COMPATIBLE -> "الجهاز لا يدعم إعداد الرسوم المطلوب لهذا المحاكي."
-    else -> "توقف ${definition.coreName} أثناء بدء اللعبة (رمز $error)."
+    GLRetroView.ERROR_LOAD_LIBRARY -> "Could not load ${definition.coreName}. Reinstall the complete APK."
+    GLRetroView.ERROR_LOAD_GAME -> "Could not open $fileName. Check that it is compatible with ${definition.title}."
+    GLRetroView.ERROR_GL_NOT_COMPATIBLE -> "This device does not support the graphics configuration required by this emulator."
+    else -> "${definition.coreName} stopped while starting the game (code $error)."
   }
 
   private fun showError(message: String) {
@@ -339,6 +371,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   }
 
   private inner class MovableControlButton(context: Context, private val control: EmulatorTouchButton) : TextView(context) {
+    fun controlId(): String = control.id
     private var dragging = false
     private var downX = 0f
     private var downY = 0f

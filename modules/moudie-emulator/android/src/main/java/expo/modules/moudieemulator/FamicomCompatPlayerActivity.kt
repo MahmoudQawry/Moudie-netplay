@@ -37,17 +37,21 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
 
   private lateinit var retroView: GLRetroView
   private lateinit var controlsContainer: FrameLayout
+  private lateinit var controlPreferences: android.content.SharedPreferences
   private lateinit var stateDirectory: File
   private val controlProfile = EmulatorControlProfiles.FAMICOM
   private var selectedSlot = 1
   private var controlScale = 1.3f
   private var focusMode = false
+  private var micMuted = true
   @Volatile private var stateActionInProgress = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     focusMode = intent.getBooleanExtra(EXTRA_FOCUS_MODE, false)
-    requestedOrientation = if (focusMode) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    controlPreferences = getSharedPreferences("moudie-famicom-controls", MODE_PRIVATE)
+    controlScale = controlPreferences.getFloat(controlScaleKey(), 1.3f).coerceIn(.75f, 1.5f)
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     @Suppress("DEPRECATION")
     window.decorView.systemUiVisibility = (
@@ -76,6 +80,8 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
 
     val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
     root.addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    root.addView(createHeader(gameFile), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+    root.addView(createSocialOverlay(), FrameLayout.LayoutParams(dp(48), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(12) })
     controlsContainer = FrameLayout(this)
     root.addView(controlsContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
     renderControls()
@@ -103,13 +109,24 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     setBackgroundColor(Color.argb(145, 4, 12, 22))
     addView(button("×", KeyEvent.KEYCODE_UNKNOWN, dp(36), onClick = { finish() }))
     addView(TextView(this@FamicomCompatPlayerActivity).apply {
-      text = if (focusMode) "Famicom · وضع تركيز أصلي" else "Famicom · وضع توافق موسّع"
+      text = if (focusMode) "Famicom · Native Focus" else "Famicom · Extended Compatibility"
       setTextColor(Color.rgb(210, 241, 255)); textSize = 12f; gravity = Gravity.CENTER_VERTICAL
       setPadding(dp(10), 0, 0, 0)
     }, LinearLayout.LayoutParams(0, dp(36), 1f))
-    (1..3).forEach { slot -> addView(button("S$slot", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { selectedSlot = slot; showToast("تم اختيار فتحة الحفظ $slot") })) }
-    addView(button("تحميل", KeyEvent.KEYCODE_UNKNOWN, dp(50), onClick = { loadState() }))
-    addView(button("حفظ", KeyEvent.KEYCODE_UNKNOWN, dp(42), onClick = { saveState() }))
+    (1..3).forEach { slot -> addView(button("S$slot", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { selectedSlot = slot; showToast("Save slot $slot selected.") })) }
+    addView(button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(50), onClick = { loadState() }))
+    addView(button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(42), onClick = { saveState() }))
+  }
+
+  private fun createSocialOverlay(): LinearLayout = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    gravity = Gravity.CENTER
+    alpha = .92f
+    addView(button("CHAT", KeyEvent.KEYCODE_UNKNOWN, dp(48), dp(44), onClick = { showToast("Text chat is available in an online room.") }), LinearLayout.LayoutParams(dp(48), dp(44)).apply { bottomMargin = dp(10) })
+    addView(button(if (micMuted) "MIC×" else "MIC", KeyEvent.KEYCODE_UNKNOWN, dp(48), dp(44), onClick = {
+      micMuted = !micMuted
+      showToast(if (micMuted) "Microphone muted." else "Microphone enabled. Voice connects when you join a room.")
+    }), LinearLayout.LayoutParams(dp(48), dp(44)))
   }
 
   private fun renderControls() {
@@ -151,8 +168,8 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
       button(controlProfile.systemButtons[1], dp(74), dp(48)),
     ))
     addView(row(
-      button("استرجاع", KeyEvent.KEYCODE_UNKNOWN, dp(70), dp(42), onClick = { loadState() }),
-      button("حفظ", KeyEvent.KEYCODE_UNKNOWN, dp(54), dp(42), onClick = { saveState() }),
+      button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(70), dp(42), onClick = { loadState() }),
+      button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(54), dp(42), onClick = { saveState() }),
     ))
   }
 
@@ -202,7 +219,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     }
   }
   private fun controlScaleIndicator(): TextView = TextView(this).apply {
-    text = "حجم الأزرار\n${controlScalePercent()}%"
+      text = "CONTROL SIZE\n${controlScalePercent()}%"
     textSize = 11f; setTextColor(Color.rgb(216, 244, 255)); gravity = Gravity.CENTER
     setBackgroundColor(Color.rgb(20, 49, 70)); setPadding(dp(5), 0, dp(5), 0)
     layoutParams = LinearLayout.LayoutParams(dp(92), dp(54))
@@ -222,7 +239,12 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
   }
   private fun changeControlScale(delta: Float) {
     controlScale = (((controlScale + delta) * 100).roundToInt() / 100f).coerceIn(.75f, 1.5f)
+    controlPreferences.edit().putFloat(controlScaleKey(), controlScale).apply()
     renderControls()
+  }
+  private fun controlScaleKey(): String {
+    val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+    return "famicom.$orientation.scale"
   }
   private fun controlScalePercent(): Int = (controlScale * 100).roundToInt()
   private fun controlSize(): Int {

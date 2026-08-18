@@ -44,7 +44,7 @@ class MoudieEmulatorModule : Module() {
           "maxControllerSlots" to definition.maxControllerSlots,
           "acceptedExtensions" to definition.extensions.sorted(),
           "message" to when {
-            available -> "${definition.coreName} جاهز للتشغيل المحلي."
+            available -> "${definition.coreName} is ready for local play."
             NativeCoreCatalog.isDownloadable(definition) -> "سيُنزل محرك ${definition.coreName} الرسمي عند أول تشغيل للآركيد؛ يلزم اتصال إنترنت ومساحة تخزين كافية."
             else -> "محرك ${definition.coreName} غير موجود داخل APK الحالي."
           },
@@ -152,7 +152,7 @@ class MoudieEmulatorModule : Module() {
     }
 
     AsyncFunction("fingerprintPS1Game") { uri: String, fileName: String ->
-      require(fileName.substringAfterLast('.', "").lowercase() in ps1GameExtensions) { "اختر ملف PS1 بامتداد BIN أو CHD أو PBP." }
+      require(fileName.substringAfterLast('.', "").lowercase() in ps1GameExtensions) { "Choose a PS1 BIN, CUE, ISO, CHD, or PBP file." }
       val parsedUri = Uri.parse(uri)
       val digest = MessageDigest.getInstance("SHA-256")
       val input = if (parsedUri.scheme == "file") {
@@ -195,7 +195,7 @@ class MoudieEmulatorModule : Module() {
 
   private val supportedSystems = setOf("nes", "sega", "ps1", "psp", "arcade")
   private val ps1BiosCandidates = setOf("scph5500.bin", "scph5501.bin", "scph5502.bin", "scph1001.bin")
-  private val ps1GameExtensions = setOf("bin", "cue", "chd", "pbp")
+  private val ps1GameExtensions = setOf("bin", "cue", "iso", "chd", "pbp")
 
   private fun launchFamicomNativePlayer(uri: String, fileName: String, focusMode: Boolean) {
     require(uri.isNotBlank()) { "اختر ملف Famicom محلياً أولاً." }
@@ -240,7 +240,7 @@ class MoudieEmulatorModule : Module() {
 
   private fun preparePS1GameFile(cacheDir: File, rawUri: String, fileName: String): String {
     val extension = fileName.substringAfterLast('.', "").lowercase()
-    require(extension in ps1GameExtensions) { "اختر ملف PS1 بامتداد BIN أو CUE أو CHD أو PBP." }
+    require(extension in ps1GameExtensions) { "Choose a PS1 BIN, CUE, ISO, CHD, or PBP file." }
     val gamePath = prepareGameFile(cacheDir, rawUri, fileName, "moudie-ps1-games")
     val gameFile = File(gamePath)
     require(gameFile.length() > 1024L) { "ملف لعبة PS1 صغير جداً أو غير مكتمل." }

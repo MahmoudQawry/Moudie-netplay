@@ -44,7 +44,7 @@ object NativeCoreCatalog {
       title = "PlayStation 1",
       coreName = "PCSX-ReARMed",
       libraryNames = listOf("pcsx_rearmed_libretro_android.so", "libpcsx_rearmed_libretro_android.so"),
-      extensions = setOf("bin", "cue", "chd", "pbp"),
+      extensions = setOf("bin", "cue", "iso", "chd", "pbp"),
       netplay = "retroarch",
       maxControllerSlots = 8,
       profile = EmulatorControlProfiles.PS1,

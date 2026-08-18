@@ -32,6 +32,11 @@ fetch_core fceumm fceumm
 fetch_core pcsx_rearmed pcsx_rearmed
 fetch_core genesis_plus_gx genesis_plus_gx
 fetch_core ppsspp ppsspp
-fetch_core mamearcade mamearcade
+
+# Arcade uses its dedicated first-launch download path. Set INCLUDE_MAME=1 only for
+# an intentionally large offline bundle.
+if [[ "${INCLUDE_MAME:-0}" == "1" ]]; then
+  fetch_core mamearcade mamearcade
+fi
 
 echo "Installed Libretro cores in ${TARGET}."

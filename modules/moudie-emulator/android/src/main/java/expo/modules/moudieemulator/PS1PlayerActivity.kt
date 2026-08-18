@@ -15,6 +15,7 @@ import android.util.Base64
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -71,6 +72,11 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   private lateinit var retroView: GLRetroView
+  private lateinit var controlsContainer: FrameLayout
+  private lateinit var controlPreferences: android.content.SharedPreferences
+  private var controlScale = 1f
+  private var controlEditMode = false
+  private var editToggleButton: TextView? = null
   private lateinit var stateFile: File
   private val controlProfile = EmulatorControlProfiles.PS1
   private var netplayClient: Ps1NetplayClient? = null
@@ -94,7 +100,7 @@ class PS1PlayerActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     @Suppress("DEPRECATION")
     window.decorView.systemUiVisibility = (
@@ -105,6 +111,9 @@ class PS1PlayerActivity : ComponentActivity() {
         View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
         View.SYSTEM_UI_FLAG_LAYOUT_STABLE
       )
+
+    controlPreferences = getSharedPreferences("moudie-ps1-controls", Context.MODE_PRIVATE)
+    controlScale = controlPreferences.getFloat(controlScaleKey(), 1f).coerceIn(.65f, 1.5f)
 
     val gamePath = intent.getStringExtra(EXTRA_GAME_PATH).orEmpty()
     val gameFile = File(gamePath)
@@ -155,7 +164,12 @@ class PS1PlayerActivity : ComponentActivity() {
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.TOP,
     ))
-    root.addView(createControls(), FrameLayout.LayoutParams(
+    controlsContainer = FrameLayout(this).apply {
+      scaleX = controlScale
+      scaleY = controlScale
+      addView(createControls())
+    }
+    root.addView(controlsContainer, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.BOTTOM,
@@ -447,9 +461,34 @@ class PS1PlayerActivity : ComponentActivity() {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(12), 0, 0, 0)
       }, LinearLayout.LayoutParams(0, dp(38), 1f))
-      addView(button("استرجاع", KeyEvent.KEYCODE_UNKNOWN, dp(64), onClick = { loadState() }))
-      addView(button("حفظ", KeyEvent.KEYCODE_UNKNOWN, dp(46), onClick = { saveState() }))
+      addView(button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { loadState() }))
+      addView(button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { saveState() }))
+      addView(button("−", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeControls(-.1f) }))
+      addView(button("+", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeControls(.1f) }))
+      editToggleButton = button("EDIT", KeyEvent.KEYCODE_UNKNOWN, dp(46), onClick = { toggleControlEditing() })
+      addView(editToggleButton)
     }
+  }
+
+  private fun toggleControlEditing() {
+    controlEditMode = !controlEditMode
+    editToggleButton?.text = if (controlEditMode) "DONE" else "EDIT"
+    showToast(if (controlEditMode) "Edit mode: drag a button or pinch it to resize. Tap DONE to save." else "PS1 control layout saved for this orientation.")
+  }
+
+  private fun resizeControls(delta: Float) {
+    controlScale = (controlScale + delta).coerceIn(.65f, 1.5f)
+    if (::controlsContainer.isInitialized) {
+      controlsContainer.scaleX = controlScale
+      controlsContainer.scaleY = controlScale
+    }
+    controlPreferences.edit().putFloat(controlScaleKey(), controlScale).apply()
+    showToast("Control size ${(controlScale * 100).toInt()}% saved for this orientation.")
+  }
+
+  private fun controlScaleKey(): String {
+    val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+    return "ps1.$orientation.scale"
   }
 
   private fun createInGameOverlay(): LinearLayout = LinearLayout(this).apply {
@@ -658,7 +697,7 @@ class PS1PlayerActivity : ComponentActivity() {
   private enum class TouchButtonShape { CIRCLE }
 
   private fun button(control: EmulatorTouchButton, width: Int, height: Int = dp(40), shape: TouchButtonShape = TouchButtonShape.CIRCLE): TextView =
-    button(control.label, control.keyCode, width, height, shape)
+    button(control.label, control.keyCode, width, height, shape).also { view -> attachEditableControl(view, control.id, control.keyCode) }
 
   private fun button(label: String, keyCode: Int, width: Int, height: Int = dp(40), shape: TouchButtonShape = TouchButtonShape.CIRCLE, onClick: (() -> Unit)? = null): TextView {
     return TextView(this).apply {
@@ -684,6 +723,68 @@ class PS1PlayerActivity : ComponentActivity() {
         }
       }
     }
+  }
+
+  private fun attachEditableControl(view: TextView, controlId: String, keyCode: Int) {
+    var downX = 0f
+    var downY = 0f
+    var originX = 0f
+    var originY = 0f
+    val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+      override fun onScale(detector: ScaleGestureDetector): Boolean {
+        if (!controlEditMode) return false
+        val next = (view.scaleX * detector.scaleFactor).coerceIn(.65f, 1.75f)
+        view.scaleX = next
+        view.scaleY = next
+        return true
+      }
+    })
+    view.post {
+      val key = controlLayoutKey(controlId)
+      view.translationX = controlPreferences.getFloat("$key.x", 0f)
+      view.translationY = controlPreferences.getFloat("$key.y", 0f)
+      val storedScale = controlPreferences.getFloat("$key.scale", 1f)
+      view.scaleX = storedScale
+      view.scaleY = storedScale
+    }
+    view.setOnTouchListener { _, event ->
+      scaler.onTouchEvent(event)
+      if (controlEditMode) {
+        when (event.actionMasked) {
+          MotionEvent.ACTION_DOWN -> {
+            downX = event.rawX
+            downY = event.rawY
+            originX = view.translationX
+            originY = view.translationY
+          }
+          MotionEvent.ACTION_MOVE -> if (!scaler.isInProgress) {
+            view.translationX = originX + event.rawX - downX
+            view.translationY = originY + event.rawY - downY
+          }
+          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> persistControlLayout(view, controlId)
+        }
+        return@setOnTouchListener true
+      }
+      when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> sendLocalKey(KeyEvent.ACTION_DOWN, keyCode)
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> sendLocalKey(KeyEvent.ACTION_UP, keyCode)
+      }
+      true
+    }
+  }
+
+  private fun controlLayoutKey(controlId: String): String {
+    val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+    return "ps1.$orientation.$controlId"
+  }
+
+  private fun persistControlLayout(view: View, controlId: String) {
+    val key = controlLayoutKey(controlId)
+    controlPreferences.edit()
+      .putFloat("$key.x", view.translationX)
+      .putFloat("$key.y", view.translationY)
+      .putFloat("$key.scale", view.scaleX)
+      .apply()
   }
 
   private fun controlBackground(shape: TouchButtonShape): GradientDrawable = GradientDrawable().apply {

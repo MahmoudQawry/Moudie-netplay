@@ -15,7 +15,7 @@ import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorMo
 
 // Android's single-file picker cannot guarantee that a CUE's companion BIN remains beside it.
 // Accept self-contained formats so the native player receives a complete game image.
-const SUPPORTED_EXTENSIONS = [".bin", ".chd", ".pbp"] as const;
+const SUPPORTED_EXTENSIONS = [".bin", ".iso", ".chd", ".pbp"] as const;
 const PS1_NETPLAY_CORE_VERSION = "pcsx-rearmed-0.13.2-lockstep-v1";
 type BiosStatus = Record<string, { required: boolean; available: boolean; files?: string[]; message: string }>;
 type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void> };
@@ -41,7 +41,7 @@ export default function PS1Screen() {
   const [isInstallingBios, setIsInstallingBios] = useState(false);
   const [biosStatus, setBiosStatus] = useState<BiosStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<{ available: boolean; message: string } | null>(null);
-  const [status, setStatus] = useState("اختر ملف لعبة PS1 من هاتفك. يبقى الملف محلياً ولا يرفعه التطبيق.");
+  const [status, setStatus] = useState("Choose a PS1 game file from your device. The file stays local and is never uploaded.");
   const snapshotQuery = trpc.rooms.snapshot.useQuery(
     { roomId: numericRoomId, memberId: credential?.memberId ?? 0, memberToken: credential?.memberToken ?? "" },
     { enabled: Boolean(credential && Number.isFinite(numericRoomId)), refetchInterval: 3000 },
@@ -86,7 +86,7 @@ export default function PS1Screen() {
     };
     const start = (payload: { system?: string }) => {
       if (payload.system !== "ps1" || !game || !credential) return;
-      setStatus("تم تأكيد جاهزية الجهازين. جارٍ فتح مشغّل PS1 بالتوقيت المشترك…");
+      setStatus("Both devices are ready. Opening the PS1 player at the shared start time…");
       launchGame(true);
     };
     socket.on("connect", connected);
@@ -114,11 +114,11 @@ export default function PS1Screen() {
       const asset = result.assets[0];
       if (!isPs1GameFile(asset.name)) {
         haptic.error();
-        Alert.alert("الملف غير مناسب", "اختر ملف PS1 كاملاً بامتداد .bin أو .chd أو .pbp. لا تختر ملف CUE وحده لأنه يحتاج BIN مرافقاً.");
+        Alert.alert("Unsupported file", "Choose a complete PS1 .bin, .iso, .chd, or .pbp file. A CUE file is not selected here because it needs its companion BIN file.");
         return;
       }
-      if (Platform.OS === "web") throw new Error("فحص ملف PS1 وتجهيزه للغرفة متاحان في APK Android فقط.");
-      setStatus("جارٍ فحص بصمة ملف PS1 محلياً للتحقق من تطابقه عند اللاعب الآخر…");
+      if (Platform.OS === "web") throw new Error("PS1 game verification and room preparation are available in the Android APK only.");
+      setStatus("Checking the local PS1 game fingerprint to verify that the other player selected the same file…");
       const fingerprint = await MoudieEmulatorModule.fingerprintPS1Game(asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false);
@@ -132,11 +132,11 @@ export default function PS1Screen() {
           coreVersion: PS1_NETPLAY_CORE_VERSION,
         });
       }
-      setStatus("تم اختيار الملف وبصمته محلياً. اضغط «استعداد» بعد التأكد من اختيار اللاعب الآخر للملف نفسه.");
+      setStatus("The file and its fingerprint are ready. Tap READY after the other player selects the same file.");
       haptic.success();
     } catch (error) {
       haptic.error();
-      Alert.alert("تعذر اختيار الملف", error instanceof Error ? error.message : "أعد المحاولة واختر ملف لعبة من التخزين.");
+      Alert.alert("Could not choose the file", error instanceof Error ? error.message : "Try again and choose a game file from storage.");
     } finally {
       setIsPicking(false);
     }
@@ -154,11 +154,11 @@ export default function PS1Screen() {
       });
       socketRef.current?.emit("netplay:session-ready", { system: "ps1", fingerprint: game.fingerprint, coreVersion: PS1_NETPLAY_CORE_VERSION });
       setGameReady(true);
-      setStatus("تم إعلان جاهزية ملفك. انتظر جاهزية اللاعب الآخر، ثم يطلب المضيف بدء الجلسة.");
+      setStatus("Your game is marked ready. Wait for the other player, then the host can start the session.");
       haptic.success();
     } catch (error) {
       haptic.error();
-      Alert.alert("تعذر إعلان الاستعداد", error instanceof Error ? error.message : "أعد المحاولة.");
+      Alert.alert("Could not mark ready", error instanceof Error ? error.message : "Try again.");
     }
   };
 
@@ -166,13 +166,13 @@ export default function PS1Screen() {
     if (!gameReady || assignedPlayer !== 1 || !ps1NetplayReady) return;
     socketRef.current?.emit("netplay:session-start-request", { system: "ps1" });
     setStartRequested(true);
-    setStatus("جارٍ التحقق من ملف الجهازين والمحرك قبل إعطاء إشارة البدء…");
+    setStatus("Checking both game files and the core before sending the start signal…");
   };
 
   const launchGame = async (withNetplay = false) => {
     if (!game) return;
     if (Platform.OS === "web") {
-      Alert.alert("نسخة Android مطلوبة", "مشغّل PS1 الأصلي يعمل في ملف APK على أندرويد، ولا يعمل داخل معاينة الويب.");
+      Alert.alert("Android APK required", "The native PS1 player runs in the Android APK and is not available in the web preview.");
       return;
     }
     try {
@@ -185,15 +185,15 @@ export default function PS1Screen() {
         fingerprint: game.fingerprint,
         player: assignedPlayer,
       } : undefined;
-      if (withNetplay && !netplay) throw new Error("PS1 NetPlay يحتاج لاعبين في الغرفة اختارا الملف نفسه كاملاً.");
-      setStatus(netplay ? "جارٍ تجهيز PS1 NetPlay وتعيين دور جهازك داخل الغرفة…" : "جارٍ تجهيز الملف وفتح PCSX ReARMed…");
+      if (withNetplay && !netplay) throw new Error("PS1 NetPlay requires two room members who selected the same complete game file.");
+      setStatus(netplay ? "Preparing PS1 NetPlay and assigning this device inside the room…" : "Preparing the game file and opening PCSX-ReARMed…");
       await MoudieEmulatorModule.launchPS1Game(game.uri, game.name, netplay);
-      setStatus(netplay ? "تم فتح مشغّل PS1 وربطه بالغرفة. انتظر رسالة التحقق داخل شاشة اللعب." : "تم فتح المشغّل المحلي. عند الرجوع ستعود إلى هذه الغرفة.");
+      setStatus(netplay ? "The PS1 player is open and linked to the room. Wait for the in-game verification message." : "The local player is open. Returning from the game brings you back to this room.");
     } catch (error) {
       haptic.error();
-      const message = error instanceof Error ? error.message : "تعذر بدء مشغّل PS1.";
+      const message = error instanceof Error ? error.message : "Could not start the PS1 player.";
       setStatus(message);
-      Alert.alert("تعذر تشغيل اللعبة", message);
+      Alert.alert("Could not start the game", message);
     } finally {
       setIsLaunching(false);
     }
@@ -201,7 +201,7 @@ export default function PS1Screen() {
 
   const pickBios = async () => {
     if (Platform.OS === "web") {
-      Alert.alert("نسخة Android مطلوبة", "فحص وإضافة BIOS محلي متاحان في ملف APK فقط.");
+      Alert.alert("Android APK required", "Local BIOS checking and installation are available in the Android APK only.");
       return;
     }
     try {
@@ -212,10 +212,10 @@ export default function PS1Screen() {
       const nextStatus = await MoudieEmulatorModule.installPS1Bios(asset.uri, asset.name);
       setBiosStatus(nextStatus);
       haptic.success();
-      Alert.alert("تمت إضافة BIOS", "تم حفظ ملف BIOS محلياً داخل التطبيق. لا يتم رفعه أو مشاركته.");
+      Alert.alert("BIOS added", "The BIOS file was stored locally in the app. It is never uploaded or shared.");
     } catch (error) {
       haptic.error();
-      Alert.alert("تعذر إضافة BIOS", error instanceof Error ? error.message : "اختر dump قانونياً باسم متوافق.");
+      Alert.alert("Could not add BIOS", error instanceof Error ? error.message : "Choose a legal dump with a supported name.");
     } finally {
       setIsInstallingBios(false);
     }
@@ -226,65 +226,65 @@ export default function PS1Screen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.topRow}>
           <Pressable onPress={() => router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId ?? "") } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
-            <Text style={styles.backText}>‹ العودة إلى الغرفة</Text>
+            <Text style={styles.backText}>‹ BACK TO ROOM</Text>
           </Pressable>
           <Text style={styles.chip}>PS1 · BETA</Text>
         </View>
 
         <Text style={styles.eyebrow}>PCSX REARMED</Text>
-        <Text style={styles.title}>مشغّل PlayStation 1</Text>
-        <Text style={styles.subtitle}>تشغيل محلي داخل تطبيق Moudie NetPlay. لا تتضمن النسخة ألعاباً أو ملفات BIOS؛ استخدم فقط الملفات التي تملكها قانونياً.</Text>
+        <Text style={styles.title}>PlayStation 1 Player</Text>
+        <Text style={styles.subtitle}>Local play inside Moudie NetPlay. The app does not include games or BIOS files; use only files you are legally entitled to use.</Text>
 
         <View style={styles.preview}>
           <Text style={styles.previewMark}>PS</Text>
-          <Text style={styles.previewTitle}>{game ? game.name : "لم يتم اختيار لعبة"}</Text>
-          <Text style={styles.previewText}>{game ? "جاهز للفتح في المشغّل الأصلي" : "تدعم النسخة BIN وCHD وPBP الكاملة"}</Text>
+          <Text style={styles.previewTitle}>{game ? game.name : "NO GAME SELECTED"}</Text>
+          <Text style={styles.previewText}>{game ? "Ready for the native player" : "Supports BIN, ISO, CHD, and PBP"}</Text>
         </View>
 
         <Pressable onPress={pickGame} disabled={isPicking || isLaunching} style={({ pressed }) => [styles.primaryButton, (pressed || isPicking || isLaunching) && styles.pressed]}>
-          {isPicking ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{game ? "تغيير ملف لعبة PS1" : "1. اختيار ملف لعبة PS1"}</Text>}
+          {isPicking ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{game ? "CHANGE PS1 GAME FILE" : "1. CHOOSE PS1 GAME FILE"}</Text>}
         </Pressable>
 
         {game && (
           <Pressable onPress={() => launchGame(false)} disabled={isLaunching || isPicking || runtimeStatus?.available === false} style={({ pressed }) => [styles.launchButton, (pressed || isLaunching || isPicking || runtimeStatus?.available === false) && styles.pressed]}>
-            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>2. تشغيل محلياً بوضع أفقي</Text>}
+            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>2. START LOCAL PLAY · PORTRAIT OR LANDSCAPE</Text>}
           </Pressable>
         )}
 
         {game && <View style={styles.netplayCard}>
           <Text style={styles.statusTitle}>PS1 NetPlay</Text>
-          <Text style={styles.statusText}>{ps1NetplayReady ? `اختار اللاعبان نفس الملف. ستكون اللاعب ${assignedPlayer}.` : `بانتظار الاستعداد والملف المطابق (${matchingPlayers.length}/2 جاهزان).`}</Text>
+          <Text style={styles.statusText}>{ps1NetplayReady ? `Both players selected the same game. You are Player ${assignedPlayer}.` : `Waiting for READY and a matching file (${matchingPlayers.length}/2 ready).`}</Text>
           <Pressable onPress={markGameReady} disabled={gameReady || isLaunching || isPicking || !roomConnected} style={({ pressed }) => [styles.netplayButton, (gameReady || pressed || isLaunching || isPicking || !roomConnected) && styles.netplayDisabled]}>
-            <Text style={styles.launchText}>{gameReady ? "تم إعلان الاستعداد" : "2. استعداد"}</Text>
+            <Text style={styles.launchText}>{gameReady ? "READY CONFIRMED" : "2. READY"}</Text>
           </Pressable>
           <Pressable onPress={requestSynchronizedStart} disabled={!gameReady || !ps1NetplayReady || assignedPlayer !== 1 || startRequested || isLaunching} style={({ pressed }) => [styles.netplayButton, (!gameReady || !ps1NetplayReady || assignedPlayer !== 1 || startRequested || pressed || isLaunching) && styles.netplayDisabled]}>
-            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>{assignedPlayer === 1 ? (startRequested ? "جارٍ تأكيد البداية…" : "3. ابدأ PS1 للجميع") : "بانتظار المضيف لبدء الجلسة"}</Text>}
+            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>{assignedPlayer === 1 ? (startRequested ? "CONFIRMING START…" : "3. START PS1 FOR EVERYONE") : "WAITING FOR HOST TO START"}</Text>}
           </Pressable>
         </View>}
 
         {Platform.OS !== "web" && <>
-          <RoomChat socket={roomConnected ? socketRef.current : null} title="دردشة غرفة PS1" />
+          <RoomChat socket={roomConnected ? socketRef.current : null} title="PS1 ROOM CHAT" />
           <RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={assignedPlayer === 1} remoteOnline={remoteOnline} />
         </>}
 
         <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>حالة مشغّل PS1</Text>
+          <Text style={styles.statusTitle}>PS1 PLAYER STATUS</Text>
           <Text style={styles.statusText}>{status}</Text>
-          <Text style={styles.statusText}>{runtimeStatus?.message ?? "جارٍ التحقق من core المحلي…"}</Text>
+          <Text style={styles.statusText}>{runtimeStatus?.message ?? "Checking the local core…"}</Text>
         </View>
 
         <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>حالة BIOS</Text>
-          <Text style={styles.statusText}>{biosStatus?.ps1.message ?? "جارٍ فحص BIOS المحلي…"}</Text>
-          {!biosStatus?.ps1.available && <Text style={styles.biosWarning}>قد تبدأ بعض الألعاب عبر HLE، لكن إضافة BIOS محلي متوافق تحسن توافق PCSX ReARMed وتكشف سبب فشل الألعاب التي تحتاجه.</Text>}
+          <Text style={styles.statusTitle}>BIOS STATUS</Text>
+          <Text style={styles.statusText}>{biosStatus?.ps1.message ?? "Checking local BIOS…"}</Text>
+          {!biosStatus?.ps1.available && <Text style={styles.biosWarning}>Some games may start with HLE, but a compatible local BIOS improves PCSX-ReARMed compatibility and helps diagnose games that fail to start.</Text>}
           <Pressable onPress={pickBios} disabled={isInstallingBios || isLaunching} style={({ pressed }) => [styles.primaryButton, (pressed || isInstallingBios || isLaunching) && styles.pressed]}>
-            {isInstallingBios ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>إضافة BIOS محلي قانوني</Text>}
+            {isInstallingBios ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>ADD LEGAL LOCAL BIOS</Text>}
           </Pressable>
         </View>
 
         <View style={styles.noteCard}>
-          <Text style={styles.noteTitle}>حدود النسخة التجريبية الحالية</Text>
-          <Text style={styles.noteText}>يعمل PS1 NetPlay فقط عندما يختار اللاعبان ملفاً مطابقاً بالبصمة نفسها. لا تُرفع اللعبة إلى الخادم؛ تمر عبر الغرفة ضغطات التحكم وحالة بداية قصيرة فقط.</Text>
+          <Text style={styles.noteTitle}>CURRENT BETA LIMIT</Text>
+          <Text style={styles.noteText}>PS1 NetPlay starts only when two players choose files with the same fingerprint. The game is never uploaded; the room transports controller input and a small initial state only.</Text>
         </View>
       </ScrollView>
     </ScreenContainer>

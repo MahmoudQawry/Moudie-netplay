@@ -13,38 +13,40 @@ type Props = {
   onButtonChange?: (button: ControlId, isDown: boolean) => void;
 };
 
-const STORAGE_PREFIX = "moudie.controller-layout.v2.";
+const STORAGE_PREFIX = "moudie.controller-layout.v3.";
+const MIN_BUTTON_SIZE = 32;
+const MAX_BUTTON_SIZE = 104;
 
 const profiles: Record<SystemId, { controls: ControlId[]; accent: string; labels: Partial<Record<ControlId, string>>; defaults: ControllerLayout }> = {
   famicom: {
     accent: "#F5C84C",
     controls: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "START", "SELECT"],
     labels: { UP: "▲", DOWN: "▼", LEFT: "◀", RIGHT: "▶", A: "A", B: "B", START: "START", SELECT: "SELECT" },
-    defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, A: { x: 78, y: 69, size: 58 }, B: { x: 64, y: 61, size: 58 }, START: { x: 51, y: 89, size: 42 }, SELECT: { x: 37, y: 89, size: 42 }, },
+    defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, A: { x: 78, y: 69, size: 58 }, B: { x: 64, y: 61, size: 58 }, START: { x: 51, y: 89, size: 42 }, SELECT: { x: 37, y: 89, size: 42 } },
   },
   ps1: {
     accent: "#B978FF",
     controls: ["UP", "DOWN", "LEFT", "RIGHT", "X", "O", "TRIANGLE", "SQUARE", "L1", "R1", "START", "SELECT"],
     labels: { UP: "▲", DOWN: "▼", LEFT: "◀", RIGHT: "▶", X: "×", O: "○", TRIANGLE: "△", SQUARE: "□", L1: "L1", R1: "R1", START: "START", SELECT: "SELECT" },
-    defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, TRIANGLE: { x: 78, y: 54, size: 52 }, X: { x: 78, y: 73, size: 52 }, SQUARE: { x: 68, y: 64, size: 52 }, O: { x: 88, y: 64, size: 52 }, L1: { x: 5, y: 37, size: 44 }, R1: { x: 82, y: 37, size: 44 }, START: { x: 52, y: 89, size: 41 }, SELECT: { x: 37, y: 89, size: 41 }, },
+    defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, TRIANGLE: { x: 78, y: 54, size: 52 }, X: { x: 78, y: 73, size: 52 }, SQUARE: { x: 68, y: 64, size: 52 }, O: { x: 88, y: 64, size: 52 }, L1: { x: 5, y: 37, size: 44 }, R1: { x: 82, y: 37, size: 44 }, START: { x: 52, y: 89, size: 41 }, SELECT: { x: 37, y: 89, size: 41 } },
   },
   psp: {
     accent: "#45DDFC",
     controls: ["UP", "DOWN", "LEFT", "RIGHT", "X", "O", "TRIANGLE", "SQUARE", "L", "R", "START", "SELECT"],
     labels: { UP: "▲", DOWN: "▼", LEFT: "◀", RIGHT: "▶", X: "×", O: "○", TRIANGLE: "△", SQUARE: "□", L: "L", R: "R", START: "START", SELECT: "SELECT" },
-    defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, TRIANGLE: { x: 78, y: 54, size: 52 }, X: { x: 78, y: 73, size: 52 }, SQUARE: { x: 68, y: 64, size: 52 }, O: { x: 88, y: 64, size: 52 }, L: { x: 5, y: 37, size: 44 }, R: { x: 82, y: 37, size: 44 }, START: { x: 52, y: 89, size: 41 }, SELECT: { x: 37, y: 89, size: 41 }, },
+    defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, TRIANGLE: { x: 78, y: 54, size: 52 }, X: { x: 78, y: 73, size: 52 }, SQUARE: { x: 68, y: 64, size: 52 }, O: { x: 88, y: 64, size: 52 }, L: { x: 5, y: 37, size: 44 }, R: { x: 82, y: 37, size: 44 }, START: { x: 52, y: 89, size: 41 }, SELECT: { x: 37, y: 89, size: 41 } },
   },
   sega: {
     accent: "#70E39B",
     controls: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "C", "START"],
     labels: { UP: "▲", DOWN: "▼", LEFT: "◀", RIGHT: "▶", A: "A", B: "B", C: "C", START: "START" },
-    defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, A: { x: 64, y: 67, size: 56 }, B: { x: 76, y: 61, size: 56 }, C: { x: 88, y: 55, size: 56 }, START: { x: 46, y: 89, size: 44 }, },
+    defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, A: { x: 64, y: 67, size: 56 }, B: { x: 76, y: 61, size: 56 }, C: { x: 88, y: 55, size: 56 }, START: { x: 46, y: 89, size: 44 } },
   },
   arcade: {
     accent: "#FF886D",
     controls: ["UP", "DOWN", "LEFT", "RIGHT", "ONE", "TWO", "THREE", "FOUR", "START"],
     labels: { UP: "▲", DOWN: "▼", LEFT: "◀", RIGHT: "▶", ONE: "1", TWO: "2", THREE: "3", FOUR: "4", START: "START" },
-    defaults: { UP: { x: 13, y: 54, size: 58 }, DOWN: { x: 13, y: 73, size: 58 }, LEFT: { x: 3, y: 64, size: 58 }, RIGHT: { x: 23, y: 64, size: 58 }, ONE: { x: 68, y: 57, size: 55 }, TWO: { x: 81, y: 57, size: 55 }, THREE: { x: 68, y: 73, size: 55 }, FOUR: { x: 81, y: 73, size: 55 }, START: { x: 46, y: 89, size: 44 }, },
+    defaults: { UP: { x: 13, y: 54, size: 58 }, DOWN: { x: 13, y: 73, size: 58 }, LEFT: { x: 3, y: 64, size: 58 }, RIGHT: { x: 23, y: 64, size: 58 }, ONE: { x: 68, y: 57, size: 55 }, TWO: { x: 81, y: 57, size: 55 }, THREE: { x: 68, y: 73, size: 55 }, FOUR: { x: 81, y: 73, size: 55 }, START: { x: 46, y: 89, size: 44 } },
   },
 };
 
@@ -57,6 +59,7 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
   const [layout, setLayout] = useState<ControllerLayout>(() => cloneLayout(profile.defaults));
   const [scale, setScale] = useState(1);
   const [size, setSize] = useState({ width: 1, height: 1 });
+  const [selectedControl, setSelectedControl] = useState<ControlId | null>(null);
   const currentLayoutRef = useRef(layout);
   const dragStartRef = useRef<Position | null>(null);
 
@@ -69,7 +72,7 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
         const decoded = JSON.parse(saved) as { scale?: number; layout?: ControllerLayout };
         if (decoded.layout) setLayout({ ...cloneLayout(profile.defaults), ...decoded.layout });
         if (typeof decoded.scale === "number" && decoded.scale >= 0.65 && decoded.scale <= 1.5) setScale(decoded.scale);
-      } catch { /* keep safe defaults */ }
+      } catch { /* Keep safe defaults. */ }
     });
     return () => { active = false; };
   }, [profile.defaults, system]);
@@ -77,26 +80,45 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
   const save = useCallback((nextLayout = currentLayoutRef.current, nextScale = scale) => {
     AsyncStorage.setItem(`${STORAGE_PREFIX}${system}`, JSON.stringify({ layout: nextLayout, scale: nextScale })).catch(() => undefined);
   }, [scale, system]);
-  const resize = (delta: number) => {
+
+  const resizeLayout = (delta: number) => {
     setScale((value) => {
       const next = Math.max(0.65, Math.min(1.5, Math.round((value + delta) * 100) / 100));
       save(currentLayoutRef.current, next);
       return next;
     });
   };
+
+  const resizeSelectedControl = (delta: number) => {
+    if (!selectedControl) return;
+    const current = currentLayoutRef.current[selectedControl] ?? profile.defaults[selectedControl];
+    if (!current) return;
+    const nextLayout = {
+      ...currentLayoutRef.current,
+      [selectedControl]: { ...current, size: Math.max(MIN_BUTTON_SIZE, Math.min(MAX_BUTTON_SIZE, current.size + delta)) },
+    };
+    setLayout(nextLayout);
+    save(nextLayout);
+  };
+
   const reset = () => {
     const restored = cloneLayout(profile.defaults);
     setLayout(restored);
     setScale(1);
+    setSelectedControl(null);
     save(restored, 1);
   };
+
   const onSurfaceLayout = (event: LayoutChangeEvent) => setSize(event.nativeEvent.layout);
 
   const controls = useMemo(() => profile.controls.map((id) => {
     const gesture = PanResponder.create({
       onStartShouldSetPanResponder: () => editable,
       onMoveShouldSetPanResponder: () => editable,
-      onPanResponderGrant: () => { dragStartRef.current = currentLayoutRef.current[id] ?? profile.defaults[id] ?? null; },
+      onPanResponderGrant: () => {
+        setSelectedControl(id);
+        dragStartRef.current = currentLayoutRef.current[id] ?? profile.defaults[id] ?? null;
+      },
       onPanResponderMove: (_, state) => {
         const initial = dragStartRef.current;
         if (!initial || size.width < 2 || size.height < 2) return;
@@ -116,6 +138,8 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
     return { id, gesture };
   }), [editable, profile.controls, profile.defaults, save, size.height, size.width]);
 
+  const selectedLabel = selectedControl ? (profile.labels[selectedControl] ?? selectedControl) : "LAYOUT";
+
   return (
     <View style={styles.root} onLayout={onSurfaceLayout}>
       {controls.map(({ id, gesture }) => {
@@ -123,13 +147,14 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
         if (!position) return null;
         const controlSize = position.size * scale;
         const isMeta = id === "START" || id === "SELECT" || id === "L" || id === "R" || id === "L1" || id === "R1";
+        const selected = selectedControl === id && editable;
         return (
           <View key={id} {...gesture.panHandlers} style={[styles.position, { left: `${position.x}%`, top: `${position.y}%`, marginLeft: -controlSize / 2, marginTop: -controlSize / 2 }]}>
             <Pressable
               disabled={editable}
               onPressIn={() => onButtonChange?.(id, true)}
               onPressOut={() => onButtonChange?.(id, false)}
-              style={({ pressed }) => [styles.button, isMeta && styles.metaButton, { width: controlSize, height: controlSize, borderRadius: controlSize / 2, borderColor: profile.accent }, pressed && styles.buttonPressed, editable && styles.editButton]}
+              style={({ pressed }) => [styles.button, isMeta && styles.metaButton, { width: controlSize, height: controlSize, borderRadius: controlSize / 2, borderColor: profile.accent }, pressed && styles.buttonPressed, editable && styles.editButton, selected && { borderColor: "#FFFFFF", borderWidth: 3 }]}
             >
               <Text style={[styles.buttonText, isMeta && styles.metaText, { color: profile.accent }]}>{profile.labels[id] ?? id}</Text>
             </Pressable>
@@ -137,10 +162,21 @@ export function CustomizableController({ system, editable, onButtonChange }: Pro
         );
       })}
       <View style={styles.customizeBar}>
-        <Pressable onPress={() => resize(-0.1)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]}><Text style={styles.utilityText}>−</Text></Pressable>
-        <Text style={styles.scaleText}>{Math.round(scale * 100)}%</Text>
-        <Pressable onPress={() => resize(0.1)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]}><Text style={styles.utilityText}>+</Text></Pressable>
-        {editable && <Pressable onPress={reset} style={({ pressed }) => [styles.resetButton, pressed && styles.utilityPressed]}><Text style={styles.resetText}>إعادة ضبط</Text></Pressable>}
+        {editable ? (
+          <>
+            <Text style={styles.modeText}>EDIT {selectedLabel}</Text>
+            <Pressable onPress={() => resizeSelectedControl(-4)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]} accessibilityLabel="Make selected button smaller"><Text style={styles.utilityText}>−</Text></Pressable>
+            <Text style={styles.scaleText}>SIZE</Text>
+            <Pressable onPress={() => resizeSelectedControl(4)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]} accessibilityLabel="Make selected button larger"><Text style={styles.utilityText}>+</Text></Pressable>
+            <Pressable onPress={reset} style={({ pressed }) => [styles.resetButton, pressed && styles.utilityPressed]}><Text style={styles.resetText}>RESET</Text></Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable onPress={() => resizeLayout(-0.1)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]} accessibilityLabel="Make all controls smaller"><Text style={styles.utilityText}>−</Text></Pressable>
+            <Text style={styles.scaleText}>{Math.round(scale * 100)}%</Text>
+            <Pressable onPress={() => resizeLayout(0.1)} style={({ pressed }) => [styles.utilityButton, pressed && styles.utilityPressed]} accessibilityLabel="Make all controls larger"><Text style={styles.utilityText}>+</Text></Pressable>
+          </>
+        )}
       </View>
     </View>
   );
@@ -155,10 +191,11 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 9, letterSpacing: 0.4 },
   buttonPressed: { transform: [{ scale: 0.92 }], backgroundColor: "rgba(255,255,255,0.2)" },
   editButton: { borderStyle: "dashed", backgroundColor: "rgba(255,255,255,0.10)" },
-  customizeBar: { position: "absolute", top: 8, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: "rgba(16, 13, 28, 0.78)", borderWidth: 1, borderColor: "#38304D", borderRadius: 16, paddingHorizontal: 8, paddingVertical: 5 },
+  customizeBar: { position: "absolute", top: 8, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: "rgba(16, 13, 28, 0.82)", borderWidth: 1, borderColor: "#38304D", borderRadius: 16, paddingHorizontal: 8, paddingVertical: 5 },
+  modeText: { color: "#E7DFFF", fontSize: 9, fontWeight: "900", maxWidth: 72 },
   utilityButton: { height: 30, width: 30, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: "#252137" },
   utilityText: { color: "#FFFFFF", fontSize: 19, fontWeight: "800" },
-  scaleText: { minWidth: 38, color: "#E5E0F5", fontSize: 11, fontWeight: "900", textAlign: "center" },
+  scaleText: { minWidth: 38, color: "#E5E0F5", fontSize: 10, fontWeight: "900", textAlign: "center" },
   resetButton: { marginRight: 2, paddingHorizontal: 8, height: 30, justifyContent: "center", borderRadius: 10, backgroundColor: "#352852" },
   resetText: { color: "#D9C4FF", fontSize: 10, fontWeight: "800" },
   utilityPressed: { opacity: 0.7 },

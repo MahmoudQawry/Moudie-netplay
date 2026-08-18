@@ -22,12 +22,12 @@ export default function JoinRoomScreen() {
   const join = async () => {
     if (joinCode.trim().length !== 6) {
       haptic.error();
-      Alert.alert("تحقق من الرمز", "رمز الغرفة يتكون من 6 أحرف أو أرقام.");
+      Alert.alert("Check the code", "A room code has six letters or numbers.");
       return;
     }
     if (displayName.trim().length < 2) {
       haptic.error();
-      Alert.alert("أضف اسماً ظاهراً", "اكتب حرفين على الأقل ليظهر اسمك داخل الغرفة.");
+      Alert.alert("Add a display name", "Enter at least two characters for your room name.");
       return;
     }
     try {
@@ -38,7 +38,7 @@ export default function JoinRoomScreen() {
       router.replace({ pathname: "/room/[roomId]", params: { roomId: String(result.roomId) } });
     } catch (error) {
       haptic.error();
-      Alert.alert("تعذر الانضمام", error instanceof Error ? error.message : "تحقق من الرمز ثم أعد المحاولة.");
+      Alert.alert("Could not join", error instanceof Error ? error.message : "Check the room code and try again.");
     }
   };
 
@@ -48,34 +48,34 @@ export default function JoinRoomScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><MaterialCommunityIcons name="arrow-right" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>انضم لغرفة</Text></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>JOIN ROOM</Text></View>
           <View style={styles.headerSpace} />
         </View>
         <View style={styles.panel}>
-          <Text style={styles.label}>رمز الغرفة</Text>
+          <Text style={styles.label}>ROOM CODE</Text>
           <TextInput value={joinCode} onChangeText={(value) => setJoinCode(value.toUpperCase().replace(/[^A-Z2-9]/g, "").slice(0, 6))} autoCapitalize="characters" autoCorrect={false} maxLength={6} style={styles.codeInput} placeholder="ABC123" placeholderTextColor="#756E87" textAlign="center" returnKeyType="done" />
-          <Text style={styles.label}>اسمك الظاهر</Text>
-          <TextInput value={displayName} onChangeText={setDisplayName} style={styles.input} placeholder="مثال: محمد" placeholderTextColor="#827B97" textAlign="right" returnKeyType="done" />
+          <Text style={styles.label}>DISPLAY NAME</Text>
+          <TextInput value={displayName} onChangeText={setDisplayName} style={styles.input} placeholder="Example: Alex" placeholderTextColor="#827B97" textAlign="left" returnKeyType="done" />
 
-          <Text style={styles.label}>كيف تريد الدخول؟</Text>
+          <Text style={styles.label}>HOW DO YOU WANT TO JOIN?</Text>
           <View style={styles.roleRow}>
             <Pressable onPress={() => { haptic.selection(); setJoinAs("player"); }} style={({ pressed }) => [styles.roleCard, joinAs === "player" && styles.roleSelected, pressed && styles.pressed]}>
               <MaterialCommunityIcons name="gamepad-variant-outline" size={24} color={joinAs === "player" ? "#65E8FF" : "#9B93AD"} />
-              <Text style={[styles.roleTitle, joinAs === "player" && styles.roleTitleSelected]}>لاعب</Text>
-              <Text style={styles.roleText}>تتحكم داخل اللعبة</Text>
+              <Text style={[styles.roleTitle, joinAs === "player" && styles.roleTitleSelected]}>PLAYER</Text>
+              <Text style={styles.roleText}>You control the game</Text>
             </Pressable>
             <Pressable onPress={() => { haptic.selection(); setJoinAs("spectator"); }} style={({ pressed }) => [styles.roleCard, joinAs === "spectator" && styles.roleSelected, pressed && styles.pressed]}>
               <MaterialCommunityIcons name="eye-outline" size={24} color={joinAs === "spectator" ? "#D9A3FF" : "#9B93AD"} />
-              <Text style={[styles.roleTitle, joinAs === "spectator" && styles.roleTitleSelected]}>مشاهد</Text>
-              <Text style={styles.roleText}>تشاهد وتتحدث وتدردش</Text>
+              <Text style={[styles.roleTitle, joinAs === "spectator" && styles.roleTitleSelected]}>SPECTATOR</Text>
+              <Text style={styles.roleText}>Watch, talk, and chat</Text>
             </Pressable>
           </View>
 
           <Pressable onPress={join} disabled={joinRoom.isPending} style={({ pressed }) => [styles.primaryButton, (pressed || joinRoom.isPending) && styles.buttonPressed]}>
-            {joinRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>انضم الآن</Text><MaterialCommunityIcons name="login-variant" size={20} color="#FFFFFF" /></>}
+            {joinRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>JOIN ROOM</Text><MaterialCommunityIcons name="login-variant" size={20} color="#FFFFFF" /></>}
           </Pressable>
         </View>
-        <View style={styles.helper}><MaterialCommunityIcons name="shield-lock-outline" size={18} color="#69E8FF" /><Text style={styles.helperText}>رمز الغرفة وعضويتك محفوظان على جهازك. ملفات ألعابك لا تُرسل إلى الغرفة.</Text></View>
+        <View style={styles.helper}><MaterialCommunityIcons name="shield-lock-outline" size={18} color="#69E8FF" /><Text style={styles.helperText}>Your room code and membership stay on this device. Game files are never sent to the room.</Text></View>
       </ScrollView>
     </ScreenContainer>
   );

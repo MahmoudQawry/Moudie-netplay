@@ -21,16 +21,16 @@ const SYSTEMS: { id: SystemId; label: string; detail: string; icon: keyof typeof
 
 export default function CreateRoomScreen() {
   const [system, setSystem] = useState<SystemId>("ps1");
-  const [name, setName] = useState("جلسة الأصدقاء");
+  const [name, setName] = useState("Friends Session");
   const [hostName, setHostName] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(10);
   const createRoom = trpc.rooms.create.useMutation();
 
   const create = async () => {
-    const normalizedHost = hostName.trim() || (await getProfileName())?.trim() || "لاعب";
+    const normalizedHost = hostName.trim() || (await getProfileName())?.trim() || "Player";
     if (name.trim().length < 2) {
       haptic.error();
-      Alert.alert("اسم الغرفة قصير", "اكتب اسماً من حرفين على الأقل.");
+      Alert.alert("Room name is too short", "Enter at least two characters.");
       return;
     }
     try {
@@ -41,7 +41,7 @@ export default function CreateRoomScreen() {
       router.replace({ pathname: "/room/[roomId]", params: { roomId: String(room.roomId) } });
     } catch (error) {
       haptic.error();
-      Alert.alert("تعذر إنشاء الغرفة", error instanceof Error ? error.message : "حاول مرة أخرى.");
+      Alert.alert("Could not create room", error instanceof Error ? error.message : "Try again.");
     }
   };
 
@@ -51,13 +51,13 @@ export default function CreateRoomScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><MaterialCommunityIcons name="arrow-right" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>إنشاء غرفة</Text></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>CREATE ROOM</Text></View>
           <View style={styles.headerSpace} />
         </View>
 
         <View style={styles.panel}>
-          <Text style={styles.panelLead}>اختر المحاكي</Text>
-          <Text style={styles.panelSub}>اختر نظام اللعب. لكل نظام أزرار تحكم مخصصة داخل المحاكي.</Text>
+          <Text style={styles.panelLead}>CHOOSE AN EMULATOR</Text>
+          <Text style={styles.panelSub}>Choose the game system. Every system has a dedicated controller layout inside the player.</Text>
           <View style={styles.systemGrid}>
             {SYSTEMS.map((item) => {
               const selected = system === item.id;
@@ -71,12 +71,12 @@ export default function CreateRoomScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>اسم الغرفة</Text>
-          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="مثال: سباق مساء الجمعة" placeholderTextColor="#827B97" returnKeyType="done" textAlign="right" />
-          <Text style={styles.label}>اسمك الظاهر</Text>
-          <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="سيظهر لأصدقائك" placeholderTextColor="#827B97" returnKeyType="done" textAlign="right" />
+          <Text style={styles.label}>ROOM NAME</Text>
+          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Example: Friday Night Race" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
+          <Text style={styles.label}>DISPLAY NAME</Text>
+          <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="Visible to your friends" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
 
-          <View style={styles.capacityHeading}><Text style={styles.labelInline}>سعة الغرفة</Text><Text style={styles.capacityHint}>حتى 10 أعضاء</Text></View>
+          <View style={styles.capacityHeading}><Text style={styles.labelInline}>ROOM CAPACITY</Text><Text style={styles.capacityHint}>UP TO 10 MEMBERS</Text></View>
           <View style={styles.capacityRow}>
             {[2, 4, 6, 8, 10].map((value) => (
               <Pressable key={value} onPress={() => { haptic.selection(); setMaxPlayers(value); }} style={({ pressed }) => [styles.capacity, maxPlayers === value && styles.capacitySelected, pressed && styles.pressed]}><Text style={[styles.capacityText, maxPlayers === value && styles.capacityTextSelected]}>{value}</Text></Pressable>
@@ -84,13 +84,13 @@ export default function CreateRoomScreen() {
           </View>
 
           <View style={styles.featureRow}>
-            <View style={styles.feature}><MaterialCommunityIcons name="microphone-outline" size={16} color="#69E8FF" /><Text style={styles.featureText}>صوت</Text></View>
-            <View style={styles.feature}><MaterialCommunityIcons name="message-text-outline" size={16} color="#C58AFF" /><Text style={styles.featureText}>دردشة</Text></View>
-            <View style={styles.feature}><MaterialCommunityIcons name="eye-outline" size={16} color="#FFD16A" /><Text style={styles.featureText}>مشاهدة</Text></View>
+            <View style={styles.feature}><MaterialCommunityIcons name="microphone-outline" size={16} color="#69E8FF" /><Text style={styles.featureText}>VOICE</Text></View>
+            <View style={styles.feature}><MaterialCommunityIcons name="message-text-outline" size={16} color="#C58AFF" /><Text style={styles.featureText}>CHAT</Text></View>
+            <View style={styles.feature}><MaterialCommunityIcons name="eye-outline" size={16} color="#FFD16A" /><Text style={styles.featureText}>SPECTATE</Text></View>
           </View>
 
           <Pressable onPress={create} disabled={createRoom.isPending} style={({ pressed }) => [styles.primaryButton, (pressed || createRoom.isPending) && styles.buttonPressed]}>
-            {createRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>أنشئ الغرفة وادخل المحاكي</Text><MaterialCommunityIcons name="arrow-left" size={20} color="#FFFFFF" /></>}
+            {createRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>CREATE ROOM & ENTER PLAYER</Text><MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" /></>}
           </Pressable>
         </View>
       </ScrollView>

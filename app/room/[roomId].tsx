@@ -10,7 +10,7 @@ import { createNetplaySocket } from "@/lib/netplay-socket";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
 import { trpc } from "@/lib/trpc";
 
-const SYSTEM_LABEL: Record<string, string> = { psp: "PSP", nes: "Famicom", sega: "Sega", ps1: "PS1", arcade: "Arcade" };
+const SYSTEM_LABEL: Record<string, string> = { psp: "PSP", nes: "Famicom / NES", sega: "Sega Genesis", ps1: "PlayStation 1", arcade: "Arcade" };
 
 export default function RoomScreen() {
   const { roomId: rawRoomId } = useLocalSearchParams<{ roomId: string }>();
@@ -59,7 +59,7 @@ export default function RoomScreen() {
   const share = async () => {
     if (!snapshot) return;
     haptic.light();
-    await Share.share({ message: `انضم إلى غرفة «${snapshot.room.name}» في Moudie NetPlay. رمز الغرفة: ${snapshot.room.joinCode}` });
+    await Share.share({ message: `Join ${snapshot.room.name} on Moudie NetPlay. Room code: ${snapshot.room.joinCode}` });
   };
 
   if (credential === undefined || snapshotQuery.isLoading) {
@@ -68,9 +68,9 @@ export default function RoomScreen() {
   if (!credential || snapshotQuery.error || !snapshot) {
     return (
       <ScreenContainer className="items-center justify-center px-7">
-        <Text style={styles.errorTitle}>تعذر فتح الغرفة</Text>
-        <Text style={styles.errorText}>قد تكون عضوية الغرفة محفوظة على جهاز آخر، أو أن الغرفة لم تعد متاحة.</Text>
-        <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.outlineButton, pressed && styles.pressed]}><Text style={styles.outlineText}>العودة إلى الردهة</Text></Pressable>
+        <Text style={styles.errorTitle}>Could not open room</Text>
+        <Text style={styles.errorText}>This membership may be stored on another device, or the room is no longer available.</Text>
+        <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.outlineButton, pressed && styles.pressed]}><Text style={styles.outlineText}>RETURN TO LOBBY</Text></Pressable>
       </ScreenContainer>
     );
   }
@@ -82,25 +82,25 @@ export default function RoomScreen() {
     <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.topRow}>
-          <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>‹ الردهة</Text></Pressable>
-          <View style={styles.live}><View style={styles.liveDot} /><Text style={styles.liveText}>{snapshot.room.status === "waiting" ? "بانتظار اللاعبين" : "الجلسة نشطة"}</Text></View>
+          <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>‹ LOBBY</Text></Pressable>
+          <View style={styles.live}><View style={styles.liveDot} /><Text style={styles.liveText}>{snapshot.room.status === "waiting" ? "WAITING FOR PLAYERS" : "SESSION ACTIVE"}</Text></View>
         </View>
         <Text style={styles.system}>{SYSTEM_LABEL[snapshot.room.system]}</Text>
         <Text style={styles.title}>{snapshot.room.name}</Text>
-        <Text style={styles.caption}>غرفة خاصة · {playerCount}/{snapshot.room.maxPlayers} لاعب{spectatorCount ? ` · ${spectatorCount} مشاهد` : ""}</Text>
+        <Text style={styles.caption}>PRIVATE ROOM · {playerCount}/{snapshot.room.maxPlayers} PLAYERS{spectatorCount ? ` · ${spectatorCount} SPECTATORS` : ""}</Text>
 
         <View style={styles.codeCard}>
-          <Text style={styles.codeLabel}>رمز الدعوة</Text>
+          <Text style={styles.codeLabel}>INVITE CODE</Text>
           <Text style={styles.code}>{snapshot.room.joinCode}</Text>
-          <Pressable onPress={share} style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}><Text style={styles.shareText}>مشاركة الرمز</Text></Pressable>
+          <Pressable onPress={share} style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}><Text style={styles.shareText}>SHARE CODE</Text></Pressable>
         </View>
 
-        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>أعضاء الغرفة</Text><Text style={styles.counter}>{playerCount}/{snapshot.room.maxPlayers} لاعب</Text></View>
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ROOM MEMBERS</Text><Text style={styles.counter}>{playerCount}/{snapshot.room.maxPlayers} PLAYERS</Text></View>
         <View style={styles.memberList}>
           {snapshot.members.map((member) => (
             <View key={member.id} style={styles.member}>
               <View style={[styles.avatar, member.role === "host" && styles.avatarHost]}><Text style={styles.avatarText}>{member.displayName.slice(0, 1).toUpperCase()}</Text></View>
-              <View style={styles.memberText}><Text style={styles.memberName}>{member.displayName}{member.role === "host" ? " · المضيف" : member.role === "spectator" ? " · مشاهد" : ""}</Text><Text style={styles.memberStatus}>{member.role === "spectator" ? "يشاهد ويتحدث في الغرفة" : member.isReady ? "التحقق مكتمل" : "بانتظار فحص المحرك"}</Text></View>
+              <View style={styles.memberText}><Text style={styles.memberName}>{member.displayName}{member.role === "host" ? " · HOST" : member.role === "spectator" ? " · SPECTATOR" : ""}</Text><Text style={styles.memberStatus}>{member.role === "spectator" ? "Watching and talking in the room" : member.isReady ? "READY" : "Checking emulator"}</Text></View>
               <View style={[styles.readyDot, member.isReady ? styles.ready : styles.pending]} />
             </View>
           ))}
@@ -108,20 +108,24 @@ export default function RoomScreen() {
 
         {snapshot.room.system === "nes" ? (
           <Pressable onPress={() => router.push({ pathname: "/famicom/[roomId]" as never, params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
-            <Text style={styles.playText}>فتح Famicom · NetPlay ودردشة الغرفة</Text>
+            <Text style={styles.playText}>OPEN FAMICOM · NETPLAY & ROOM CHAT</Text>
           </Pressable>
         ) : snapshot.room.system === "ps1" ? (
           <Pressable onPress={() => router.push({ pathname: "/ps1/[roomId]" as never, params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
-            <Text style={styles.playText}>فتح مشغّل PS1 المحلي</Text>
+            <Text style={styles.playText}>OPEN PS1 PLAYER</Text>
+          </Pressable>
+        ) : snapshot.room.system === "psp" ? (
+          <Pressable onPress={() => router.push({ pathname: "/psp/[roomId]" as never, params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
+            <Text style={styles.playText}>OPEN PSP PLAYER</Text>
           </Pressable>
         ) : (
           <>
             <View style={styles.nextCard}>
-              <Text style={styles.nextTitle}>المشغّل قيد التحضير</Text>
-              <Text style={styles.nextText}>يمكنكما فتح الشات والمكالمة الصوتية الآن أثناء انتظار دمج مشغّل {SYSTEM_LABEL[snapshot.room.system]} الفعلي.</Text>
-              <Text style={styles.progress}>{readyCount} لاعب جاهز من أصل {playerCount}</Text>
+              <Text style={styles.nextTitle}>PLAYER PREPARATION</Text>
+              <Text style={styles.nextText}>Text chat and voice are available while the {SYSTEM_LABEL[snapshot.room.system]} room player is prepared.</Text>
+              <Text style={styles.progress}>{readyCount} READY PLAYERS OUT OF {playerCount}</Text>
             </View>
-            {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title={`دردشة غرفة ${SYSTEM_LABEL[snapshot.room.system]}`} />
+            {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title={`${SYSTEM_LABEL[snapshot.room.system]} ROOM CHAT`} />
             <RoomVoiceChat socket={roomConnected ? socketRef.current : null} isHost={Boolean(roomIsHost)} remoteOnline={remoteOnline} memberId={credential.memberId} members={snapshot.members} /></>}
           </>
         )}
