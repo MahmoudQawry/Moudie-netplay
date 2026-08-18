@@ -25,6 +25,7 @@ export default function EmulatorLibraryScreen() {
   const meta = displayMeta[system];
   const [capability, setCapability] = useState<EmulatorCoreCapability | null>(null);
   const [loading, setLoading] = useState(false);
+  const [installingCore, setInstallingCore] = useState(false);
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("landscape");
   const [aspectRatio, setAspectRatio] = useState<"fit" | "4:3" | "16:9">("4:3");
 
@@ -49,6 +50,19 @@ export default function EmulatorLibraryScreen() {
     } finally { setLoading(false); }
   };
 
+  const installArcadeCore = async () => {
+    try {
+      setInstallingCore(true);
+      const result = await MoudieEmulatorModule.prepareNativeCore("arcade");
+      setCapability((current) => current ? { ...current, available: result.available, downloadable: false, message: result.message } : current);
+      Alert.alert("Arcade core ready", result.message);
+    } catch (error) {
+      Alert.alert("Could not install Arcade", error instanceof Error ? error.message : "Check your internet connection and storage, then try again.");
+    } finally {
+      setInstallingCore(false);
+    }
+  };
+
   return (
     <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
       <NeonCircuitBackground />
@@ -67,6 +81,7 @@ export default function EmulatorLibraryScreen() {
           <View style={styles.detailRow}><MaterialCommunityIcons name="cellphone-link" color="#C98AFF" size={18} /><Text style={styles.detailText}>Portrait and landscape play are both supported with independent controller layouts.</Text></View>
           <View style={styles.detailRow}><MaterialCommunityIcons name="content-save-outline" color="#F8CF68" size={18} /><Text style={styles.detailText}>Local save/load state is available from the in-game toolbar.</Text></View>
         </View>
+        {system === "arcade" && capability?.downloadable && !capability.available && <Pressable onPress={installArcadeCore} disabled={installingCore} style={({ pressed }) => [styles.arcadeInstall, (pressed || installingCore) && styles.launchPressed]}>{installingCore ? <ActivityIndicator color="#071018" /> : <MaterialCommunityIcons name="download" size={22} color="#071018" />}<Text style={styles.arcadeInstallText}>{installingCore ? "DOWNLOADING MAME ARCADE CORE…" : "INSTALL MAME ARCADE CORE"}</Text></Pressable>}
         <View style={styles.settingsPanel}>
           <Text style={styles.settingsTitle}>EMULATOR SETTINGS</Text>
           <Text style={styles.settingsLabel}>PLAY ORIENTATION</Text>
@@ -88,5 +103,6 @@ const styles = StyleSheet.create({
   hero: { overflow: "hidden", backgroundColor: "#160E2B", borderWidth: 1, borderRadius: 26, padding: 23, alignItems: "center" }, heroGlow: { position: "absolute", width: 210, height: 210, borderRadius: 110, opacity: .14, top: -95 }, iconShell: { width: 82, height: 82, borderRadius: 27, borderWidth: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.2)" }, title: { color: "#FFFFFF", fontSize: 23, fontWeight: "900", marginTop: 14 }, subtitle: { color: "#C6BFD7", fontSize: 11, textAlign: "center", lineHeight: 18, marginTop: 6 }, coreRow: { marginTop: 15, flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 7, paddingHorizontal: 11, borderRadius: 14, backgroundColor: "rgba(4, 11, 24, .5)" }, coreName: { fontSize: 10, fontWeight: "900" }, statusDot: { width: 7, height: 7, borderRadius: 4 }, statusText: { color: "#B7B0C8", fontSize: 9, fontWeight: "800" },
   panel: { marginTop: 17, borderRadius: 22, padding: 17, backgroundColor: "#151127", borderWidth: 1, borderColor: "#332A4D" }, panelTitle: { color: "#F8F5FF", fontSize: 14, fontWeight: "900" }, panelText: { color: "#BDB6CC", fontSize: 11, lineHeight: 18, marginTop: 8 }, isoNotice: { color: "#D7B5FF", fontSize: 11, lineHeight: 17, marginTop: 10, fontWeight: "800" }, detailRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderTopWidth: 1, borderTopColor: "#2A233E", paddingTop: 10, marginTop: 10 }, detailText: { color: "#D4CEDF", fontSize: 10, lineHeight: 16, flex: 1 },
   settingsPanel: { marginTop: 17, borderRadius: 22, padding: 17, backgroundColor: "#101C2C", borderWidth: 1, borderColor: "#284865" }, settingsTitle: { color: "#DFF7FF", fontSize: 14, fontWeight: "900" }, settingsLabel: { color: "#91BED4", fontSize: 10, fontWeight: "900", marginTop: 13 }, settingRow: { flexDirection: "row", gap: 8, marginTop: 7 }, settingOption: { flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: "#38536A", backgroundColor: "#13283A" }, settingOptionText: { color: "#F2F8FC", fontSize: 10, fontWeight: "900" }, settingsHint: { color: "#B6CEDB", fontSize: 10, lineHeight: 16, marginTop: 13 }, settingsLaunch: { minHeight: 48, marginTop: 13, borderRadius: 14, backgroundColor: "#1B4A65", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }, settingsLaunchText: { color: "#D7F6FF", fontSize: 10, fontWeight: "900" },
+  arcadeInstall: { marginTop: 17, minHeight: 53, borderRadius: 17, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9, backgroundColor: "#FF8364" }, arcadeInstallText: { color: "#071018", fontSize: 12, fontWeight: "900" },
   launch: { marginTop: 18, minHeight: 58, borderRadius: 18, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 }, launchText: { color: "#08111B", fontSize: 13, fontWeight: "900" }, launchPressed: { opacity: .7, transform: [{ scale: .987 }] }, legal: { color: "#7F7892", fontSize: 9, lineHeight: 15, textAlign: "center", marginTop: 12, paddingHorizontal: 15 },
 });

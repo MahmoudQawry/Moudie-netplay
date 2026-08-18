@@ -11,7 +11,7 @@ type VoiceSignal =
 
 type VoiceMember = { id: number; displayName: string; role: "host" | "player" | "spectator" };
 type Props = { socket: Socket | null; isHost: boolean; remoteOnline: boolean; memberId?: number; members?: VoiceMember[] };
-export type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void> };
+export type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void>; setSpeakerEnabled: (enabled: boolean) => Promise<void> };
 type AudioRoute = "auto" | "speaker" | "bluetooth";
 type PeerState = { peer: RTCPeerConnection; remoteDescriptionSet: boolean; pendingCandidates: Record<string, unknown>[] };
 
@@ -136,7 +136,7 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
     }
   }, [audioRoute, ensureLocalStream, makeOffer, microphoneEnabled, remoteOnline, remoteTargets, socket]);
 
-  const selectSpeaker = () => { InCallManager.setForceSpeakerphoneOn(true); setAudioRoute("speaker"); socket?.emit("netplay:voice-status", { microphoneEnabled, speakerEnabled: true }); };
+  const selectSpeaker = useCallback(() => { InCallManager.setForceSpeakerphoneOn(true); setAudioRoute("speaker"); socket?.emit("netplay:voice-status", { microphoneEnabled, speakerEnabled: true }); }, [microphoneEnabled, socket]);
   const selectBluetooth = async () => {
     try { await InCallManager.chooseAudioRoute("BLUETOOTH"); setAudioRoute("bluetooth"); setVoiceState("Bluetooth output requested."); }
     catch { setVoiceState("No Bluetooth headset is available. Use automatic output or speaker."); }
@@ -184,7 +184,13 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
     remoteTargets.forEach((target) => { if (!peersRef.current.has(target)) makeOffer(target); });
   }, [makeOffer, microphoneEnabled, remoteTargets, socket]);
   useEffect(() => () => { streamRef.current?.getTracks().forEach((track) => track.stop()); closeAllPeers(); InCallManager.stop(); }, [closeAllPeers]);
-  useImperativeHandle(ref, () => ({ setMicrophoneEnabled: async (enabled) => { if (enabled !== microphoneEnabled) await toggleMicrophone(enabled); } }), [microphoneEnabled, toggleMicrophone]);
+  useImperativeHandle(ref, () => ({
+    setMicrophoneEnabled: async (enabled) => { if (enabled !== microphoneEnabled) await toggleMicrophone(enabled); },
+    setSpeakerEnabled: async (enabled: boolean) => {
+      if (enabled) selectSpeaker();
+      else { InCallManager.setForceSpeakerphoneOn(false); setAudioRoute("auto"); socket?.emit("netplay:voice-status", { microphoneEnabled, speakerEnabled: false }); }
+    },
+  }), [microphoneEnabled, selectSpeaker, socket, toggleMicrophone]);
 
   if (Platform.OS === "web") return null;
   return (

@@ -50,7 +50,7 @@ type PeerInstance = {
 };
 
 type ButtonName = "UP" | "DOWN" | "LEFT" | "RIGHT" | "A" | "B" | "START" | "SELECT";
-type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void> };
+type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void>; setSpeakerEnabled: (enabled: boolean) => Promise<void> };
 type ScreenLayout = { x: number; y: number; scale: number };
 
 export default function FamicomScreen() {
@@ -90,6 +90,7 @@ export default function FamicomScreen() {
   const [chatDraft, setChatDraft] = useState("");
   const [inGameChatOpen, setInGameChatOpen] = useState(false);
   const [inGameMicMuted, setInGameMicMuted] = useState(true);
+  const [inGameSpeakerEnabled, setInGameSpeakerEnabled] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [focusControlEditor, setFocusControlEditor] = useState(false);
   const [startOrientation, setStartOrientation] = useState<"portrait" | "landscape">("landscape");
@@ -558,7 +559,7 @@ export default function FamicomScreen() {
         <View {...screenPanResponder.panHandlers} style={[styles.emulatorFrame, focusMode && styles.focusFrame, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9, minHeight: undefined }, { transform: [{ translateX: screenLayout.x }, { translateY: screenLayout.y }, { scale: screenLayout.scale }] }]}>
           {Platform.OS === "web" ? <View ref={mountRef as never} style={[styles.webMount, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9 }]} /> : romBase64 ? <FamicomNativePlayer ref={nativePlayerRef} romBase64={romBase64} onStatus={setNetworkState} onReady={restoreLocalState} onState={(snapshotValue, requestId) => { if (localStateStorageKey) AsyncStorage.setItem(localStateStorageKey, snapshotValue).catch(() => undefined); if (requestId === "netplay" && assignedPlayer === 1) socketRef.current?.emit("netplay:state", { snapshot: snapshotValue, syncId: ++famicomSyncSequenceRef.current }); if (requestId === "local") setNetworkState("Game state saved locally."); }} /> : null}
           {!romName && <View style={styles.emptyScreen}><Text style={styles.emptyIcon}>▦</Text><Text style={styles.emptyText}>NO GAME SELECTED</Text></View>}
-          {Platform.OS !== "web" && romName && (gameActive || localNativeGameActive || focusControlEditor) && <DraggableHudControls system="famicom" editable={focusControlEditor && !gameActive} microphoneMuted={inGameMicMuted} onToggleChat={() => setInGameChatOpen((open) => !open)} onToggleMicrophone={() => { const muted = !inGameMicMuted; setInGameMicMuted(muted); voiceChatRef.current?.setMicrophoneEnabled(!muted); }} onSave={saveLocalState} onLoad={() => { void loadLocalState(); }} onExit={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} />}
+          {Platform.OS !== "web" && romName && (gameActive || localNativeGameActive || focusControlEditor) && <DraggableHudControls system="famicom" editable={focusControlEditor && !gameActive} microphoneMuted={inGameMicMuted} speakerEnabled={inGameSpeakerEnabled} onToggleChat={() => setInGameChatOpen((open) => !open)} onToggleMicrophone={() => { const muted = !inGameMicMuted; setInGameMicMuted(muted); voiceChatRef.current?.setMicrophoneEnabled(!muted); }} onToggleSpeaker={() => { const enabled = !inGameSpeakerEnabled; setInGameSpeakerEnabled(enabled); voiceChatRef.current?.setSpeakerEnabled(enabled); }} onSave={saveLocalState} onLoad={() => { void loadLocalState(); }} onExit={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} />}
           {Platform.OS !== "web" && gameActive && inGameChatOpen && <View style={styles.inGameChatOverlay}><TextInput value={chatDraft} onChangeText={setChatDraft} placeholder="Message…" placeholderTextColor="#A7B7C7" style={styles.inGameChatInput} returnKeyType="send" onSubmitEditing={() => { sendChat(); setInGameChatOpen(false); }} /><Pressable onPress={() => { sendChat(); setInGameChatOpen(false); }} style={styles.inGameChatSend}><Text style={styles.inGameChatSendText}>SEND</Text></Pressable></View>}
         </View>
         {focusMode && romName && <View style={[styles.focusPortraitControls, !controlsEnabled && styles.controlsMuted]}>

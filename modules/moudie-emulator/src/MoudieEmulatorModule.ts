@@ -35,6 +35,7 @@ declare class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEven
   getPs1LaunchStatus(): { available: boolean; message: string };
   getCoreCatalog(): EmulatorCoreCapability[];
   prepareLocalGame(system: EmulatorSystem, uri: string): PreparedLocalGame;
+  prepareNativeCore(system: EmulatorSystem): Promise<{ system: EmulatorSystem; coreName: string; available: boolean; message: string }>;
   launchPS1Game(uri: string, fileName: string, netplay?: PS1NetplayOptions, options?: PlayerLaunchOptions): Promise<void>;
   launchNativeGame(system: EmulatorSystem, uri: string, fileName: string, options?: PlayerLaunchOptions, netplay?: UniversalNetplayOptions): Promise<void>;
   fingerprintNativeGame(system: EmulatorSystem, uri: string, fileName: string): Promise<string>;
@@ -61,6 +62,7 @@ function unavailableModule(): MoudieEmulatorModule {
     getPs1LaunchStatus: () => ({ available: false, message: unavailable }),
     getCoreCatalog: () => [],
     prepareLocalGame: () => { throw new Error(unavailable); },
+    prepareNativeCore: reject,
     launchPS1Game: reject,
     launchNativeGame: reject,
     fingerprintNativeGame: reject,

@@ -53,6 +53,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
   private var editToggleButton: TextView? = null
   private var aspectMode = "fit"
   private var micMuted = true
+  private var speakerEnabled = false
   private val gameplayHud = mutableListOf<View>()
   @Volatile private var stateActionInProgress = false
 
@@ -68,7 +69,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     aspectMode = intent.getStringExtra(EXTRA_PLAYER_ASPECT_RATIO)
       ?.takeIf { it in setOf("fit", "4:3", "16:9") }
       ?: "fit"
-    controlScale = controlPreferences.getFloat(controlScaleKey(), 1.3f).coerceIn(.75f, 1.5f)
+    controlScale = kotlin.math.max(.35f, controlPreferences.getFloat(controlScaleKey(), 1.3f))
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     @Suppress("DEPRECATION")
     window.decorView.systemUiVisibility = (
@@ -151,15 +152,26 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
         gameplayHud.filterIsInstance<DraggableHudButton>().firstOrNull { it.text.toString().startsWith("MIC") }?.text = if (micMuted) "MIC×" else "MIC"
         showToast(if (micMuted) "Microphone muted." else "Microphone enabled.")
       },
-      Triple("SAVE", "save") { saveState() },
-      Triple("LOAD", "load") { loadState() },
-      Triple("EXIT", "exit") { finish() },
+      Triple(if (speakerEnabled) "SPK" else "SPK×", "speaker") {
+        speakerEnabled = !speakerEnabled
+        gameplayHud.filterIsInstance<DraggableHudButton>().firstOrNull { it.text.toString().startsWith("SPK") }?.text = if (speakerEnabled) "SPK" else "SPK×"
+        showToast(if (speakerEnabled) "Phone speaker selected." else "Automatic audio output selected.")
+      },
+      Triple("OPTIONS", "options") { showGameplayOptions() },
     )
     actions.forEachIndexed { index, (label, id, action) ->
       val hud = DraggableHudButton(this, controlPreferences, "famicom", id, label, editing = { controlEditMode }, action = action).also { it.restore() }
       root.addView(hud, hud.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
       gameplayHud += hud
     }
+  }
+
+  private fun showGameplayOptions() {
+    android.app.AlertDialog.Builder(this)
+      .setItems(arrayOf("SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
+        when (index) { 0 -> saveState(); 1 -> loadState(); else -> finish() }
+      }
+      .show()
   }
 
   private fun renderControls() {
@@ -287,7 +299,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     val selected = selectedEditableControl
     if (selected == null) { showToast("Tap a control in EDIT mode first."); return }
     val (view, controlId) = selected
-    val next = (view.scaleX + delta).coerceIn(.65f, 1.75f)
+    val next = kotlin.math.max(.35f, view.scaleX + delta)
     view.scaleX = next; view.scaleY = next
     persistControlLayout(view, controlId)
     showToast("$controlId size ${(next * 100).toInt()}% saved.")
@@ -312,7 +324,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
       override fun onScale(detector: ScaleGestureDetector): Boolean {
         if (!controlEditMode) return false
-        val next = (view.scaleX * detector.scaleFactor).coerceIn(.65f, 1.75f)
+        val next = kotlin.math.max(.35f, view.scaleX * detector.scaleFactor)
         view.scaleX = next; view.scaleY = next
         return true
       }
@@ -389,7 +401,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
       override fun onScale(detector: ScaleGestureDetector): Boolean {
         if (!controlEditMode) return false
-        val next = (gameFrame.scaleX * detector.scaleFactor).coerceIn(.55f, 1.5f)
+        val next = kotlin.math.max(.35f, gameFrame.scaleX * detector.scaleFactor)
         gameFrame.scaleX = next
         gameFrame.scaleY = next
         return true

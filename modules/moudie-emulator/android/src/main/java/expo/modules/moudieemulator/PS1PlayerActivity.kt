@@ -102,6 +102,8 @@ class PS1PlayerActivity : ComponentActivity() {
   private var lockstepNetplay = false
   private var micOverlayMuted = true
   private var micOverlayButton: TextView? = null
+  private var speakerOverlayEnabled = false
+  private var speakerOverlayButton: TextView? = null
   @Volatile
   private var stateActionInProgress = false
 
@@ -493,9 +495,6 @@ class PS1PlayerActivity : ComponentActivity() {
         addView(button("−", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(-.1f) }))
         addView(button("+", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(.1f) }))
         addView(button("SAVE & PLAY", KeyEvent.KEYCODE_UNKNOWN, dp(92), onClick = { finishControlSetup() }))
-      } else {
-        addView(button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { loadState() }))
-        addView(button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { saveState() }))
       }
     }
   }
@@ -517,7 +516,7 @@ class PS1PlayerActivity : ComponentActivity() {
       return
     }
     val (view, controlId) = selected
-    val next = (view.scaleX + delta).coerceIn(.65f, 1.75f)
+    val next = max(.35f, view.scaleX + delta)
     view.scaleX = next
     view.scaleY = next
     persistControlLayout(view, controlId)
@@ -561,7 +560,7 @@ class PS1PlayerActivity : ComponentActivity() {
     val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
       override fun onScale(detector: ScaleGestureDetector): Boolean {
         if (!settingsMode) return false
-        val next = (gameFrame.scaleX * detector.scaleFactor).coerceIn(.55f, 1.5f)
+        val next = max(.35f, gameFrame.scaleX * detector.scaleFactor)
         gameFrame.scaleX = next; gameFrame.scaleY = next
         return true
       }
@@ -584,13 +583,13 @@ class PS1PlayerActivity : ComponentActivity() {
     val actions = listOf(
       Triple("CHAT", "chat") { showChatDialog() },
       Triple(if (micOverlayMuted) "MIC×" else "MIC", "microphone") { toggleOverlayMicrophone() },
-      Triple("SAVE", "save") { saveState(silent = false) },
-      Triple("LOAD", "load") { loadState() },
-      Triple("EXIT", "exit") { finish() },
+      Triple(if (speakerOverlayEnabled) "SPK" else "SPK×", "speaker") { toggleOverlaySpeaker() },
+      Triple("OPTIONS", "options") { showGameplayOptions() },
     )
     actions.forEachIndexed { index, (label, id, action) ->
       val button = DraggableHudButton(this, controlPreferences, "ps1", id, label, editing = { settingsMode }, action = action).also { it.restore() }
       if (id == "microphone") micOverlayButton = button
+      if (id == "speaker") speakerOverlayButton = button
       root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
       gameplayHud += button
     }
@@ -605,6 +604,21 @@ class PS1PlayerActivity : ComponentActivity() {
     micOverlayButton?.text = if (micOverlayMuted) "MIC×" else "MIC"
     onOverlayAction?.invoke("toggle-microphone", micOverlayMuted)
     showToast(if (micOverlayMuted) "Microphone muted." else "Microphone enabled.")
+  }
+
+  private fun toggleOverlaySpeaker() {
+    speakerOverlayEnabled = !speakerOverlayEnabled
+    speakerOverlayButton?.text = if (speakerOverlayEnabled) "SPK" else "SPK×"
+    onOverlayAction?.invoke("toggle-speaker", !speakerOverlayEnabled)
+    showToast(if (speakerOverlayEnabled) "Phone speaker enabled." else "Automatic audio output enabled.")
+  }
+
+  private fun showGameplayOptions() {
+    android.app.AlertDialog.Builder(this)
+      .setItems(arrayOf("SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
+        when (index) { 0 -> saveState(silent = false); 1 -> loadState(); else -> finish() }
+      }
+      .show()
   }
 
   private fun showChatDialog() {
@@ -747,7 +761,7 @@ class PS1PlayerActivity : ComponentActivity() {
     val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
       override fun onScale(detector: ScaleGestureDetector): Boolean {
         if (!controlEditMode) return false
-        val next = (view.scaleX * detector.scaleFactor).coerceIn(.65f, 1.75f)
+        val next = max(.35f, view.scaleX * detector.scaleFactor)
         view.scaleX = next
         view.scaleY = next
         return true

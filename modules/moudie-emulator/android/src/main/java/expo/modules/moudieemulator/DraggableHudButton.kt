@@ -36,7 +36,7 @@ internal class DraggableHudButton(
   private val scaler = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
     override fun onScale(detector: ScaleGestureDetector): Boolean {
       if (!editing()) return false
-      val next = (scaleX * detector.scaleFactor).coerceIn(.65f, 1.75f)
+      val next = max(.35f, scaleX * detector.scaleFactor)
       scaleX = next
       scaleY = next
       return true

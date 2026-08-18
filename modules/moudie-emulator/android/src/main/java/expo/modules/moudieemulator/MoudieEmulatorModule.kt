@@ -88,6 +88,26 @@ class MoudieEmulatorModule : Module() {
       )
     }
 
+    AsyncFunction("prepareNativeCore") { system: String ->
+      val definition = NativeCoreCatalog.forSystem(system)
+      val activity = appContext.currentActivity ?: throw IllegalStateException("Open the emulator setup after the app is visible on screen.")
+      val coreFile = NativeCoreCatalog.findCore(activity, definition)
+        ?: NativeCoreCatalog.downloadCore(activity, definition)
+        ?: throw IllegalStateException(
+          if (NativeCoreCatalog.isDownloadable(definition)) {
+            "Could not download ${definition.coreName}. Check internet access and storage space, then try again."
+          } else {
+            "Could not find ${definition.coreName} inside this APK. Install the complete Android build."
+          },
+        )
+      mapOf(
+        "system" to definition.system,
+        "coreName" to definition.coreName,
+        "available" to (coreFile.isFile && coreFile.length() > 0L),
+        "message" to "${definition.coreName} is ready for ${definition.title} games.",
+      )
+    }
+
     AsyncFunction("launchPS1Game") { uri: String, fileName: String, netplay: Map<String, Any>?, playerOptions: Map<String, Any>? ->
       require(uri.isNotBlank()) { "Choose a local PS1 game file first." }
       val activity = appContext.currentActivity ?: throw IllegalStateException("Open the PS1 player from the app after it is visible on screen.")

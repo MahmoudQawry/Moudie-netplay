@@ -78,6 +78,8 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private var aspectMode = "fit"
   private var micMuted = true
   private var micOverlayButton: TextView? = null
+  private var speakerEnabled = false
+  private var speakerOverlayButton: TextView? = null
   private lateinit var headerView: LinearLayout
   private val gameplayHud = mutableListOf<View>()
   private var stateActionInProgress = false
@@ -417,9 +419,6 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     }, LinearLayout.LayoutParams(0, dp(38), 1f))
     if (settingsMode) {
       addView(headerButton("SAVE & PLAY") { finishControlSetup() }, LinearLayout.LayoutParams(dp(98), dp(38)))
-    } else {
-      addView(headerButton("LOAD") { loadState() }, LinearLayout.LayoutParams(dp(52), dp(38)))
-      addView(headerButton("SAVE") { saveState(silent = false) }, LinearLayout.LayoutParams(dp(52), dp(38)))
     }
   }
 
@@ -556,7 +555,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
       override fun onScale(detector: ScaleGestureDetector): Boolean {
         if (!settingsMode) return false
-        val next = (gameFrame.scaleX * detector.scaleFactor).coerceIn(.55f, 1.5f)
+        val next = max(.35f, gameFrame.scaleX * detector.scaleFactor)
         gameFrame.scaleX = next; gameFrame.scaleY = next
         return true
       }
@@ -583,16 +582,28 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
         micOverlayButton?.text = if (micMuted) "MIC×" else "MIC"
         showToast(if (micMuted) "Microphone muted." else "Microphone enabled.")
       },
-      Triple("SAVE", "save") { saveState(silent = false) },
-      Triple("LOAD", "load") { loadState() },
-      Triple("EXIT", "exit") { finish() },
+      Triple(if (speakerEnabled) "SPK" else "SPK×", "speaker") {
+        speakerEnabled = !speakerEnabled
+        speakerOverlayButton?.text = if (speakerEnabled) "SPK" else "SPK×"
+        showToast(if (speakerEnabled) "Phone speaker selected." else "Automatic audio output selected.")
+      },
+      Triple("OPTIONS", "options") { showGameplayOptions() },
     )
     actions.forEachIndexed { index, (label, id, action) ->
       val button = DraggableHudButton(this, preferences, definition.system, id, label, editing = { settingsMode }, action = action).also { it.restore() }
       if (id == "microphone") micOverlayButton = button
+      if (id == "speaker") speakerOverlayButton = button
       root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
       gameplayHud += button
     }
+  }
+
+  private fun showGameplayOptions() {
+    AlertDialog.Builder(this)
+      .setItems(arrayOf("SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
+        when (index) { 0 -> saveState(silent = false); 1 -> loadState(); else -> finish() }
+      }
+      .show()
   }
 
   private fun showChatDialog() {
@@ -702,7 +713,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     private val scaler = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
       override fun onScale(detector: ScaleGestureDetector): Boolean {
         if (!customizationEnabled) return false
-        val next = (scaleX * detector.scaleFactor).coerceIn(.65f, 1.75f)
+        val next = max(.35f, scaleX * detector.scaleFactor)
         scaleX = next
         scaleY = next
         return true

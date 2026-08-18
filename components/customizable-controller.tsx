@@ -19,8 +19,7 @@ type Props = {
 
 const STORAGE_PREFIX = "moudie.controller-layout.v4.";
 const LEGACY_STORAGE_PREFIX = "moudie.controller-layout.v3.";
-const MIN_BUTTON_SIZE = 32;
-const MAX_BUTTON_SIZE = 104;
+const MIN_BUTTON_SIZE = 18;
 
 const profiles: Record<SystemId, { controls: ControlId[]; accent: string; labels: Partial<Record<ControlId, string>>; defaults: ControllerLayout }> = {
   famicom: {
@@ -66,9 +65,9 @@ function normalizeLayout(defaults: ControllerLayout, value: unknown): Controller
   for (const [control, position] of Object.entries(source)) {
     if (!position || typeof position.x !== "number" || typeof position.y !== "number" || typeof position.size !== "number") continue;
     result[control as ControlId] = {
-      x: Math.max(0, Math.min(100, position.x)),
-      y: Math.max(30, Math.min(94, position.y)),
-      size: Math.max(MIN_BUTTON_SIZE, Math.min(MAX_BUTTON_SIZE, position.size)),
+      x: position.x,
+      y: position.y,
+      size: Math.max(MIN_BUTTON_SIZE, position.size),
     };
   }
   return result;
@@ -122,7 +121,7 @@ export function CustomizableController({ system, editable, orientation, onButton
     if (!current) return;
     const nextLayout = {
       ...currentLayoutRef.current,
-      [selectedControl]: { ...current, size: Math.max(MIN_BUTTON_SIZE, Math.min(MAX_BUTTON_SIZE, current.size + delta)) },
+        [selectedControl]: { ...current, size: Math.max(MIN_BUTTON_SIZE, current.size + delta) },
     };
     setLayout(nextLayout);
     save(nextLayout);
@@ -152,8 +151,8 @@ export function CustomizableController({ system, editable, orientation, onButton
           ...currentLayoutRef.current,
           [id]: {
             ...initial,
-            x: Math.max(0, Math.min(100, initial.x + (state.dx / size.width) * 100)),
-            y: Math.max(30, Math.min(94, initial.y + (state.dy / size.height) * 100)),
+            x: initial.x + (state.dx / size.width) * 100,
+            y: initial.y + (state.dy / size.height) * 100,
           },
         };
         setLayout(next);
