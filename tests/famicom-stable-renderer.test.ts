@@ -15,6 +15,6 @@ describe("Famicom stable renderer", () => {
   });
 
   it("fails clearly if an upstream JSNES bridge removes the expected hooks", () => {
-    expect(() => withFamicomStableRenderer("<html></html>")).toThrow("تعذر العثور");
+    expect(() => withFamicomStableRenderer("<html></html>")).toThrow("Could not find the original Famicom rendering path");
   });
 });

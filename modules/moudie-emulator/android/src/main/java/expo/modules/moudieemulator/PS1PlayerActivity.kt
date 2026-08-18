@@ -56,6 +56,8 @@ class PS1PlayerActivity : ComponentActivity() {
     const val EXTRA_NETPLAY_MEMBER_TOKEN = "expo.modules.moudieemulator.NETPLAY_MEMBER_TOKEN"
     const val EXTRA_NETPLAY_FINGERPRINT = "expo.modules.moudieemulator.NETPLAY_FINGERPRINT"
     const val EXTRA_NETPLAY_PLAYER = "expo.modules.moudieemulator.NETPLAY_PLAYER"
+    const val EXTRA_PLAYER_ORIENTATION = "expo.modules.moudieemulator.PLAYER_ORIENTATION"
+    const val EXTRA_PLAYER_ASPECT_RATIO = "expo.modules.moudieemulator.PLAYER_ASPECT_RATIO"
     private const val NETPLAY_CORE_VERSION = "pcsx-rearmed-0.13.2-lockstep-v1"
     private const val NETPLAY_INPUT_DELAY_FRAMES = 3L
     private const val NETPLAY_FRAME_INTERVAL_MS = 17L
@@ -72,10 +74,14 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   private lateinit var retroView: GLRetroView
+  private lateinit var root: FrameLayout
+  private lateinit var gameFrame: FrameLayout
   private lateinit var controlsContainer: FrameLayout
   private lateinit var controlPreferences: android.content.SharedPreferences
-  private var controlScale = 1f
   private var controlEditMode = false
+  private var selectedEditableControl: Pair<TextView, String>? = null
+  private var aspectMode = "fit"
+  private var aspectButton: TextView? = null
   private var editToggleButton: TextView? = null
   private lateinit var stateFile: File
   private val controlProfile = EmulatorControlProfiles.PS1
@@ -100,7 +106,11 @@ class PS1PlayerActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    requestedOrientation = when (intent.getStringExtra(EXTRA_PLAYER_ORIENTATION)) {
+      "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+      "landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+      else -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    }
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     @Suppress("DEPRECATION")
     window.decorView.systemUiVisibility = (
@@ -113,18 +123,20 @@ class PS1PlayerActivity : ComponentActivity() {
       )
 
     controlPreferences = getSharedPreferences("moudie-ps1-controls", Context.MODE_PRIVATE)
-    controlScale = controlPreferences.getFloat(controlScaleKey(), 1f).coerceIn(.65f, 1.5f)
+    aspectMode = intent.getStringExtra(EXTRA_PLAYER_ASPECT_RATIO)
+      ?.takeIf { it in setOf("fit", "4:3", "16:9") }
+      ?: controlPreferences.getString("ps1.aspect", "fit") ?: "fit"
 
     val gamePath = intent.getStringExtra(EXTRA_GAME_PATH).orEmpty()
     val gameFile = File(gamePath)
     if (!gameFile.isFile || !gameFile.canRead()) {
-      showError("تعذر قراءة ملف لعبة PS1. اختره مجدداً من شاشة الغرفة.")
+      showError("Could not read the PS1 game file. Choose it again from the room screen.")
       return
     }
 
     val coreFile = NativeCoreLocator.findPs1Core(this)
     if (coreFile == null) {
-      showError("تعذر العثور على محرك PS1 داخل التطبيق. ثبّت أحدث ملف APK كاملاً ثم أعد المحاولة.")
+      showError("Could not find the PS1 core in this app. Install the latest complete APK and try again.")
       return
     }
 
@@ -151,24 +163,17 @@ class PS1PlayerActivity : ComponentActivity() {
       }
     }
 
-    val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-    root.addView(
-      retroView,
-      FrameLayout.LayoutParams(
-        FrameLayout.LayoutParams.MATCH_PARENT,
-        FrameLayout.LayoutParams.MATCH_PARENT,
-      ),
-    )
+    root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+    gameFrame = FrameLayout(this).apply {
+      addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+    root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     root.addView(createTopControls(), FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.TOP,
     ))
-    controlsContainer = FrameLayout(this).apply {
-      scaleX = controlScale
-      scaleY = controlScale
-      addView(createControls())
-    }
+    controlsContainer = FrameLayout(this).apply { addView(createControls()) }
     root.addView(controlsContainer, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
       FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -180,6 +185,7 @@ class PS1PlayerActivity : ComponentActivity() {
       Gravity.RIGHT or Gravity.CENTER_VERTICAL,
     ).apply { rightMargin = dp(12) })
     setContentView(root)
+    root.post { applyAspectRatio() }
     connectNetplayIfConfigured()
   }
 
@@ -230,7 +236,7 @@ class PS1PlayerActivity : ComponentActivity() {
       Ps1NetplayConfig(serverUrl, roomId, memberId, memberToken, fingerprint, NETPLAY_CORE_VERSION, localPlayerIndex),
       onBootstrap = {
         runOnUiThread {
-          showToast(if (localPlayerIndex == 0) "تم التحقق من الجاهزية. جارٍ إرسال حالة البداية الموحدة." else "تم التحقق من الجاهزية. جارٍ انتظار حالة البداية من المضيف.")
+          showToast(if (localPlayerIndex == 0) "Readiness verified. Sending the shared initial state." else "Readiness verified. Waiting for the host's shared initial state.")
           if (localPlayerIndex == 0) sendInitialNetplayState() else startBootstrapRetry()
         }
       },
@@ -279,9 +285,9 @@ class PS1PlayerActivity : ComponentActivity() {
             lastNetplaySyncId = syncId
             netplayClient?.acknowledgeState(syncId)
             stopBootstrapRetry()
-            if (syncId == 0L) showToast("تمت مطابقة حالة البداية. انتظر إشارة البدء المشتركة.")
+            if (syncId == 0L) showToast("Initial state synchronized. Wait for the shared start signal.")
           }
-          else showToast("وصلت حالة PS1 لكن تعذر تطبيقها؛ أعد طلبها من الغرفة.")
+          else showToast("A PS1 state arrived but could not be applied. Request it again from the room.")
         } }
     }.start()
   }
@@ -295,7 +301,7 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private fun startLockstep(startAt: Long) {
     if (localPlayerIndex == 1 && lastNetplaySyncId < 0L) {
-      showToast("لم تصل حالة البداية بعد؛ جارٍ طلبها مجدداً قبل تشغيل الجلسة.")
+      showToast("The initial state has not arrived yet; requesting it again before starting.")
       startBootstrapRetry()
       return
     }
@@ -313,7 +319,7 @@ class PS1PlayerActivity : ComponentActivity() {
       }
     }
     lockstepHandler.postDelayed(lockstepTick, max(0L, startAt - System.currentTimeMillis()))
-    showToast("بدأت الجلسة المشتركة دون إعادة تحميل لقطات قديمة.")
+    showToast("The shared session started without reloading stale frames.")
   }
 
   private fun stopLockstep() {
@@ -325,7 +331,7 @@ class PS1PlayerActivity : ComponentActivity() {
     override fun run() {
       if (localPlayerIndex != 1 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
       if (bootstrapRequestAttempts >= 20) {
-        showToast("تأخر تأكيد حالة البداية. تأكد من بقاء الجهازين داخل اللعبة ثم أعد طلب بدء الجلسة.")
+        showToast("Initial-state confirmation is delayed. Keep both devices in-game and request session start again.")
         return
       }
       bootstrapRequestAttempts += 1
@@ -381,9 +387,9 @@ class PS1PlayerActivity : ComponentActivity() {
 
   /** Saves a complete emulation snapshot without uploading the game or state to a server. */
   private fun saveState(silent: Boolean = false) {
-    runStateAction("جارٍ حفظ حالة اللعبة…", silent) {
+    runStateAction("Saving game state…", silent) {
       val state = retroView.serializeState()
-      require(state.isNotEmpty()) { "تعذر إنشاء حالة حفظ لهذه اللعبة." }
+      require(state.isNotEmpty()) { "Could not create a save state for this game." }
       val temporaryFile = File(stateFile.parentFile, "${stateFile.name}.tmp")
       FileOutputStream(temporaryFile).use { output ->
         output.write(state)
@@ -393,23 +399,23 @@ class PS1PlayerActivity : ComponentActivity() {
         temporaryFile.copyTo(stateFile, overwrite = true)
         temporaryFile.delete()
       }
-      "تم حفظ الحالة محلياً (${formatByteCount(state.size)})."
+      "State saved locally (${formatByteCount(state.size)})."
     }
   }
 
   /** Restores the most recent locally saved emulation snapshot for this game. */
   private fun loadState() {
-    runStateAction("جارٍ استرجاع حالة اللعبة…", silent = false) {
-      require(stateFile.isFile() && stateFile.length() > 0L) { "لا توجد حالة محفوظة لهذه اللعبة بعد." }
+    runStateAction("Loading game state…", silent = false) {
+      require(stateFile.isFile() && stateFile.length() > 0L) { "No saved state exists for this game yet." }
       val restored = retroView.unserializeState(stateFile.readBytes())
-      require(restored) { "تعذر استرجاع الحالة؛ قد تكون غير متوافقة مع إصدار المحرك الحالي." }
-      "تم استرجاع آخر حالة محفوظة بنجاح."
+      require(restored) { "Could not load the state; it may not match the current core version." }
+      "Latest saved state loaded successfully."
     }
   }
 
   private fun runStateAction(startMessage: String, silent: Boolean, action: () -> String) {
     if (stateActionInProgress) {
-      if (!silent) showToast("انتظر حتى تكتمل عملية الحفظ أو الاسترجاع الحالية.")
+      if (!silent) showToast("Wait for the current save or load action to finish.")
       return
     }
     stateActionInProgress = true
@@ -418,7 +424,7 @@ class PS1PlayerActivity : ComponentActivity() {
       val result = runCatching(action)
       runOnUiThread {
         stateActionInProgress = false
-        if (!silent) showToast(result.getOrElse { error -> error.message ?: "تعذر إكمال عملية الحالة." })
+        if (!silent) showToast(result.getOrElse { error -> error.message ?: "Could not complete the state action." })
       }
     }.start()
   }
@@ -442,10 +448,10 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   private fun ps1ErrorMessage(errorCode: Int, gameName: String): String = when (errorCode) {
-    GLRetroView.ERROR_LOAD_LIBRARY -> "تعذر تحميل محرك PCSX ReARMed. أعد تثبيت أحدث APK كاملاً ثم أعد المحاولة."
-    GLRetroView.ERROR_LOAD_GAME -> "تعذر فتح $gameName. اختر ملف BIN أو CHD أو PBP كاملاً؛ ملف CUE يحتاج ملف BIN المرافق في المجلد نفسه."
-    GLRetroView.ERROR_GL_NOT_COMPATIBLE -> "جهازك لا يدعم إعداد الرسوم المطلوب لتشغيل PS1. حدّث نظام Android أو جرّب جهازاً أحدث."
-    else -> "توقف مشغّل PS1 أثناء بدء اللعبة (رمز $errorCode). تأكد من أن الملف كامل، ثم أضف BIOS محلياً متوافقاً إذا استمر الخطأ."
+    GLRetroView.ERROR_LOAD_LIBRARY -> "Could not load the PCSX ReARMed core. Reinstall the latest complete APK and try again."
+    GLRetroView.ERROR_LOAD_GAME -> "Could not open $gameName. Choose a complete BIN, ISO, CHD, or PBP file; a CUE file needs its companion BIN in the same folder."
+    GLRetroView.ERROR_GL_NOT_COMPATIBLE -> "This device does not support the graphics configuration required for PS1. Update Android or try a newer device."
+    else -> "The PS1 player stopped while starting the game (code $errorCode). Check that the file is complete and add a compatible local BIOS if needed."
   }
 
   private fun createHeader(): LinearLayout {
@@ -455,7 +461,7 @@ class PS1PlayerActivity : ComponentActivity() {
       setBackgroundColor(Color.argb(105, 4, 12, 22))
       addView(button("×", KeyEvent.KEYCODE_UNKNOWN, dp(38), onClick = { finish() }))
       addView(TextView(this@PS1PlayerActivity).apply {
-        text = "PS1 · تشغيل محلي"
+        text = "PS1 · LOCAL PLAY"
         setTextColor(Color.rgb(210, 241, 255))
         textSize = 13f
         gravity = Gravity.CENTER_VERTICAL
@@ -463,8 +469,10 @@ class PS1PlayerActivity : ComponentActivity() {
       }, LinearLayout.LayoutParams(0, dp(38), 1f))
       addView(button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { loadState() }))
       addView(button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { saveState() }))
-      addView(button("−", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeControls(-.1f) }))
-      addView(button("+", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeControls(.1f) }))
+      addView(button("−", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(-.1f) }))
+      addView(button("+", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { resizeSelectedControl(.1f) }))
+      aspectButton = button(aspectLabel(), KeyEvent.KEYCODE_UNKNOWN, dp(54), onClick = { cycleAspectRatio() })
+      addView(aspectButton)
       editToggleButton = button("EDIT", KeyEvent.KEYCODE_UNKNOWN, dp(46), onClick = { toggleControlEditing() })
       addView(editToggleButton)
     }
@@ -476,19 +484,42 @@ class PS1PlayerActivity : ComponentActivity() {
     showToast(if (controlEditMode) "Edit mode: drag a button or pinch it to resize. Tap DONE to save." else "PS1 control layout saved for this orientation.")
   }
 
-  private fun resizeControls(delta: Float) {
-    controlScale = (controlScale + delta).coerceIn(.65f, 1.5f)
-    if (::controlsContainer.isInitialized) {
-      controlsContainer.scaleX = controlScale
-      controlsContainer.scaleY = controlScale
+  private fun resizeSelectedControl(delta: Float) {
+    val selected = selectedEditableControl
+    if (selected == null) {
+      showToast("Tap a control in EDIT mode, then use − or + to resize that control only.")
+      return
     }
-    controlPreferences.edit().putFloat(controlScaleKey(), controlScale).apply()
-    showToast("Control size ${(controlScale * 100).toInt()}% saved for this orientation.")
+    val (view, controlId) = selected
+    val next = (view.scaleX + delta).coerceIn(.65f, 1.75f)
+    view.scaleX = next
+    view.scaleY = next
+    persistControlLayout(view, controlId)
+    showToast("$controlId size ${(next * 100).toInt()}% saved.")
   }
 
-  private fun controlScaleKey(): String {
-    val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
-    return "ps1.$orientation.scale"
+  private fun aspectLabel(): String = if (aspectMode == "fit") "FIT" else aspectMode
+
+  private fun cycleAspectRatio() {
+    val modes = listOf("fit", "4:3", "16:9")
+    aspectMode = modes[(modes.indexOf(aspectMode) + 1) % modes.size]
+    controlPreferences.edit().putString("ps1.aspect", aspectMode).apply()
+    aspectButton?.text = aspectLabel()
+    root.post { applyAspectRatio() }
+    showToast("Screen ratio: ${aspectLabel()}.")
+  }
+
+  private fun applyAspectRatio() {
+    if (!::gameFrame.isInitialized || root.width <= 0 || root.height <= 0) return
+    if (aspectMode == "fit") {
+      gameFrame.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+      return
+    }
+    val ratio = if (aspectMode == "4:3") 4f / 3f else 16f / 9f
+    var width = root.width
+    var height = (width / ratio).toInt()
+    if (height > root.height) { height = root.height; width = (height * ratio).toInt() }
+    gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
   }
 
   private fun createInGameOverlay(): LinearLayout = LinearLayout(this).apply {
@@ -502,22 +533,22 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private fun toggleOverlayMicrophone() {
     if (netplayClient == null) {
-      showToast("الميكروفون داخل اللعب متاح في جلسة NetPlay فقط.")
+      showToast("In-game microphone is available in a NetPlay session only.")
       return
     }
     micOverlayMuted = !micOverlayMuted
     micOverlayButton?.text = if (micOverlayMuted) "MIC×" else "MIC"
     onOverlayAction?.invoke("toggle-microphone", micOverlayMuted)
-    showToast(if (micOverlayMuted) "تم كتم الميكروفون ×" else "تم تشغيل الميكروفون")
+    showToast(if (micOverlayMuted) "Microphone muted." else "Microphone enabled.")
   }
 
   private fun showChatDialog() {
     if (netplayClient == null) {
-      showToast("الدردشة داخل اللعب متاحة في جلسة NetPlay فقط.")
+      showToast("In-game chat is available in a NetPlay session only.")
       return
     }
     val input = EditText(this).apply {
-      hint = "اكتب رسالة للاعب الآخر…"
+      hint = "Write a message to the other player…"
       setSingleLine(false)
       maxLines = 3
       setTextColor(Color.WHITE)
@@ -525,10 +556,10 @@ class PS1PlayerActivity : ComponentActivity() {
       setPadding(dp(16), dp(10), dp(16), dp(10))
     }
     AlertDialog.Builder(this)
-      .setTitle("رسالة الغرفة")
+      .setTitle("Room message")
       .setView(input)
-      .setNegativeButton("إلغاء", null)
-      .setPositiveButton("إرسال") { _, _ ->
+      .setNegativeButton("Cancel", null)
+      .setPositiveButton("Send") { _, _ ->
         netplayClient?.sendChat(input.text?.toString().orEmpty())
       }
       .show()
@@ -752,6 +783,8 @@ class PS1PlayerActivity : ComponentActivity() {
       if (controlEditMode) {
         when (event.actionMasked) {
           MotionEvent.ACTION_DOWN -> {
+            selectedEditableControl = view to controlId
+            showToast("$controlId selected. Drag, pinch, or use − / +.")
             downX = event.rawX
             downY = event.rawY
             originX = view.translationX

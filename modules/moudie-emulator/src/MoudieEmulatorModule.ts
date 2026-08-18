@@ -11,17 +11,22 @@ export type PS1NetplayOptions = {
   player: 1 | 2;
 };
 
+export type PlayerLaunchOptions = {
+  orientation?: "portrait" | "landscape";
+  aspectRatio?: "fit" | "4:3" | "16:9";
+};
+
 declare class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEvents> {
   getRuntimeStatus(): EmulatorRuntimeStatus;
   getBiosStatus(): Record<string, { required: boolean; available: boolean; files?: string[]; message: string }>;
   getPs1LaunchStatus(): { available: boolean; message: string };
   getCoreCatalog(): EmulatorCoreCapability[];
   prepareLocalGame(system: EmulatorSystem, uri: string): PreparedLocalGame;
-  launchPS1Game(uri: string, fileName: string, netplay?: PS1NetplayOptions): Promise<void>;
-  launchNativeGame(system: EmulatorSystem, uri: string, fileName: string): Promise<void>;
+  launchPS1Game(uri: string, fileName: string, netplay?: PS1NetplayOptions, options?: PlayerLaunchOptions): Promise<void>;
+  launchNativeGame(system: EmulatorSystem, uri: string, fileName: string, options?: PlayerLaunchOptions): Promise<void>;
   fingerprintPS1Game(uri: string, fileName: string): Promise<string>;
-  launchFamicomCompatGame(uri: string, fileName: string): Promise<void>;
-  launchFamicomFocusGame(uri: string, fileName: string): Promise<void>;
+  launchFamicomCompatGame(uri: string, fileName: string, options?: PlayerLaunchOptions): Promise<void>;
+  launchFamicomFocusGame(uri: string, fileName: string, options?: PlayerLaunchOptions): Promise<void>;
   setFamicomFocusLandscape(active: boolean): Promise<void>;
   installPS1Bios(uri: string, fileName: string): Promise<Record<string, { required: boolean; available: boolean; files?: string[]; message: string }>>;
 }
@@ -34,7 +39,7 @@ declare class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEven
  * the splash screen.
  */
 function unavailableModule(): MoudieEmulatorModule {
-  const unavailable = "وحدة المحاكاة غير جاهزة في هذه النسخة. أعد تثبيت أحدث APK كاملاً.";
+  const unavailable = "The emulator module is not ready in this build. Reinstall the latest complete APK.";
   const reject = () => Promise.reject(new Error(unavailable));
   return {
     getRuntimeStatus: () => ({ runtime: "android-native", supportedSystems: [], nativeBuildRequired: true }) as EmulatorRuntimeStatus,

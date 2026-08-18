@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -32,10 +33,14 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     const val EXTRA_GAME_PATH = "expo.modules.moudieemulator.FAMICOM_GAME_PATH"
     const val EXTRA_GAME_NAME = "expo.modules.moudieemulator.FAMICOM_GAME_NAME"
     const val EXTRA_FOCUS_MODE = "expo.modules.moudieemulator.FAMICOM_FOCUS_MODE"
+    const val EXTRA_PLAYER_ORIENTATION = "expo.modules.moudieemulator.PLAYER_ORIENTATION"
+    const val EXTRA_PLAYER_ASPECT_RATIO = "expo.modules.moudieemulator.PLAYER_ASPECT_RATIO"
     private const val CORE_FILE_NAME = "fceumm_libretro_android.so"
   }
 
   private lateinit var retroView: GLRetroView
+  private lateinit var root: FrameLayout
+  private lateinit var gameFrame: FrameLayout
   private lateinit var controlsContainer: FrameLayout
   private lateinit var controlPreferences: android.content.SharedPreferences
   private lateinit var stateDirectory: File
@@ -43,14 +48,25 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
   private var selectedSlot = 1
   private var controlScale = 1.3f
   private var focusMode = false
+  private var controlEditMode = false
+  private var selectedEditableControl: Pair<TextView, String>? = null
+  private var editToggleButton: TextView? = null
+  private var aspectMode = "fit"
   private var micMuted = true
   @Volatile private var stateActionInProgress = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     focusMode = intent.getBooleanExtra(EXTRA_FOCUS_MODE, false)
-    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    requestedOrientation = when (intent.getStringExtra(EXTRA_PLAYER_ORIENTATION)) {
+      "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+      "landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+      else -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    }
     controlPreferences = getSharedPreferences("moudie-famicom-controls", MODE_PRIVATE)
+    aspectMode = intent.getStringExtra(EXTRA_PLAYER_ASPECT_RATIO)
+      ?.takeIf { it in setOf("fit", "4:3", "16:9") }
+      ?: "fit"
     controlScale = controlPreferences.getFloat(controlScaleKey(), 1.3f).coerceIn(.75f, 1.5f)
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     @Suppress("DEPRECATION")
@@ -62,7 +78,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
 
     val gameFile = File(intent.getStringExtra(EXTRA_GAME_PATH).orEmpty())
     if (!gameFile.isFile || !gameFile.canRead()) {
-      showError("تعذر قراءة ملف Famicom. اختره مجدداً من شاشة اللعبة.")
+      showError("Could not read the Famicom game file. Choose it again from the game screen.")
       return
     }
 
@@ -78,14 +94,18 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     })
     lifecycle.addObserver(retroView)
 
-    val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-    root.addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+    gameFrame = FrameLayout(this).apply {
+      addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+    root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     root.addView(createHeader(gameFile), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
     root.addView(createSocialOverlay(), FrameLayout.LayoutParams(dp(48), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(12) })
     controlsContainer = FrameLayout(this)
     root.addView(controlsContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
     renderControls()
     setContentView(root)
+    root.post { applyAspectRatio() }
   }
 
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -116,6 +136,8 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     (1..3).forEach { slot -> addView(button("S$slot", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { selectedSlot = slot; showToast("Save slot $slot selected.") })) }
     addView(button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(50), onClick = { loadState() }))
     addView(button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(42), onClick = { saveState() }))
+    editToggleButton = button("EDIT", KeyEvent.KEYCODE_UNKNOWN, dp(46), onClick = { toggleControlEditing() })
+    addView(editToggleButton)
   }
 
   private fun createSocialOverlay(): LinearLayout = LinearLayout(this).apply {
@@ -159,9 +181,9 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
     layoutDirection = View.LAYOUT_DIRECTION_LTR
     addView(row(
-      button("−", KeyEvent.KEYCODE_UNKNOWN, dp(46), dp(54), onClick = { changeControlScale(-.1f) }),
+      button("−", KeyEvent.KEYCODE_UNKNOWN, dp(46), dp(54), onClick = { resizeSelectedControl(-.1f) }),
       controlScaleIndicator(),
-      button("+", KeyEvent.KEYCODE_UNKNOWN, dp(46), dp(54), onClick = { changeControlScale(.1f) }),
+      button("+", KeyEvent.KEYCODE_UNKNOWN, dp(46), dp(54), onClick = { resizeSelectedControl(.1f) }),
     ))
     addView(row(
       button(controlProfile.systemButtons[0], dp(74), dp(48)),
@@ -179,18 +201,18 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     addView(row(button(controlProfile.actionButtons[0], controlSize(), controlSize()), button(controlProfile.actionButtons[1], controlSize(), controlSize())))
   }
 
-  private fun saveState(silent: Boolean = false) = runStateAction("جارٍ حفظ الحالة…", silent) {
-    val state = retroView.serializeState(); require(state.isNotEmpty()) { "تعذر إنشاء حالة حفظ." }
+  private fun saveState(silent: Boolean = false) = runStateAction("Saving state…", silent) {
+    val state = retroView.serializeState(); require(state.isNotEmpty()) { "Could not create a save state." }
     val target = stateFile(); val temporary = File(target.parentFile, "${target.name}.tmp")
     FileOutputStream(temporary).use { output -> output.write(state); output.fd.sync() }
     if (!temporary.renameTo(target)) { temporary.copyTo(target, overwrite = true); temporary.delete() }
-    "تم الحفظ في الفتحة S$selectedSlot."
+    "Saved in slot S$selectedSlot."
   }
 
-  private fun loadState() = runStateAction("جارٍ استرجاع الحالة…", false) {
-    val source = stateFile(); require(source.isFile && source.length() > 0) { "لا توجد حالة في الفتحة S$selectedSlot." }
-    require(retroView.unserializeState(source.readBytes())) { "تعذر استرجاع الحالة؛ قد تكون غير متوافقة." }
-    "تم استرجاع الفتحة S$selectedSlot."
+  private fun loadState() = runStateAction("Loading state…", false) {
+    val source = stateFile(); require(source.isFile && source.length() > 0) { "No state exists in slot S$selectedSlot." }
+    require(retroView.unserializeState(source.readBytes())) { "Could not load the state; it may be incompatible." }
+    "Slot S$selectedSlot loaded."
   }
 
   private fun runStateAction(startMessage: String, silent: Boolean, action: () -> String) {
@@ -198,7 +220,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     stateActionInProgress = true; if (!silent) showToast(startMessage)
     Thread {
       val result = runCatching(action)
-      runOnUiThread { stateActionInProgress = false; if (!silent) showToast(result.getOrElse { it.message ?: "تعذر إتمام العملية." }) }
+      runOnUiThread { stateActionInProgress = false; if (!silent) showToast(result.getOrElse { it.message ?: "Could not complete the action." }) }
     }.start()
   }
 
@@ -219,12 +241,13 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     }
   }
   private fun controlScaleIndicator(): TextView = TextView(this).apply {
-      text = "CONTROL SIZE\n${controlScalePercent()}%"
+      text = "SELECT\nBUTTON"
     textSize = 11f; setTextColor(Color.rgb(216, 244, 255)); gravity = Gravity.CENTER
     setBackgroundColor(Color.rgb(20, 49, 70)); setPadding(dp(5), 0, dp(5), 0)
     layoutParams = LinearLayout.LayoutParams(dp(92), dp(54))
   }
-  private fun button(control: EmulatorTouchButton, width: Int, height: Int = dp(46)): TextView = button(control.label, control.keyCode, width, height)
+  private fun button(control: EmulatorTouchButton, width: Int, height: Int = dp(46)): TextView =
+    button(control.label, control.keyCode, width, height).also { view -> attachEditableControl(view, control.id, control.keyCode) }
   private fun button(label: String, keyCode: Int, width: Int, height: Int = dp(46), onClick: (() -> Unit)? = null): TextView = TextView(this).apply {
     val side = maxOf(width, height)
     text = label; textSize = if (label.length == 1) 21f else 10f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
@@ -237,14 +260,67 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     setColor(Color.argb(150, 37, 62, 85))
     setStroke(dp(2), Color.argb(205, 218, 239, 255))
   }
-  private fun changeControlScale(delta: Float) {
-    controlScale = (((controlScale + delta) * 100).roundToInt() / 100f).coerceIn(.75f, 1.5f)
-    controlPreferences.edit().putFloat(controlScaleKey(), controlScale).apply()
-    renderControls()
+  private fun toggleControlEditing() {
+    controlEditMode = !controlEditMode
+    editToggleButton?.text = if (controlEditMode) "DONE" else "EDIT"
+    showToast(if (controlEditMode) "Edit mode: tap a control, then drag, pinch, or use − / +." else "Control layout saved for this orientation.")
+  }
+
+  private fun resizeSelectedControl(delta: Float) {
+    val selected = selectedEditableControl
+    if (selected == null) { showToast("Tap a control in EDIT mode first."); return }
+    val (view, controlId) = selected
+    val next = (view.scaleX + delta).coerceIn(.65f, 1.75f)
+    view.scaleX = next; view.scaleY = next
+    persistControlLayout(view, controlId)
+    showToast("$controlId size ${(next * 100).toInt()}% saved.")
   }
   private fun controlScaleKey(): String {
     val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
     return "famicom.$orientation.scale"
+  }
+
+  private fun controlLayoutKey(controlId: String): String {
+    val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"
+    return "famicom.$orientation.$controlId"
+  }
+
+  private fun persistControlLayout(view: View, controlId: String) {
+    val key = controlLayoutKey(controlId)
+    controlPreferences.edit().putFloat("$key.x", view.translationX).putFloat("$key.y", view.translationY).putFloat("$key.scale", view.scaleX).apply()
+  }
+
+  private fun attachEditableControl(view: TextView, controlId: String, keyCode: Int) {
+    var downX = 0f; var downY = 0f; var originX = 0f; var originY = 0f
+    val scaler = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+      override fun onScale(detector: ScaleGestureDetector): Boolean {
+        if (!controlEditMode) return false
+        val next = (view.scaleX * detector.scaleFactor).coerceIn(.65f, 1.75f)
+        view.scaleX = next; view.scaleY = next
+        return true
+      }
+    })
+    view.post {
+      val key = controlLayoutKey(controlId)
+      view.translationX = controlPreferences.getFloat("$key.x", 0f)
+      view.translationY = controlPreferences.getFloat("$key.y", 0f)
+      val storedScale = controlPreferences.getFloat("$key.scale", 1f)
+      view.scaleX = storedScale; view.scaleY = storedScale
+    }
+    view.setOnTouchListener { _, event ->
+      scaler.onTouchEvent(event)
+      if (controlEditMode) {
+        when (event.actionMasked) {
+          MotionEvent.ACTION_DOWN -> { selectedEditableControl = view to controlId; downX = event.rawX; downY = event.rawY; originX = view.translationX; originY = view.translationY; showToast("$controlId selected. Drag, pinch, or use − / +.") }
+          MotionEvent.ACTION_MOVE -> if (!scaler.isInProgress) { view.translationX = originX + event.rawX - downX; view.translationY = originY + event.rawY - downY }
+          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> persistControlLayout(view, controlId)
+        }
+        true
+      } else {
+        when (event.actionMasked) { MotionEvent.ACTION_DOWN -> retroView.sendKeyEvent(KeyEvent.ACTION_DOWN, keyCode); MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> retroView.sendKeyEvent(KeyEvent.ACTION_UP, keyCode) }
+        true
+      }
+    }
   }
   private fun controlScalePercent(): Int = (controlScale * 100).roundToInt()
   private fun controlSize(): Int {
@@ -255,6 +331,15 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     val safeWidth = resources.displayMetrics.widthPixels - dp(72)
     return min(requested, safeWidth / 5)
   }
+  private fun applyAspectRatio() {
+    if (root.width <= 0 || root.height <= 0 || aspectMode == "fit") return
+    val ratio = if (aspectMode == "4:3") 4f / 3f else 16f / 9f
+    var width = root.width
+    var height = (width / ratio).toInt()
+    if (height > root.height) { height = root.height; width = (height * ratio).toInt() }
+    gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
+  }
+
   private fun showToast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
   private fun showError(message: String) { setContentView(TextView(this).apply { text = message; gravity = Gravity.CENTER; textSize = 18f; setTextColor(Color.WHITE); setBackgroundColor(Color.rgb(5, 8, 14)); setOnClickListener { finish() } }) }
   private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

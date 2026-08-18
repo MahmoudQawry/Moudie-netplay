@@ -30,10 +30,10 @@ const INPUT_BRANCH_WITH_AUDIO = "else if(message.type==='resume-audio'){resumeFa
  */
 export function withFamicomStableRenderer(html: string): string {
   const withRenderer = html.replace(LEGACY_FIT_CANVAS, STABLE_RENDERER);
-  if (withRenderer === html) throw new Error("تعذر العثور على مسار رسم Famicom الأصلي.");
+  if (withRenderer === html) throw new Error("Could not find the original Famicom rendering path.");
   const withLoadHook = withRenderer.replace(LEGACY_LOAD, STABLE_LOAD);
-  if (withLoadHook === withRenderer) throw new Error("تعذر ربط مُخرِج رسوم Famicom.");
+  if (withLoadHook === withRenderer) throw new Error("Could not attach the Famicom graphics output.");
   const withAudioBridge = withLoadHook.replace(RECEIVE_PREFIX, RECEIVE_WITH_AUDIO).replace(INPUT_BRANCH, INPUT_BRANCH_WITH_AUDIO);
-  if (withAudioBridge === withLoadHook) throw new Error("تعذر ربط صوت Famicom بوضع التركيز.");
+  if (withAudioBridge === withLoadHook) throw new Error("Could not attach Famicom audio to focus mode.");
   return withAudioBridge;
 }

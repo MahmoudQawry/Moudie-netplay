@@ -11,8 +11,8 @@ export type SaveStateCapability = {
  * their real players are integrated.
  */
 export const SAVE_STATE_CAPABILITIES: Record<EmulatorSystemId, SaveStateCapability> = {
-  nes: { available: true, label: "حفظ واسترجاع محليان متاحان في الوضعين" },
-  ps1: { available: true, label: "حفظ واسترجاع محليان متاحان داخل المشغّل" },
-  psp: { available: false, label: "سيُفعّل الحفظ والاسترجاع مع دمج مشغّل PSP الفعلي" },
-  sega: { available: false, label: "سيُفعّل الحفظ والاسترجاع مع دمج مشغّل Sega الفعلي" },
+  nes: { available: true, label: "Local save and load are available in both modes" },
+  ps1: { available: true, label: "Local save and load are available inside the player" },
+  psp: { available: false, label: "Save and load activate with the native PSP player" },
+  sega: { available: false, label: "Save and load activate with the native Sega player" },
 };

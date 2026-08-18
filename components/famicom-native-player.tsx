@@ -60,19 +60,19 @@ export const FamicomNativePlayer = forwardRef<FamicomNativePlayerHandle, Props>(
               bridgeReadyRef.current = true;
               if (romBase64) send({ type: "load", romBase64 });
             } else if (message.type === "ready") {
-              onStatus("اللعبة تعمل محلياً. استخدم أزرار التحكم أسفل الشاشة.");
+              onStatus("The game is running locally. Use the controls below the screen.");
               onReady?.();
             } else if (message.type === "state" && typeof message.snapshot === "string") {
               onState(message.snapshot, message.requestId);
             } else if (message.type === "state-applied") {
-              onStatus("تمت مزامنة بداية اللعبة مع المضيف.");
+              onStatus("The game start was synchronized with the host.");
             } else if (message.type === "audio-active") {
-              onStatus("صوت اللعبة يعمل الآن.");
+              onStatus("Game audio is now active.");
             } else if (message.type === "error") {
-              onStatus(message.message ?? "تعذر تشغيل ملف NES هذا.");
+              onStatus(message.message ?? "Could not run this NES file.");
             }
           } catch {
-            onStatus("تعذر التواصل مع شاشة المشغّل.");
+            onStatus("Could not communicate with the player screen.");
           }
         }}
         style={styles.webView}

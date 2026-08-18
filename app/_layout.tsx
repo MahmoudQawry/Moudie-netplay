@@ -45,7 +45,7 @@ export default function RootLayout() {
       try {
         initManusRuntime();
       } catch (error) {
-        console.warn("تعذر تهيئة بيئة المعاينة الاختيارية.", error);
+        console.warn("Optional preview runtime initialization failed.", error);
       } finally {
         SplashScreen.hideAsync().catch(() => undefined);
       }

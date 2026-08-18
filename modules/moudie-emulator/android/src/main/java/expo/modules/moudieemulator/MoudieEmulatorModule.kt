@@ -45,8 +45,8 @@ class MoudieEmulatorModule : Module() {
           "acceptedExtensions" to definition.extensions.sorted(),
           "message" to when {
             available -> "${definition.coreName} is ready for local play."
-            NativeCoreCatalog.isDownloadable(definition) -> "سيُنزل محرك ${definition.coreName} الرسمي عند أول تشغيل للآركيد؛ يلزم اتصال إنترنت ومساحة تخزين كافية."
-            else -> "محرك ${definition.coreName} غير موجود داخل APK الحالي."
+            NativeCoreCatalog.isDownloadable(definition) -> "The official ${definition.coreName} core downloads when Arcade is launched for the first time. Internet access and storage space are required."
+            else -> "The ${definition.coreName} core is not included in this APK."
           },
         )
       }
@@ -73,7 +73,7 @@ class MoudieEmulatorModule : Module() {
 
     Function("prepareLocalGame") { system: String, uri: String ->
       val definition = NativeCoreCatalog.forSystem(system)
-      require(uri.isNotBlank()) { "اختر ملف لعبة محلياً أولاً." }
+      require(uri.isNotBlank()) { "Choose a local game file first." }
       val available = appContext.reactContext?.let { NativeCoreCatalog.findCore(it, definition) != null } ?: false
       val downloadable = NativeCoreCatalog.isDownloadable(definition)
       mapOf(
@@ -81,16 +81,16 @@ class MoudieEmulatorModule : Module() {
         "uri" to uri,
         "ready" to (available || downloadable),
         "message" to when {
-          available -> "تم تجهيز ملف ${definition.title}. يمكنك بدء اللعب المحلي الآن."
-          downloadable -> "تم تجهيز ملف ${definition.title}. سيُنزل محرك الآركيد تلقائياً عند بدء أول لعبة."
-          else -> "محرك ${definition.coreName} غير مضمّن في هذه النسخة."
+          available -> "${definition.title} is prepared. You can start local play now."
+          downloadable -> "${definition.title} is prepared. The Arcade core downloads automatically when the first game starts."
+          else -> "The ${definition.coreName} core is not included in this build."
         },
       )
     }
 
-    AsyncFunction("launchPS1Game") { uri: String, fileName: String, netplay: Map<String, Any>? ->
-      require(uri.isNotBlank()) { "اختر ملف لعبة PS1 محلياً أولاً." }
-      val activity = appContext.currentActivity ?: throw IllegalStateException("افتح مشغّل PS1 من التطبيق بعد ظهوره على الشاشة.")
+    AsyncFunction("launchPS1Game") { uri: String, fileName: String, netplay: Map<String, Any>?, playerOptions: Map<String, Any>? ->
+      require(uri.isNotBlank()) { "Choose a local PS1 game file first." }
+      val activity = appContext.currentActivity ?: throw IllegalStateException("Open the PS1 player from the app after it is visible on screen.")
       val launchStatus = getPs1LaunchStatus()
       require(launchStatus["available"] == true) { launchStatus["message"] as String }
       val gamePath = preparePS1GameFile(activity.cacheDir, uri, fileName)
@@ -102,6 +102,7 @@ class MoudieEmulatorModule : Module() {
           Intent(activity, PS1PlayerActivity::class.java).apply {
             putExtra(PS1PlayerActivity.EXTRA_GAME_PATH, gamePath)
             putExtra(PS1PlayerActivity.EXTRA_GAME_NAME, fileName)
+            applyPlayerOptions(playerOptions)
             netplay?.let { config ->
               val serverUrl = config["serverUrl"] as? String
               val roomId = (config["roomId"] as? Number)?.toInt()
@@ -123,21 +124,21 @@ class MoudieEmulatorModule : Module() {
       }
     }
 
-    AsyncFunction("launchNativeGame") { system: String, uri: String, fileName: String ->
+    AsyncFunction("launchNativeGame") { system: String, uri: String, fileName: String, playerOptions: Map<String, Any>? ->
       val definition = NativeCoreCatalog.forSystem(system)
-      require(uri.isNotBlank()) { "اختر ملف لعبة محلياً أولاً." }
+      require(uri.isNotBlank()) { "Choose a local game file first." }
       val extension = fileName.substringAfterLast('.', "").lowercase()
-      require(extension in definition.extensions) { "اختر ملف ${definition.title} بامتداد مدعوم: ${definition.extensions.sorted().joinToString(", ")}" }
-      val activity = appContext.currentActivity ?: throw IllegalStateException("افتح المشغّل بعد ظهور التطبيق على الشاشة.")
+      require(extension in definition.extensions) { "Choose a ${definition.title} file with a supported extension: ${definition.extensions.sorted().joinToString(", ")}" }
+      val activity = appContext.currentActivity ?: throw IllegalStateException("Open the player after the app is visible on screen.")
       // AsyncFunction runs outside the Android UI thread, so optional core
       // retrieval can wait for the HTTPS download without freezing the activity.
       val coreFile = NativeCoreCatalog.findCore(activity, definition)
         ?: NativeCoreCatalog.downloadCore(activity, definition)
         ?: throw IllegalStateException(
           if (NativeCoreCatalog.isDownloadable(definition)) {
-            "تعذر تنزيل محرك ${definition.coreName}. تحقق من الإنترنت والمساحة المتاحة ثم أعد المحاولة."
+            "Could not download ${definition.coreName}. Check internet access and storage space, then try again."
           } else {
-            "تعذر العثور على ${definition.coreName} داخل APK. ثبّت نسخة Android الكاملة."
+            "Could not find ${definition.coreName} inside this APK. Install the complete Android build."
           },
         )
       val gamePath = prepareGameFile(activity.cacheDir, uri, fileName, "moudie-${definition.system}-games")
@@ -147,6 +148,7 @@ class MoudieEmulatorModule : Module() {
           putExtra(UniversalLibretroPlayerActivity.EXTRA_CORE_PATH, coreFile.absolutePath)
           putExtra(UniversalLibretroPlayerActivity.EXTRA_GAME_PATH, gamePath)
           putExtra(UniversalLibretroPlayerActivity.EXTRA_GAME_NAME, fileName)
+          applyPlayerOptions(playerOptions)
         })
       }
     }
@@ -156,12 +158,12 @@ class MoudieEmulatorModule : Module() {
       val parsedUri = Uri.parse(uri)
       val digest = MessageDigest.getInstance("SHA-256")
       val input = if (parsedUri.scheme == "file") {
-        val local = File(requireNotNull(parsedUri.path) { "تعذر قراءة ملف اللعبة." })
-        require(local.isFile() && local.canRead()) { "تعذر قراءة ملف اللعبة." }
+        val local = File(requireNotNull(parsedUri.path) { "Could not read the game file." })
+        require(local.isFile() && local.canRead()) { "Could not read the game file." }
         local.inputStream()
       } else {
-        val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("تعذر فتح تخزين الهاتف.")
-        resolver.openInputStream(parsedUri) ?: throw IllegalArgumentException("تعذر قراءة ملف اللعبة.")
+        val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("Could not open device storage.")
+        resolver.openInputStream(parsedUri) ?: throw IllegalArgumentException("Could not read the game file.")
       }
       input.use { stream ->
         val buffer = ByteArray(1024 * 128)
@@ -174,21 +176,21 @@ class MoudieEmulatorModule : Module() {
       digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     }
 
-    AsyncFunction("launchFamicomCompatGame") { uri: String, fileName: String ->
-      launchFamicomNativePlayer(uri, fileName, focusMode = false)
+    AsyncFunction("launchFamicomCompatGame") { uri: String, fileName: String, playerOptions: Map<String, Any>? ->
+      launchFamicomNativePlayer(uri, fileName, focusMode = false, playerOptions = playerOptions)
     }
 
-    AsyncFunction("launchFamicomFocusGame") { uri: String, fileName: String ->
-      launchFamicomNativePlayer(uri, fileName, focusMode = true)
+    AsyncFunction("launchFamicomFocusGame") { uri: String, fileName: String, playerOptions: Map<String, Any>? ->
+      launchFamicomNativePlayer(uri, fileName, focusMode = true, playerOptions = playerOptions)
     }
 
     AsyncFunction("installPS1Bios") { uri: String, fileName: String ->
       val normalizedName = fileName.trim().lowercase()
-      require(normalizedName in ps1BiosCandidates) { "اختر ملف BIOS أصلياً باسم scph5500.bin أو scph5501.bin أو scph5502.bin." }
-      val filesDir = appContext.reactContext?.filesDir ?: throw IllegalStateException("تعذر فتح مساحة التخزين المحلية.")
+      require(normalizedName in ps1BiosCandidates) { "Choose an original BIOS file named scph5500.bin, scph5501.bin, or scph5502.bin." }
+      val filesDir = appContext.reactContext?.filesDir ?: throw IllegalStateException("Could not open local storage.")
       val destination = File(File(filesDir, "moudie-ps1/system").apply { mkdirs() }, normalizedName)
       copyUriToFile(uri, destination)
-      require(destination.length() > 0) { "ملف BIOS فارغ أو غير قابل للقراءة." }
+      require(destination.length() > 0) { "The BIOS file is empty or unreadable." }
       getBiosStatus()
     }
   }
@@ -197,18 +199,26 @@ class MoudieEmulatorModule : Module() {
   private val ps1BiosCandidates = setOf("scph5500.bin", "scph5501.bin", "scph5502.bin", "scph1001.bin")
   private val ps1GameExtensions = setOf("bin", "cue", "iso", "chd", "pbp")
 
-  private fun launchFamicomNativePlayer(uri: String, fileName: String, focusMode: Boolean) {
-    require(uri.isNotBlank()) { "اختر ملف Famicom محلياً أولاً." }
-    require(fileName.lowercase().endsWith(".nes")) { "المشغّل الأصلي يدعم ملفات .nes حالياً." }
-    val activity = appContext.currentActivity ?: throw IllegalStateException("افتح مشغّل Famicom من التطبيق بعد ظهوره على الشاشة.")
+  private fun launchFamicomNativePlayer(uri: String, fileName: String, focusMode: Boolean, playerOptions: Map<String, Any>? = null) {
+    require(uri.isNotBlank()) { "Choose a local Famicom game file first." }
+    require(fileName.lowercase().endsWith(".nes")) { "The native player currently supports .nes files." }
+    val activity = appContext.currentActivity ?: throw IllegalStateException("Open the Famicom player from the app after it is visible on screen.")
     val gamePath = prepareGameFile(activity.cacheDir, uri, fileName, "moudie-famicom-games")
     activity.runOnUiThread {
       activity.startActivity(Intent(activity, FamicomCompatPlayerActivity::class.java).apply {
         putExtra(FamicomCompatPlayerActivity.EXTRA_GAME_PATH, gamePath)
         putExtra(FamicomCompatPlayerActivity.EXTRA_GAME_NAME, fileName)
         putExtra(FamicomCompatPlayerActivity.EXTRA_FOCUS_MODE, focusMode)
+        applyPlayerOptions(playerOptions)
       })
     }
+  }
+
+  private fun Intent.applyPlayerOptions(playerOptions: Map<String, Any>?) {
+    val orientation = playerOptions?.get("orientation") as? String
+    val aspectRatio = playerOptions?.get("aspectRatio") as? String
+    if (orientation in setOf("portrait", "landscape")) putExtra("expo.modules.moudieemulator.PLAYER_ORIENTATION", orientation)
+    if (aspectRatio in setOf("fit", "4:3", "16:9")) putExtra("expo.modules.moudieemulator.PLAYER_ASPECT_RATIO", aspectRatio)
   }
 
   private fun getPs1LaunchStatus(): Map<String, Any> {
@@ -217,7 +227,7 @@ class MoudieEmulatorModule : Module() {
     val available = coreFile != null
     return mapOf(
       "available" to available,
-      "message" to if (available) "تم العثور على core PCSX ReARMed وهو جاهز للتشغيل المحلي." else "تعذر العثور على core PCSX ReARMed داخل التطبيق. ثبّت أحدث APK كاملاً ثم أعد المحاولة.",
+      "message" to if (available) "PCSX ReARmed core found and ready for local play." else "Could not find PCSX ReARmed inside the app. Install the latest complete APK and try again.",
     )
   }
 
@@ -226,15 +236,15 @@ class MoudieEmulatorModule : Module() {
     val systemDirectory = filesDir?.let { File(it, "moudie-ps1/system") }
     val installedPs1Bios = ps1BiosCandidates.filter { candidate -> File(systemDirectory, candidate).isFile }
     return mapOf(
-      "nes" to mapOf("required" to false, "available" to true, "message" to "Famicom/NES لا يحتاج BIOS؛ جودة العرض تعتمد على ملف اللعبة ودقة البكسلات."),
+      "nes" to mapOf("required" to false, "available" to true, "message" to "Famicom/NES does not require a BIOS; output quality depends on the game file and pixel precision."),
       "ps1" to mapOf(
         "required" to false,
         "available" to installedPs1Bios.isNotEmpty(),
         "files" to installedPs1Bios,
-        "message" to if (installedPs1Bios.isNotEmpty()) "تم العثور على BIOS محلي: ${installedPs1Bios.joinToString()}" else "لم يُضف BIOS محلي. بعض ألعاب PS1 تعمل عبر HLE، لكن dump قانوني متوافق قد يحسن التوافق."
+        "message" to if (installedPs1Bios.isNotEmpty()) "Local BIOS found: ${installedPs1Bios.joinToString()}" else "No local BIOS was added. Some PS1 games run through HLE, but a compatible legal dump may improve compatibility."
       ),
-      "sega" to mapOf("required" to false, "available" to false, "message" to "لا يوجد مشغّل Sega مدمج في هذه النسخة بعد؛ لا يمكن فحص BIOS قبل دمج الـcore."),
-      "psp" to mapOf("required" to false, "available" to false, "message" to "لا يوجد مشغّل PSP مدمج في هذه النسخة بعد؛ لا يمكن فحص ملفات النظام قبل دمج الـcore."),
+      "sega" to mapOf("required" to false, "available" to false, "message" to "No Sega player is bundled in this build, so BIOS status cannot be checked before core integration."),
+      "psp" to mapOf("required" to false, "available" to false, "message" to "No PSP player is bundled in this build, so system files cannot be checked before core integration."),
     )
   }
 
@@ -243,48 +253,48 @@ class MoudieEmulatorModule : Module() {
     require(extension in ps1GameExtensions) { "Choose a PS1 BIN, CUE, ISO, CHD, or PBP file." }
     val gamePath = prepareGameFile(cacheDir, rawUri, fileName, "moudie-ps1-games")
     val gameFile = File(gamePath)
-    require(gameFile.length() > 1024L) { "ملف لعبة PS1 صغير جداً أو غير مكتمل." }
+    require(gameFile.length() > 1024L) { "The PS1 game file is too small or incomplete." }
     if (extension == "cue") validateCueCompanion(gameFile)
     return gamePath
   }
 
   private fun validateCueCompanion(cueFile: File) {
     val referencedFile = Regex("(?im)^\\s*FILE\\s+\\\"([^\\\"]+)\\\"").find(cueFile.readText())?.groupValues?.getOrNull(1)
-    require(!referencedFile.isNullOrBlank()) { "ملف CUE لا يعرّف ملف BIN/IMG مرافقاً. اختر BIN أو CHD أو PBP مباشرةً." }
+    require(!referencedFile.isNullOrBlank()) { "The CUE file does not define a companion BIN/IMG. Choose BIN, ISO, CHD, or PBP directly." }
     val companion = File(cueFile.parentFile, referencedFile)
-    require(companion.isFile && companion.canRead()) { "ملف CUE يحتاج الملف المرافق $referencedFile في المجلد نفسه. اختر BIN أو CHD أو PBP مباشرةً إذا كان منتقي الملفات لا يحافظ على المجلد." }
+    require(companion.isFile && companion.canRead()) { "The CUE file needs companion file $referencedFile in the same folder. Choose BIN, ISO, CHD, or PBP directly if the file picker does not preserve folders." }
   }
 
   private fun prepareGameFile(cacheDir: File, rawUri: String, fileName: String, directoryName: String): String {
     val parsedUri = Uri.parse(rawUri)
     if (parsedUri.scheme == "file") {
-      val local = File(requireNotNull(parsedUri.path) { "تعذر تحديد مسار ملف اللعبة." })
+      val local = File(requireNotNull(parsedUri.path) { "Could not determine the game file path." })
       if (local.isFile && local.canRead()) return local.absolutePath
     }
 
     val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(100).ifBlank { "ps1-game.bin" }
     val gameDirectory = File(cacheDir, directoryName).apply { mkdirs() }
     val copiedGame = File(gameDirectory, "${System.currentTimeMillis()}-$safeName")
-    val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("تعذر فتح مزود ملفات الهاتف.")
+    val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("Could not open the device file provider.")
     resolver.openInputStream(parsedUri)?.use { input ->
       FileOutputStream(copiedGame).use { output -> input.copyTo(output) }
-    } ?: throw IllegalArgumentException("تعذر قراءة ملف لعبة PS1.")
-    require(copiedGame.length() > 0) { "ملف لعبة PS1 فارغ أو غير قابل للقراءة." }
+    } ?: throw IllegalArgumentException("Could not read the PS1 game file.")
+    require(copiedGame.length() > 0) { "The PS1 game file is empty or unreadable." }
     return copiedGame.absolutePath
   }
 
   private fun copyUriToFile(rawUri: String, destination: File) {
     val parsedUri = Uri.parse(rawUri)
     if (parsedUri.scheme == "file") {
-      val local = File(requireNotNull(parsedUri.path) { "تعذر تحديد مسار الملف." })
+      val local = File(requireNotNull(parsedUri.path) { "Could not determine the file path." })
       if (local.isFile && local.canRead()) {
         local.copyTo(destination, overwrite = true)
         return
       }
     }
-    val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("تعذر فتح مزود ملفات الهاتف.")
+    val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("Could not open the device file provider.")
     resolver.openInputStream(parsedUri)?.use { input ->
       FileOutputStream(destination).use { output -> input.copyTo(output) }
-    } ?: throw IllegalArgumentException("تعذر قراءة الملف من التخزين.")
+    } ?: throw IllegalArgumentException("Could not read the file from storage.")
   }
 }

@@ -32,7 +32,7 @@ export type VoiceStatus = {
 
 export function createNetplaySocket(credentials: NetplayCredentials): Socket {
   const baseUrl = getApiBaseUrl();
-  if (!baseUrl) throw new Error("تعذر تحديد خادم الغرفة. تحقق من اتصال التطبيق بالإنترنت.");
+  if (!baseUrl) throw new Error("Could not determine the room server. Check the app's internet connection.");
   return io(baseUrl, {
     path: "/api/netplay",
     transports: ["websocket", "polling"],

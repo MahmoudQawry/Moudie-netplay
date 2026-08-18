@@ -88,7 +88,7 @@ object NativeCoreCatalog {
 
   fun all(): List<Definition> = definitions
   fun forSystem(system: String): Definition = definitions.firstOrNull { it.system == system }
-    ?: throw IllegalArgumentException("نظام المحاكاة غير مدعوم.")
+    ?: throw IllegalArgumentException("Unsupported emulator system.")
 
   fun isDownloadable(definition: Definition): Boolean = !definition.downloadUrl.isNullOrBlank()
 
@@ -129,7 +129,7 @@ object NativeCoreCatalog {
         requestMethod = "GET"
       }
       try {
-        require(connection.responseCode in 200..299) { "تعذر الوصول إلى مصدر محرك ${definition.coreName}." }
+        require(connection.responseCode in 200..299) { "Could not reach the ${definition.coreName} core source." }
         ZipInputStream(connection.inputStream.buffered()).use { archive ->
           var entry = archive.nextEntry
           var extracted = false
@@ -144,9 +144,9 @@ object NativeCoreCatalog {
             }
             entry = archive.nextEntry
           }
-          require(extracted) { "أرشيف محرك ${definition.coreName} لا يحتوي ملف النواة المطلوب." }
+          require(extracted) { "The ${definition.coreName} archive does not contain the required core file." }
         }
-        require(isUsableCore(temporary)) { "تم تنزيل ملف محرك غير صالح." }
+        require(isUsableCore(temporary)) { "An invalid core file was downloaded." }
         if (!temporary.renameTo(target)) {
           temporary.copyTo(target, overwrite = true)
           temporary.delete()

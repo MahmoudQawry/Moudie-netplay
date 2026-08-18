@@ -41,15 +41,21 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     const val EXTRA_CORE_PATH = "expo.modules.moudieemulator.CORE_PATH"
     const val EXTRA_GAME_PATH = "expo.modules.moudieemulator.GAME_PATH"
     const val EXTRA_GAME_NAME = "expo.modules.moudieemulator.GAME_NAME"
+    const val EXTRA_PLAYER_ORIENTATION = "expo.modules.moudieemulator.PLAYER_ORIENTATION"
+    const val EXTRA_PLAYER_ASPECT_RATIO = "expo.modules.moudieemulator.PLAYER_ASPECT_RATIO"
   }
 
   private lateinit var retroView: GLRetroView
   private lateinit var root: FrameLayout
+  private lateinit var gameFrame: FrameLayout
   private lateinit var definition: NativeCoreCatalog.Definition
   private lateinit var stateFile: File
   private lateinit var preferences: android.content.SharedPreferences
   private var customizationEnabled = false
   private val controlButtons = mutableListOf<MovableControlButton>()
+  private var selectedControl: MovableControlButton? = null
+  private var aspectMode = "fit"
+  private var aspectButton: TextView? = null
   private var micMuted = true
   private var micOverlayButton: TextView? = null
   private var stateActionInProgress = false
@@ -73,7 +79,11 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    requestedOrientation = when (intent.getStringExtra(EXTRA_PLAYER_ORIENTATION)) {
+      "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+      "landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+      else -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    }
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     @Suppress("DEPRECATION")
     window.decorView.systemUiVisibility = (
@@ -99,6 +109,9 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     }
 
     preferences = getSharedPreferences("moudie-controller-layouts", Context.MODE_PRIVATE)
+    aspectMode = intent.getStringExtra(EXTRA_PLAYER_ASPECT_RATIO)
+      ?.takeIf { it in setOf("fit", "4:3", "16:9") }
+      ?: preferences.getString("${definition.system}.aspect", "fit") ?: "fit"
     val savesDirectory = File(filesDir, "moudie-${definition.system}/saves").apply { mkdirs() }
     val statesDirectory = File(filesDir, "moudie-${definition.system}/states").apply { mkdirs() }
     val systemDirectory = File(filesDir, definition.systemDirectory).apply { mkdirs() }
@@ -122,13 +135,15 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     }
 
     root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-    root.addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    gameFrame = FrameLayout(this).apply { addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)) }
+    root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     root.addView(createHeader(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(48), Gravity.TOP))
     metricPill = createMetricPill()
     root.addView(metricPill, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(32), Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = dp(54) })
     addController()
     root.addView(createSocialOverlay(), FrameLayout.LayoutParams(dp(48), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(12) })
     setContentView(root)
+    root.post { applyAspectRatio() }
   }
 
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -176,8 +191,10 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     }, LinearLayout.LayoutParams(0, dp(38), 1f))
     addView(headerButton("LOAD") { loadState() }, LinearLayout.LayoutParams(dp(52), dp(38)))
     addView(headerButton("SAVE") { saveState(silent = false) }, LinearLayout.LayoutParams(dp(52), dp(38)))
-    addView(headerButton("−") { resizeAllControls(-0.1f) }, LinearLayout.LayoutParams(dp(34), dp(38)))
-    addView(headerButton("+") { resizeAllControls(0.1f) }, LinearLayout.LayoutParams(dp(34), dp(38)))
+    addView(headerButton("−") { resizeSelectedControl(-0.1f) }, LinearLayout.LayoutParams(dp(34), dp(38)))
+    addView(headerButton("+") { resizeSelectedControl(0.1f) }, LinearLayout.LayoutParams(dp(34), dp(38)))
+    aspectButton = headerButton(aspectLabel()) { cycleAspectRatio() }
+    addView(aspectButton, LinearLayout.LayoutParams(dp(62), dp(38)))
     addView(headerButton(if (customizationEnabled) "DONE" else "EDIT") { toggleCustomization() }, LinearLayout.LayoutParams(dp(50), dp(38)))
   }
 
@@ -269,15 +286,44 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     showToast(label)
   }
 
-  private fun resizeAllControls(delta: Float) {
-    if (controlButtons.isEmpty()) return
-    controlButtons.forEach { button ->
-      val next = (button.scaleX + delta).coerceIn(.65f, 1.75f)
-      button.scaleX = next
-      button.scaleY = next
-      persistLayout(button, button.controlId())
+  private fun resizeSelectedControl(delta: Float) {
+    val button = selectedControl
+    if (button == null) {
+      showToast("Tap a control in EDIT mode, then use − or + to resize that control only.")
+      return
     }
-    showToast("Control size ${if (delta > 0f) "increased" else "decreased"}.")
+    val next = (button.scaleX + delta).coerceIn(.65f, 1.75f)
+    button.scaleX = next
+    button.scaleY = next
+    persistLayout(button, button.controlId())
+    showToast("${button.controlId()} size ${(next * 100).toInt()}% saved.")
+  }
+
+  private fun aspectLabel(): String = if (aspectMode == "fit") "FIT" else aspectMode
+
+  private fun cycleAspectRatio() {
+    val modes = listOf("fit", "4:3", "16:9")
+    aspectMode = modes[(modes.indexOf(aspectMode) + 1) % modes.size]
+    preferences.edit().putString("${definition.system}.aspect", aspectMode).apply()
+    aspectButton?.text = aspectLabel()
+    root.post { applyAspectRatio() }
+    showToast("Screen ratio: ${if (aspectMode == "fit") "FIT" else aspectMode}.")
+  }
+
+  private fun applyAspectRatio() {
+    if (!::gameFrame.isInitialized || root.width <= 0 || root.height <= 0) return
+    if (aspectMode == "fit") {
+      gameFrame.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+      return
+    }
+    val ratio = if (aspectMode == "4:3") 4f / 3f else 16f / 9f
+    var width = root.width
+    var height = (width / ratio).toInt()
+    if (height > root.height) {
+      height = root.height
+      width = (height * ratio).toInt()
+    }
+    gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
   }
 
   private fun createSocialOverlay(): LinearLayout = LinearLayout(this).apply {
@@ -407,7 +453,10 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
           originX = translationX
           originY = translationY
           dragging = false
-          if (!customizationEnabled) retroView.sendKeyEvent(KeyEvent.ACTION_DOWN, control.keyCode, 0)
+          if (customizationEnabled) {
+            selectedControl = this
+            showToast("${control.id} selected. Drag, pinch, or use − / +.")
+          } else retroView.sendKeyEvent(KeyEvent.ACTION_DOWN, control.keyCode, 0)
           return true
         }
         MotionEvent.ACTION_MOVE -> {

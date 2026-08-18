@@ -14,10 +14,10 @@ export type LocalGame = {
 const STORAGE_KEY = "moudie.local-games.v1";
 
 export const SYSTEM_META: Record<LocalSystem, { title: string; subtitle: string; extensions: string; color: string; symbol: string }> = {
-  nes: { title: "Famicom", subtitle: "NES · أزرار A / B", extensions: ".nes", color: "#F4B942", symbol: "▦" },
+  nes: { title: "Famicom", subtitle: "NES · A / B controls", extensions: ".nes", color: "#F4B942", symbol: "▦" },
   sega: { title: "Sega", subtitle: "Genesis · Mega Drive", extensions: ".gen · .md · .smd · .bin", color: "#F26B5B", symbol: "◆" },
-  ps1: { title: "PlayStation 1", subtitle: "PS1 · ملفات محلية", extensions: ".cue · .bin · .chd · .pbp", color: "#9F8DF5", symbol: "○" },
-  psp: { title: "PlayStation Portable", subtitle: "PSP · ملفات محلية", extensions: ".iso · .cso · .pbp", color: "#62C2EB", symbol: "△" },
+  ps1: { title: "PlayStation 1", subtitle: "PS1 · local files", extensions: ".cue · .bin · .iso · .chd · .pbp", color: "#9F8DF5", symbol: "○" },
+  psp: { title: "PlayStation Portable", subtitle: "PSP · local files", extensions: ".iso · .cso · .pbp", color: "#62C2EB", symbol: "△" },
 };
 
 export function isExtensionAllowed(system: LocalSystem, name: string): boolean {
@@ -25,7 +25,7 @@ export function isExtensionAllowed(system: LocalSystem, name: string): boolean {
   const extensions: Record<LocalSystem, string[]> = {
     nes: [".nes"],
     sega: [".gen", ".md", ".smd", ".bin"],
-    ps1: [".cue", ".bin", ".chd", ".pbp"],
+    ps1: [".cue", ".bin", ".iso", ".chd", ".pbp"],
     psp: [".iso", ".cso", ".pbp"],
   };
   return extensions[system].some((extension) => lower.endsWith(extension));

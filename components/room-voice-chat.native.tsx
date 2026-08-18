@@ -34,7 +34,7 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
   const streamRef = useRef<MediaStream | null>(null);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [audioRoute, setAudioRoute] = useState<AudioRoute>("auto");
-  const [voiceState, setVoiceState] = useState("الصوت غير متصل");
+  const [voiceState, setVoiceState] = useState("Voice is disconnected");
   const [connectedPeers, setConnectedPeers] = useState(0);
 
   const remoteTargets = useMemo(() => (members ?? []).filter((member) => member.id !== memberId).map((member) => member.id), [memberId, members]);
@@ -77,11 +77,11 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
     };
     peer.onconnectionstatechange = () => {
       refreshConnectedCount();
-      if (peer.connectionState === "connected") setVoiceState("الصوت متصل داخل الغرفة");
-      else if (peer.connectionState === "connecting") setVoiceState("جارٍ توصيل الصوت…");
-      else if (peer.connectionState === "failed") { closePeer(peerId); setVoiceState("فشل اتصال عضو صوتي؛ يمكنك إعادة المحاولة."); }
+      if (peer.connectionState === "connected") setVoiceState("Voice is connected in the room");
+      else if (peer.connectionState === "connecting") setVoiceState("Connecting voice…");
+      else if (peer.connectionState === "failed") { closePeer(peerId); setVoiceState("A voice peer connection failed. You can try again."); }
     };
-    peer.ontrack = () => { refreshConnectedCount(); setVoiceState("الصوت متصل داخل الغرفة"); };
+    peer.ontrack = () => { refreshConnectedCount(); setVoiceState("Voice is connected in the room"); };
     if (streamRef.current) addTracks(peer, streamRef.current);
     peersRef.current.set(peerId, state);
     return state;
@@ -99,22 +99,22 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
       const offer = await state.peer.createOffer({ offerToReceiveAudio: true });
       await state.peer.setLocalDescription(offer);
       sendSignal(targetMemberId, { type: "offer", sdp: offer.sdp });
-      setVoiceState("جارٍ توصيل الصوت…");
+      setVoiceState("Connecting voice…");
     } catch {
-      setVoiceState("تعذر بدء الصوت. تحقق من إذن الميكروفون والاتصال.");
+      setVoiceState("Could not start voice. Check microphone permission and connection.");
     }
   }, [ensureLocalStream, getPeer, microphoneEnabled, sendSignal, socket]);
 
   const toggleMicrophone = useCallback(async (requestedEnabled?: boolean) => {
     if (!socket?.connected) {
-      Alert.alert("اربط الغرفة أولاً", "اربط قناة NetPlay قبل تفعيل الميكروفون.");
+      Alert.alert("Connect to the room first", "Connect to the NetPlay room channel before enabling the microphone.");
       return;
     }
     const next = requestedEnabled ?? !microphoneEnabled;
     try {
       if (next) {
         if (!(await requestVoicePermissions())) {
-          Alert.alert("إذن مطلوب", "اسمح للتطبيق باستخدام الميكروفون وBluetooth من إعدادات Android لتفعيل الدردشة الصوتية.");
+          Alert.alert("Permission required", "Allow microphone and Bluetooth access in Android settings to enable voice chat.");
           return;
         }
         await ensureLocalStream();
@@ -123,23 +123,23 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
         setAudioRoute("auto");
         const targets = remoteTargets.length ? remoteTargets : (remoteOnline ? [undefined] : []);
         if (targets.length) await Promise.all(targets.map((target) => makeOffer(target, true)));
-        setVoiceState(targets.length ? "الميكروفون يعمل. جارٍ ربط أعضاء الغرفة…" : "الميكروفون يعمل. بانتظار دخول عضو آخر.");
+        setVoiceState(targets.length ? "Microphone is on. Connecting room members…" : "Microphone is on. Waiting for another room member.");
       } else {
         streamRef.current?.getAudioTracks().forEach((track) => (track.enabled = false));
         InCallManager.setMicrophoneMute(true);
-        setVoiceState("الميكروفون مكتوم؛ تستمر سماع الغرفة.");
+        setVoiceState("Microphone is muted; you can still hear the room.");
       }
       setMicrophoneEnabled(next);
       socket.emit("netplay:voice-status", { microphoneEnabled: next, speakerEnabled: next && audioRoute === "speaker" });
     } catch {
-      setVoiceState("تعذر تفعيل الميكروفون. أعد توصيل الغرفة ثم حاول مجدداً.");
+      setVoiceState("Could not enable the microphone. Reconnect to the room and try again.");
     }
   }, [audioRoute, ensureLocalStream, makeOffer, microphoneEnabled, remoteOnline, remoteTargets, socket]);
 
   const selectSpeaker = () => { InCallManager.setForceSpeakerphoneOn(true); setAudioRoute("speaker"); socket?.emit("netplay:voice-status", { microphoneEnabled, speakerEnabled: true }); };
   const selectBluetooth = async () => {
-    try { await InCallManager.chooseAudioRoute("BLUETOOTH"); setAudioRoute("bluetooth"); setVoiceState("تم طلب مخرج Bluetooth."); }
-    catch { setVoiceState("لم تتوفر سماعة Bluetooth حالياً. استخدم الوضع التلقائي أو مكبر الصوت."); }
+    try { await InCallManager.chooseAudioRoute("BLUETOOTH"); setAudioRoute("bluetooth"); setVoiceState("Bluetooth output requested."); }
+    catch { setVoiceState("No Bluetooth headset is available. Use automatic output or speaker."); }
   };
 
   useEffect(() => {
@@ -158,7 +158,7 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
           const answer = await state.peer.createAnswer();
           await state.peer.setLocalDescription(answer);
           sendSignal(sourceId || undefined, { type: "answer", sdp: answer.sdp });
-          setVoiceState("جارٍ توصيل الصوت…");
+          setVoiceState("Connecting voice…");
         } else if (signal.type === "answer") {
           await state.peer.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: signal.sdp }));
           state.remoteDescriptionSet = true;
@@ -168,11 +168,11 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
           else await state.peer.addIceCandidate(new RTCIceCandidate(signal.candidate));
         }
       } catch {
-        setVoiceState("تعذر ربط الصوت مع أحد أعضاء الغرفة.");
+        setVoiceState("Could not connect voice to a room member.");
       }
     };
-    const handleDisconnect = () => { closeAllPeers(); setVoiceState("انقطع اتصال الغرفة؛ جارٍ إعادة الاتصال…"); };
-    const handleReconnect = () => { setVoiceState("عادت قناة الغرفة. فعّل الميكروفون لإعادة ربط الصوت."); };
+    const handleDisconnect = () => { closeAllPeers(); setVoiceState("Room connection lost; reconnecting…"); };
+    const handleReconnect = () => { setVoiceState("Room channel restored. Enable the microphone to reconnect voice."); };
     socket.on("netplay:signal", handleSignal);
     socket.on("disconnect", handleDisconnect);
     socket.on("reconnect", handleReconnect);
@@ -189,14 +189,14 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
   if (Platform.OS === "web") return null;
   return (
     <View style={styles.card}>
-      <View style={styles.heading}><Text style={styles.title}>الصوت داخل الغرفة</Text><View style={styles.counter}><Text style={styles.counterText}>{connectedPeers} متصل صوتيًا</Text></View></View>
+      <View style={styles.heading}><Text style={styles.title}>ROOM VOICE</Text><View style={styles.counter}><Text style={styles.counterText}>{connectedPeers} VOICE CONNECTED</Text></View></View>
       <Text style={styles.status}>{voiceState}</Text>
       <View style={styles.actions}>
-        <Pressable onPress={() => toggleMicrophone()} style={({ pressed }) => [styles.action, microphoneEnabled && styles.actionActive, pressed && styles.pressed]}><Text style={styles.actionLabel}>{microphoneEnabled ? "الميكروفون يعمل" : "الميكروفون متوقف"}</Text></Pressable>
-        <Pressable onPress={selectSpeaker} style={({ pressed }) => [styles.action, audioRoute === "speaker" && styles.actionActive, pressed && styles.pressed]}><Text style={styles.actionLabel}>مكبر الهاتف</Text></Pressable>
+        <Pressable onPress={() => toggleMicrophone()} style={({ pressed }) => [styles.action, microphoneEnabled && styles.actionActive, pressed && styles.pressed]}><Text style={styles.actionLabel}>{microphoneEnabled ? "MIC ON" : "MIC OFF"}</Text></Pressable>
+        <Pressable onPress={selectSpeaker} style={({ pressed }) => [styles.action, audioRoute === "speaker" && styles.actionActive, pressed && styles.pressed]}><Text style={styles.actionLabel}>PHONE SPEAKER</Text></Pressable>
         <Pressable onPress={selectBluetooth} style={({ pressed }) => [styles.action, audioRoute === "bluetooth" && styles.actionActive, pressed && styles.pressed]}><Text style={styles.actionLabel}>Bluetooth</Text></Pressable>
       </View>
-      <Text style={styles.hint}>الصوت يُربط مباشرة بين أعضاء الغرفة. قد يحتاج بعض الاتصالات المقيدة إلى خادم TURN للإنتاج واسع النطاق.</Text>
+      <Text style={styles.hint}>Voice connects directly between room members. Some restricted networks may require a TURN server for broad production use.</Text>
     </View>
   );
 });
@@ -204,14 +204,14 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
 const styles = StyleSheet.create({
   card: { backgroundColor: "#160D29", borderWidth: 1, borderColor: "#4B3370", borderRadius: 18, padding: 14, marginTop: 16 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  title: { color: "#DCA7FF", fontSize: 14, fontWeight: "900", textAlign: "right" },
+  title: { color: "#DCA7FF", fontSize: 14, fontWeight: "900", textAlign: "left" },
   counter: { backgroundColor: "#27203A", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
   counterText: { color: "#9EEBFF", fontSize: 10, fontWeight: "800" },
-  status: { color: "#C5BDD3", fontSize: 12, textAlign: "right", marginTop: 6 },
-  actions: { flexDirection: "row-reverse", gap: 7, marginTop: 11 },
+  status: { color: "#C5BDD3", fontSize: 12, textAlign: "left", marginTop: 6 },
+  actions: { flexDirection: "row", gap: 7, marginTop: 11 },
   action: { flex: 1, minHeight: 46, borderRadius: 13, backgroundColor: "#231836", borderWidth: 1, borderColor: "#433054", alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   actionActive: { backgroundColor: "#5A2993", borderColor: "#B768FF" },
   actionLabel: { color: "#FFFFFF", fontSize: 10, fontWeight: "900", textAlign: "center" },
-  hint: { color: "#9086A6", fontSize: 10, lineHeight: 16, textAlign: "right", marginTop: 10 },
+  hint: { color: "#9086A6", fontSize: 10, lineHeight: 16, textAlign: "left", marginTop: 10 },
   pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
 });

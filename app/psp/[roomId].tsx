@@ -15,8 +15,13 @@ import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorMo
 const PSP_EXTENSIONS = [".iso", ".cso", ".chd", ".pbp"];
 
 export default function PSPRoomScreen() {
-  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const { roomId, orientation, aspectRatio } = useLocalSearchParams<{ roomId: string; orientation?: string; aspectRatio?: string }>();
   const numericRoomId = Number(roomId);
+  const playerAspect: "fit" | "4:3" | "16:9" = aspectRatio === "fit" || aspectRatio === "4:3" || aspectRatio === "16:9" ? aspectRatio : "4:3";
+  const playerOptions = {
+    orientation: orientation === "portrait" ? "portrait" as const : "landscape" as const,
+    aspectRatio: playerAspect,
+  };
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
   const [roomConnected, setRoomConnected] = useState(false);
@@ -56,7 +61,7 @@ export default function PSPRoomScreen() {
   const launchGame = async () => {
     if (!game) return;
     if (Platform.OS === "web") { Alert.alert("Android APK required", "The native PSP player is available in the Android APK only."); return; }
-    try { setLaunching(true); await MoudieEmulatorModule.launchNativeGame("psp", game.uri, game.name); }
+    try { setLaunching(true); await MoudieEmulatorModule.launchNativeGame("psp", game.uri, game.name, playerOptions); }
     catch (error) { haptic.error(); Alert.alert("Could not start PSP", error instanceof Error ? error.message : "Try again."); }
     finally { setLaunching(false); }
   };
@@ -70,7 +75,7 @@ export default function PSPRoomScreen() {
         <Text style={styles.subtitle}>Choose a legal PSP game file, then enter the player from this room. Text chat and voice controls remain available for everyone in the room.</Text>
         <View style={styles.preview}><Text style={styles.previewMark}>PSP</Text><Text style={styles.gameName}>{game?.name || "NO GAME SELECTED"}</Text><Text style={styles.previewText}>{game ? "Ready for PPSSPP" : "Supports ISO, CSO, CHD, and PBP"}</Text></View>
         <Pressable onPress={pickGame} disabled={picking || launching} style={({ pressed }) => [styles.primary, (pressed || picking || launching) && styles.disabled]}>{picking ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{game ? "CHANGE PSP GAME" : "CHOOSE PSP GAME"}</Text>}</Pressable>
-        {game && <Pressable onPress={launchGame} disabled={launching || picking} style={({ pressed }) => [styles.launch, (pressed || launching || picking) && styles.disabled]}>{launching ? <ActivityIndicator color="#071018" /> : <Text style={styles.launchText}>START PSP · PORTRAIT OR LANDSCAPE</Text>}</Pressable>}
+        {game && <Pressable onPress={launchGame} disabled={launching || picking} style={({ pressed }) => [styles.launch, (pressed || launching || picking) && styles.disabled]}>{launching ? <ActivityIndicator color="#071018" /> : <Text style={styles.launchText}>{`START PSP · ${playerOptions.orientation.toUpperCase()} · ${playerOptions.aspectRatio === "fit" ? "FIT" : playerOptions.aspectRatio}`}</Text>}</Pressable>}
         <View style={styles.note}><Text style={styles.noteTitle}>ROOM CONTROLS</Text><Text style={styles.noteText}>Use the CHAT and MIC buttons inside the game surface. Use EDIT to move controls and pinch or SIZE − / + to resize them. Each orientation keeps its own layout.</Text></View>
         {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title="PSP ROOM CHAT" /><RoomVoiceChat socket={roomConnected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} /></>}
       </ScrollView>

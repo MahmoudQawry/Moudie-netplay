@@ -26,8 +26,13 @@ function isPs1GameFile(name: string) {
 }
 
 export default function PS1Screen() {
-  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const { roomId, orientation, aspectRatio } = useLocalSearchParams<{ roomId: string; orientation?: string; aspectRatio?: string }>();
   const numericRoomId = Number(roomId);
+  const playerAspect: "fit" | "4:3" | "16:9" = aspectRatio === "fit" || aspectRatio === "4:3" || aspectRatio === "16:9" ? aspectRatio : "4:3";
+  const playerOptions = {
+    orientation: orientation === "portrait" ? "portrait" as const : "landscape" as const,
+    aspectRatio: playerAspect,
+  };
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
   const voiceChatRef = useRef<RoomVoiceChatHandle | null>(null);
@@ -104,6 +109,8 @@ export default function PS1Screen() {
       socket.disconnect();
       if (socketRef.current === socket) socketRef.current = null;
     };
+    // launchGame intentionally remains outside the dependency list so the socket subscription is recreated only when room credentials or game selection change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credential, game, numericRoomId]);
 
   const pickGame = async () => {
@@ -187,7 +194,7 @@ export default function PS1Screen() {
       } : undefined;
       if (withNetplay && !netplay) throw new Error("PS1 NetPlay requires two room members who selected the same complete game file.");
       setStatus(netplay ? "Preparing PS1 NetPlay and assigning this device inside the room…" : "Preparing the game file and opening PCSX-ReARMed…");
-      await MoudieEmulatorModule.launchPS1Game(game.uri, game.name, netplay);
+      await MoudieEmulatorModule.launchPS1Game(game.uri, game.name, netplay, playerOptions);
       setStatus(netplay ? "The PS1 player is open and linked to the room. Wait for the in-game verification message." : "The local player is open. Returning from the game brings you back to this room.");
     } catch (error) {
       haptic.error();

@@ -45,7 +45,7 @@ class Ps1NetplayClient(
     socket = IO.socket(config.serverUrl, options).apply {
       on(Socket.EVENT_CONNECT) {
         emit("netplay:ps1-ready", JSONObject().put("fingerprint", config.fingerprint).put("coreVersion", config.coreVersion))
-        onStatus("تم ربط قناة PS1. انتظر تأكيد جاهزية الغرفة قبل بدء المحاكي.")
+        onStatus("PS1 channel connected. Wait for room readiness confirmation before starting the player.")
       }
       on("netplay:ps1-session-bootstrap") { onBootstrap() }
       on("netplay:ps1-session-go") { args ->
@@ -70,10 +70,10 @@ class Ps1NetplayClient(
       on("netplay:chat") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val text = payload.optString("text", "").trim()
-        if (text.isNotEmpty()) onChat(payload.optString("displayName", "اللاعب الآخر"), text)
+        if (text.isNotEmpty()) onChat(payload.optString("displayName", "Other player"), text)
       }
-      on(Socket.EVENT_CONNECT_ERROR) { onStatus("تعذر اتصال PS1 بالغرفة. تأكد من الإنترنت ثم أعد فتح المشغّل.") }
-      on(Socket.EVENT_DISCONNECT) { onStatus("انقطع اتصال PS1 بالغرفة؛ سيواصل جهازك اللعب المحلي حتى تعود القناة.") }
+      on(Socket.EVENT_CONNECT_ERROR) { onStatus("Could not connect PS1 to the room. Check internet access and reopen the player.") }
+      on(Socket.EVENT_DISCONNECT) { onStatus("PS1 room connection closed; this device continues local play until the channel returns.") }
       connect()
     }
   }

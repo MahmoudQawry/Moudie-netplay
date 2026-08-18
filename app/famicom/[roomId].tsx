@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, I18nManager, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ViewStyle } from "react-native";
+import { ActivityIndicator, Alert, AppState, I18nManager, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import type { Socket } from "socket.io-client";
 
@@ -79,7 +79,7 @@ export default function FamicomScreen() {
   const [gameReady, setGameReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isCompatLaunching, setIsCompatLaunching] = useState(false);
-  const [networkState, setNetworkState] = useState("اختر اللعبة أولاً");
+  const [networkState, setNetworkState] = useState("Choose a game first");
   const [remoteVerified, setRemoteVerified] = useState(false);
   const [roomConnected, setRoomConnected] = useState(false);
   const [remoteOnline, setRemoteOnline] = useState(false);
@@ -90,7 +90,9 @@ export default function FamicomScreen() {
   const [inGameMicMuted, setInGameMicMuted] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [focusControlEditor, setFocusControlEditor] = useState(false);
-  const [controlScale, setControlScale] = useState(1);
+  const [startOptionsOpen, setStartOptionsOpen] = useState(false);
+  const [startOrientation, setStartOrientation] = useState<"portrait" | "landscape">("landscape");
+  const [screenAspect, setScreenAspect] = useState<"fit" | "4:3" | "16:9">("4:3");
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -102,12 +104,9 @@ export default function FamicomScreen() {
 
   useEffect(() => {
     if (Number.isFinite(roomId)) getRoomCredential(roomId).then(setCredential);
-    AsyncStorage.getItem("moudie.control-scale").then((saved) => {
-      const parsed = Number(saved);
-      if (Number.isFinite(parsed) && parsed >= 0.75 && parsed <= 1.3) setControlScale(parsed);
-    });
+    const releaseTimers = directionReleaseTimersRef.current;
     return () => {
-      Object.values(directionReleaseTimersRef.current).forEach((timer) => {
+      Object.values(releaseTimers).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
       connectionRef.current?.close();
@@ -117,13 +116,6 @@ export default function FamicomScreen() {
     };
   }, [roomId]);
 
-  const changeControlScale = (delta: number) => {
-    setControlScale((current) => {
-      const next = Math.min(1.3, Math.max(0.75, Math.round((current + delta) * 100) / 100));
-      AsyncStorage.setItem("moudie.control-scale", String(next));
-      return next;
-    });
-  };
 
   const snapshotQuery = trpc.rooms.snapshot.useQuery(
     { roomId, memberId: credential?.memberId ?? 0, memberToken: credential?.memberToken ?? "" },
@@ -143,7 +135,7 @@ export default function FamicomScreen() {
     );
     const verified = matchingPlayers.length >= 2;
     setRemoteVerified(verified);
-    if (verified && roomConnected) setNetworkState("تم التحقق من ملف اللعبة عند اللاعب الآخر. يمكن للمضيف بدء الجلسة.");
+    if (verified && roomConnected) setNetworkState("The other player verified the game file. The host can start the session.");
   }, [fingerprint, roomConnected, snapshot]);
 
   const applyButton = (player: 1 | 2, button: string, isDown: boolean) => {
@@ -168,27 +160,27 @@ export default function FamicomScreen() {
       const snapshotValue = await AsyncStorage.getItem(localStateStorageKey);
       if (!snapshotValue) return;
       nativePlayerRef.current?.applyState(snapshotValue);
-      setNetworkState("تم استرجاع آخر حالة محلية للعبة.");
+      setNetworkState("The latest local game state was restored.");
     } catch {
-      setNetworkState("تعذر استرجاع آخر حالة محلية للعبة.");
+      setNetworkState("Could not restore the latest local game state.");
     }
   };
 
   const saveLocalState = () => {
     if (Platform.OS === "web" || !localStateStorageKey) return;
     nativePlayerRef.current?.requestState("local");
-    setNetworkState("جارٍ حفظ حالة اللعبة محلياً…");
+    setNetworkState("Saving the game state locally…");
   };
 
   const loadLocalState = async () => {
     if (Platform.OS === "web" || !localStateStorageKey) return;
     const snapshotValue = await AsyncStorage.getItem(localStateStorageKey);
     if (!snapshotValue) {
-      Alert.alert("لا توجد حالة محفوظة", "ابدأ اللعب ثم اضغط «حفظ محلي» لإنشاء حالة لهذه اللعبة.");
+      Alert.alert("No saved state", "Start the game, then tap Local Save to create a save state for this game.");
       return;
     }
     nativePlayerRef.current?.applyState(snapshotValue);
-    setNetworkState("تم استرجاع آخر حالة محلية للعبة.");
+    setNetworkState("The latest local game state was restored.");
     haptic.success();
   };
 
@@ -196,13 +188,13 @@ export default function FamicomScreen() {
     if (Platform.OS === "web" || !romUri || !romName) return;
     try {
       setIsCompatLaunching(true);
-      setNetworkState("جارٍ فتح وضع التوافق الموسّع محلياً…");
-      await MoudieEmulatorModule.launchFamicomCompatGame(romUri, romName);
-      setNetworkState("يعمل وضع التوافق الموسّع محلياً. ارجع هنا للعب NetPlay.");
+      setNetworkState("Opening extended compatibility mode locally…");
+      await MoudieEmulatorModule.launchFamicomCompatGame(romUri, romName, { orientation: startOrientation, aspectRatio: screenAspect });
+      setNetworkState("Extended compatibility mode is running locally. Return here for NetPlay.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "تعذر فتح وضع التوافق الموسّع.";
+      const message = error instanceof Error ? error.message : "Could not open extended compatibility mode.";
       setNetworkState(message);
-      Alert.alert("تعذر فتح وضع التوافق", message);
+      Alert.alert("Could not open compatibility mode", message);
       haptic.error();
     } finally {
       setIsCompatLaunching(false);
@@ -217,13 +209,13 @@ export default function FamicomScreen() {
     if (!romUri || !romName) return;
     try {
       setIsCompatLaunching(true);
-      setNetworkState("جارٍ فتح وضع التركيز الأصلي مع صوت ورسوم Famicom…");
-      await MoudieEmulatorModule.launchFamicomFocusGame(romUri, romName);
-      setNetworkState("عاد وضع التركيز الأصلي. تبقى قناة NetPlay في شاشة الغرفة؛ اللعب الأصلي محلياً حالياً.");
+      setNetworkState("Opening native focus mode with Famicom audio and graphics…");
+      await MoudieEmulatorModule.launchFamicomFocusGame(romUri, romName, { orientation: startOrientation, aspectRatio: screenAspect });
+      setNetworkState("Native focus mode is open. The NetPlay channel remains in the room; native play is currently local.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "تعذر فتح وضع التركيز الأصلي.";
+      const message = error instanceof Error ? error.message : "Could not open native focus mode.";
       setNetworkState(message);
-      Alert.alert("تعذر فتح وضع التركيز", message);
+      Alert.alert("Could not open focus mode", message);
       haptic.error();
     } finally {
       setIsCompatLaunching(false);
@@ -254,21 +246,21 @@ export default function FamicomScreen() {
       try {
         browserRef.current?.nes.fromJSON(JSON.parse(message.snapshot));
         lastFamicomSyncRef.current = message.syncId;
-        setNetworkState("تمت مزامنة بداية اللعبة من المضيف.");
+        setNetworkState("The host synchronized the game start.");
       } catch {
-        setNetworkState("تعذرت مزامنة بداية اللعبة. أعيدا تحميل الملف ثم اتصال الغرفة.");
+        setNetworkState("Could not synchronize the game start. Reload the file and reconnect to the room.");
       }
       return;
     }
     if (message.type !== "rom") return;
     const localFingerprint = fingerprintRef.current;
     if (message.fingerprint !== localFingerprint || message.coreVersion !== FAMICOM_CORE_VERSION) {
-      setNetworkState("الملف أو إصدار المحرك مختلف عند اللاعب الآخر.");
+      setNetworkState("The other player has a different game file or core version.");
       haptic.error();
       return;
     }
     setRemoteVerified(true);
-    setNetworkState("تم التحقق من اللعبة. يمكن للمضيف بدء الجلسة الثنائية.");
+    setNetworkState("Game compatibility verified. The host can start the two-player session.");
     haptic.success();
   };
 
@@ -278,11 +270,11 @@ export default function FamicomScreen() {
       const currentFingerprint = fingerprintRef.current;
       if (!currentFingerprint) return;
       connection.send({ type: "rom", fingerprint: currentFingerprint, coreVersion: FAMICOM_CORE_VERSION });
-      setNetworkState("تم الاتصال بالجهاز الآخر. جارٍ التحقق من ملف اللعبة…");
+      setNetworkState("Connected to the other device. Verifying the game file…");
     });
     connection.on("data", receiveMessage);
-    connection.on("close", () => setNetworkState("انقطع الاتصال باللاعب الآخر."));
-    connection.on("error", () => setNetworkState("تعذر إكمال الاتصال. تأكد أن اللاعب الآخر فتح مشغّل Famicom."));
+    connection.on("close", () => setNetworkState("Connection to the other player was closed."));
+    connection.on("error", () => setNetworkState("Could not complete the connection. Check that the other player opened the Famicom player."));
   };
 
   const connectNativeNetplay = () => {
@@ -291,25 +283,25 @@ export default function FamicomScreen() {
       socketRef.current?.disconnect();
       setRoomConnected(false);
       setRemoteOnline(false);
-      setNetworkState("جارٍ ربط قناة NetPlay الخاصة بالغرفة…");
+      setNetworkState("Connecting the room NetPlay channel…");
       const socket = createNetplaySocket({ roomId, memberId: credential.memberId, memberToken: credential.memberToken });
       socketRef.current = socket;
       socket.on("connect", () => {
         setRoomConnected(true);
-        setNetworkState("تم تجهيز قناة الغرفة. انتظر دخول اللاعب الآخر واختيار الملف نفسه.");
+        setNetworkState("The room channel is ready. Wait for the other player to join and choose the same file.");
       });
       socket.on("connect_error", () => {
         setRoomConnected(false);
-        setNetworkState("تعذر الاتصال بالغرفة. تأكد من الإنترنت ثم أعد المحاولة.");
+        setNetworkState("Could not connect to the room. Check your internet connection and try again.");
       });
       socket.on("disconnect", () => {
         assignedPlayerRef.current = null;
         setAssignedPlayer(null);
         setRoomConnected(false);
         setRemoteOnline(false);
-        setNetworkState("انقطع اتصال الغرفة مؤقتاً؛ جارٍ إعادة الاتصال تلقائياً…");
+        setNetworkState("Room connection interrupted; reconnecting automatically…");
       });
-      socket.io.on("reconnect_attempt", () => setNetworkState("جارٍ إعادة اتصال الغرفة…"));
+      socket.io.on("reconnect_attempt", () => setNetworkState("Reconnecting to the room…"));
       socket.on("netplay:joined", (payload: { onlineMemberIds?: number[]; assignedPlayer?: 1 | 2 }) => {
         const player = payload.assignedPlayer === 1 ? 1 : payload.assignedPlayer === 2 ? 2 : null;
         assignedPlayerRef.current = player;
@@ -322,15 +314,15 @@ export default function FamicomScreen() {
       });
       socket.on("netplay:session-start", (payload: { system?: string }) => {
         if (payload.system !== "nes") return;
-        setNetworkState("تم تأكيد مطابقة اللعبة. يبدأ اللاعبان الآن من الحالة المحلية نفسها.");
+        setNetworkState("Game compatibility confirmed. Both players now start from the same local state.");
         if (assignedPlayerRef.current === 1 && credential.hostToken) {
           startRoom.mutateAsync({ roomId, hostToken: credential.hostToken }).catch((error) => {
-            setNetworkState(error instanceof Error ? error.message : "تعذر تثبيت بدء الجلسة.");
+            setNetworkState(error instanceof Error ? error.message : "Could not confirm the session start.");
           });
         }
       });
       socket.on("netplay:session-start-refused", (payload: { message?: string }) => {
-        setNetworkState(payload.message ?? "بانتظار تأكيد اللاعب الآخر للملف والمحرك.");
+        setNetworkState(payload.message ?? "Waiting for the other player to confirm the game file and core.");
       });
       socket.on("netplay:input", (payload: { player: 1 | 2; button: ButtonName; isDown: boolean }) => {
         applyButtonRef.current(payload.player, payload.button, payload.isDown);
@@ -348,7 +340,7 @@ export default function FamicomScreen() {
         setChatMessages((current) => [...current.slice(-39), message]);
       });
     } catch (error) {
-      setNetworkState(error instanceof Error ? error.message : "تعذر تجهيز اتصال NetPlay.");
+      setNetworkState(error instanceof Error ? error.message : "Could not prepare the NetPlay connection.");
     }
   };
 
@@ -366,13 +358,13 @@ export default function FamicomScreen() {
       const asset = result.assets[0];
       if (!isNesFile(asset.name)) {
         haptic.error();
-        Alert.alert("الملف غير مناسب", "اختر ملف Famicom بامتداد .nes من ألعابك التي تملكها قانونياً.");
+        Alert.alert("Unsupported file", "Choose a legal Famicom game with the .nes extension.");
         return;
       }
       setLoading(true);
       if (Platform.OS !== "web") {
         const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-        if (!base64) throw new Error("تعذر قراءة ملف اللعبة من التخزين.");
+        if (!base64) throw new Error("Could not read the game file from storage.");
         const localFingerprint = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, base64);
         fingerprintRef.current = localFingerprint;
         setFingerprint(localFingerprint);
@@ -381,7 +373,7 @@ export default function FamicomScreen() {
         setRomBase64(base64);
         setGameReady(false);
         setRemoteVerified(false);
-        setNetworkState("جارٍ تحميل اللعبة محلياً على الهاتف…");
+        setNetworkState("Loading the game locally on this device…");
         if (credential) {
           await setReady.mutateAsync({
             memberId: credential.memberId,
@@ -394,13 +386,13 @@ export default function FamicomScreen() {
         haptic.success();
         return;
       }
-      if (!asset.file) throw new Error("تعذر قراءة ملف اللعبة من المتصفح.");
+      if (!asset.file) throw new Error("Could not read the game file in the browser.");
       const romData = await asset.file.arrayBuffer();
       const localFingerprint = await fingerprintRom(romData);
       const jsnes = (await import("jsnes")) as unknown as JsNesModule;
       jsNesRef.current = jsnes;
       browserRef.current?.destroy();
-      if (!mountRef.current) throw new Error("تعذر تجهيز شاشة المحاكي.");
+      if (!mountRef.current) throw new Error("Could not prepare the emulator screen.");
       mountRef.current.innerHTML = "";
       browserRef.current = new jsnes.Browser({ container: mountRef.current, romData });
       fingerprintRef.current = localFingerprint;
@@ -409,15 +401,15 @@ export default function FamicomScreen() {
       setRomUri(asset.uri);
       setGameReady(false);
       setRemoteVerified(false);
-      setNetworkState("تم تشغيل اللعبة محلياً. اضغط ربط اللاعب الآخر بعد أن يختار اللعبة نفسها.");
+      setNetworkState("The game is running locally. Connect the other player after they choose the same game.");
       if (credential) {
         await setReady.mutateAsync({ memberId: credential.memberId, memberToken: credential.memberToken, isReady: false, gameFingerprint: localFingerprint, coreVersion: FAMICOM_CORE_VERSION });
       }
       haptic.success();
     } catch (error) {
-      setNetworkState("تعذر تشغيل الملف. جرّب ملف .nes آخر متوافقاً.");
+      setNetworkState("Could not run this file. Try another compatible .nes file.");
       haptic.error();
-      Alert.alert("تعذر تشغيل اللعبة", error instanceof Error ? error.message : "حاول بملف Famicom آخر.");
+      Alert.alert("Could not start the game", error instanceof Error ? error.message : "Try another Famicom game file.");
     } finally {
       setLoading(false);
     }
@@ -433,14 +425,14 @@ export default function FamicomScreen() {
       connectionRef.current?.close();
       peerRef.current?.destroy();
       setRemoteVerified(false);
-      setNetworkState(isHost ? "جارٍ تجهيز اتصال الغرفة…" : "جارٍ الاتصال بالمضيف…");
+      setNetworkState(isHost ? "Preparing the room connection…" : "Connecting to the host…");
       const peerModule = await import("peerjs");
       const PeerConstructor = peerModule.default;
       const peer = (isHost ? new PeerConstructor(peerIdForRoom(roomId)) : new PeerConstructor()) as unknown as PeerInstance;
       peerRef.current = peer;
-      peer.on("error", () => setNetworkState(isHost ? "تعذر حجز اتصال الغرفة. أعد المحاولة بعد دقيقة." : "المضيف غير جاهز بعد. اطلب منه الضغط على زر الربط أولاً."));
+      peer.on("error", () => setNetworkState(isHost ? "Could not reserve the room connection. Try again in a minute." : "The host is not ready yet. Ask them to connect first."));
       if (isHost) {
-        peer.on("open", () => setNetworkState("اتصال الغرفة جاهز. انتظر اللاعب الثاني ليضغط ربط اللاعب الآخر."));
+        peer.on("open", () => setNetworkState("The room connection is ready. Wait for the second player to connect."));
         peer.on("connection", (incoming) => attachConnection(incoming as Connection));
       } else {
         peer.on("open", () => {
@@ -449,7 +441,7 @@ export default function FamicomScreen() {
         });
       }
     } catch {
-      setNetworkState("تعذر تشغيل NetPlay على هذا الاتصال. تأكد من تحديث المتصفح ثم أعد المحاولة.");
+      setNetworkState("Could not start NetPlay on this connection. Update the browser and try again.");
       haptic.error();
     }
   };
@@ -466,11 +458,11 @@ export default function FamicomScreen() {
       });
       socketRef.current?.emit("netplay:session-ready", { system: "nes", fingerprint, coreVersion: FAMICOM_CORE_VERSION });
       setGameReady(true);
-      setNetworkState("تم إعلان جاهزية ملفك. انتظر جاهزية اللاعب الآخر، ثم يبدأ المضيف الجلسة.");
+      setNetworkState("Your game file is marked ready. Wait for the other player, then the host starts the session.");
       haptic.success();
     } catch (error) {
       haptic.error();
-      Alert.alert("تعذر إعلان الاستعداد", error instanceof Error ? error.message : "أعد المحاولة.");
+      Alert.alert("Could not mark ready", error instanceof Error ? error.message : "Try again.");
     }
   };
 
@@ -479,22 +471,22 @@ export default function FamicomScreen() {
     if (!isAuthoritativeHost || !credential?.hostToken || !remoteVerified) return;
     try {
       if (Platform.OS !== "web") {
-        if (!socketRef.current?.connected || !remoteOnline) throw new Error("انتظر حتى يربط اللاعب الآخر قناة الغرفة.");
+        if (!socketRef.current?.connected || !remoteOnline) throw new Error("Wait until the other player connects to the room channel.");
         socketRef.current.emit("netplay:session-start-request", { system: "nes" });
-        setNetworkState("جارٍ التحقق من الملف والمحرك عند الجهازين قبل البدء…");
+        setNetworkState("Verifying the file and core on both devices before starting…");
         haptic.success();
         return;
       }
       const initialState = browserRef.current?.nes.toJSON();
       if (!initialState || !connectionRef.current) {
-        throw new Error("الربط بين الهاتفين غير مكتمل بعد.");
+        throw new Error("The connection between both devices is not complete yet.");
       }
       connectionRef.current.send({ type: "state", snapshot: JSON.stringify(initialState), syncId: ++famicomSyncSequenceRef.current });
       await startRoom.mutateAsync({ roomId, hostToken: credential.hostToken });
-      setNetworkState("الجلسة الثنائية نشطة. المضيف لاعب 1 والضيف لاعب 2.");
+      setNetworkState("The two-player session is active. The host is Player 1 and the guest is Player 2.");
       haptic.success();
     } catch (error) {
-      Alert.alert("لم تبدأ الجلسة", error instanceof Error ? error.message : "انتظر حتى يصبح اللاعبان جاهزين.");
+      Alert.alert("The session did not start", error instanceof Error ? error.message : "Wait until both players are ready.");
     }
   };
 
@@ -502,7 +494,7 @@ export default function FamicomScreen() {
     if (isDown && Platform.OS !== "web") nativePlayerRef.current?.resumeAudio();
     const player = Platform.OS === "web" ? (isHost ? 1 : 2) : (assignedPlayer ?? (romBase64 ? 1 : null));
     if (!player) {
-      if (isDown) setNetworkState("جارٍ تثبيت دور جهازك في الغرفة. انتظر لحظة ثم اضغط الزر مرة أخرى.");
+      if (isDown) setNetworkState("Confirming this device role in the room. Wait a moment, then press the button again.");
       return;
     }
     const sendTransitions = (transitions: { button: ButtonName; isDown: boolean }[]) => {
@@ -533,7 +525,7 @@ export default function FamicomScreen() {
     if (isDown && Platform.OS !== "web") nativePlayerRef.current?.resumeAudio();
     const player = Platform.OS === "web" ? (isHost ? 1 : 2) : (assignedPlayer ?? (romBase64 ? 1 : null));
     if (!player) {
-      if (isDown) setNetworkState("جارٍ تثبيت دور جهازك في الغرفة. انتظر لحظة ثم اضغط الزر مرة أخرى.");
+      if (isDown) setNetworkState("Confirming this device role in the room. Wait a moment, then press the button again.");
       return;
     }
     applyButton(player, button, isDown);
@@ -541,11 +533,6 @@ export default function FamicomScreen() {
     else connectionRef.current?.send({ type: "input", player, button, isDown });
   };
 
-  const controllerButton = (label: string, button: ButtonName, variant: "main" | "minor" = "main", placement?: ViewStyle, scale = controlScale) => (
-    <Pressable key={button} onPressIn={() => setLocalButton(button, true)} onPressOut={() => setLocalButton(button, false)} style={({ pressed }) => [variant === "main" ? [styles.controlButton, focusMode && styles.focusControlButton, { width: 54 * scale, height: 54 * scale, borderRadius: 27 * scale }] : [styles.minorButton, focusMode && styles.focusMinorButton], placement, pressed && styles.controlPressed]}>
-      <Text style={variant === "main" ? styles.controlText : styles.minorText}>{label}</Text>
-    </Pressable>
-  );
 
   const canStart = Boolean(
     (Platform.OS === "web" ? isHost : assignedPlayer === 1) &&
@@ -564,20 +551,20 @@ export default function FamicomScreen() {
       <StatusBar style="light" hidden={focusMode} animated />
       <ScrollView contentContainerStyle={[styles.content, focusMode && styles.focusContent]}>
         <View style={styles.topActions}>
-          <Pressable onPress={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>{focusMode ? "تصغير وضع التركيز" : "‹ العودة إلى الغرفة"}</Text></Pressable>
-          {focusMode ? <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={({ pressed }) => [styles.focusButton, focusControlEditor && styles.focusButtonActive, pressed && styles.pressed]}><Text style={styles.focusButtonText}>{focusControlEditor ? "حفظ الأزرار" : "تخصيص الأزرار"}</Text></Pressable> : romName && <Pressable onPress={launchNativeFocusPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.focusButton, (pressed || isCompatLaunching) && styles.pressed]}><Text style={styles.focusButtonText}>{isCompatLaunching ? "جارٍ فتح وضع التركيز…" : "وضع تركيز"}</Text></Pressable>}
+          <Pressable onPress={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>{focusMode ? "EXIT FOCUS MODE" : "‹ BACK TO ROOM"}</Text></Pressable>
+          {focusMode ? <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={({ pressed }) => [styles.focusButton, focusControlEditor && styles.focusButtonActive, pressed && styles.pressed]}><Text style={styles.focusButtonText}>{focusControlEditor ? "SAVE CONTROLS" : "EDIT CONTROLS"}</Text></Pressable> : romName && <Pressable onPress={launchNativeFocusPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.focusButton, (pressed || isCompatLaunching) && styles.pressed]}><Text style={styles.focusButtonText}>{isCompatLaunching ? "OPENING FOCUS MODE…" : "FOCUS MODE"}</Text></Pressable>}
         </View>
-        {!focusMode && <><Text style={styles.eyebrow}>FAMICOM · NETPLAY</Text><Text style={styles.title}>مشغّل اللعبة</Text><Text style={styles.subtitle}>اختر ملف .nes نفسه على الهاتفين. يبقى الملف محلياً ولا يرفعه Moudie NetPlay أو يشاركه.</Text></>}
+        {!focusMode && <><Text style={styles.eyebrow}>FAMICOM · NETPLAY</Text><Text style={styles.title}>GAME PLAYER</Text><Text style={styles.subtitle}>Choose the same .nes file on both devices. The file stays local and is never uploaded or shared by Moudie NetPlay.</Text></>}
 
-        <View style={[styles.emulatorFrame, focusMode && styles.focusFrame]}>
-          {Platform.OS === "web" ? <View ref={mountRef as never} style={styles.webMount} /> : romBase64 ? <FamicomNativePlayer ref={nativePlayerRef} romBase64={romBase64} onStatus={setNetworkState} onReady={restoreLocalState} onState={(snapshotValue, requestId) => { if (localStateStorageKey) AsyncStorage.setItem(localStateStorageKey, snapshotValue).catch(() => undefined); if (requestId === "netplay" && assignedPlayer === 1) socketRef.current?.emit("netplay:state", { snapshot: snapshotValue, syncId: ++famicomSyncSequenceRef.current }); if (requestId === "local") setNetworkState("تم حفظ حالة اللعبة محلياً."); }} /> : null}
-          {!romName && <View style={styles.emptyScreen}><Text style={styles.emptyIcon}>▦</Text><Text style={styles.emptyText}>لم يتم اختيار لعبة بعد</Text></View>}
+        <View style={[styles.emulatorFrame, focusMode && styles.focusFrame, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9, minHeight: undefined }]}>
+          {Platform.OS === "web" ? <View ref={mountRef as never} style={[styles.webMount, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9 }]} /> : romBase64 ? <FamicomNativePlayer ref={nativePlayerRef} romBase64={romBase64} onStatus={setNetworkState} onReady={restoreLocalState} onState={(snapshotValue, requestId) => { if (localStateStorageKey) AsyncStorage.setItem(localStateStorageKey, snapshotValue).catch(() => undefined); if (requestId === "netplay" && assignedPlayer === 1) socketRef.current?.emit("netplay:state", { snapshot: snapshotValue, syncId: ++famicomSyncSequenceRef.current }); if (requestId === "local") setNetworkState("Game state saved locally."); }} /> : null}
+          {!romName && <View style={styles.emptyScreen}><Text style={styles.emptyIcon}>▦</Text><Text style={styles.emptyText}>NO GAME SELECTED</Text></View>}
           {Platform.OS !== "web" && gameActive && romName && <View style={styles.inGameOverlay}><Pressable onPress={() => setInGameChatOpen((open) => !open)} style={({ pressed }) => [styles.inGameOverlayButton, pressed && styles.pressed]}><Text style={styles.inGameOverlayText}>▣</Text></Pressable><Pressable onPress={() => { const muted = !inGameMicMuted; setInGameMicMuted(muted); voiceChatRef.current?.setMicrophoneEnabled(!muted); }} style={({ pressed }) => [styles.inGameOverlayButton, pressed && styles.pressed]}><Text style={styles.inGameOverlayText}>{inGameMicMuted ? "MIC×" : "MIC"}</Text></Pressable></View>}
-          {Platform.OS !== "web" && gameActive && inGameChatOpen && <View style={styles.inGameChatOverlay}><TextInput value={chatDraft} onChangeText={setChatDraft} placeholder="رسالة…" placeholderTextColor="#A7B7C7" style={styles.inGameChatInput} returnKeyType="send" onSubmitEditing={() => { sendChat(); setInGameChatOpen(false); }} /><Pressable onPress={() => { sendChat(); setInGameChatOpen(false); }} style={styles.inGameChatSend}><Text style={styles.inGameChatSendText}>إرسال</Text></Pressable></View>}
+          {Platform.OS !== "web" && gameActive && inGameChatOpen && <View style={styles.inGameChatOverlay}><TextInput value={chatDraft} onChangeText={setChatDraft} placeholder="Message…" placeholderTextColor="#A7B7C7" style={styles.inGameChatInput} returnKeyType="send" onSubmitEditing={() => { sendChat(); setInGameChatOpen(false); }} /><Pressable onPress={() => { sendChat(); setInGameChatOpen(false); }} style={styles.inGameChatSend}><Text style={styles.inGameChatSendText}>SEND</Text></Pressable></View>}
         </View>
         {focusMode && romName && <View style={[styles.focusPortraitControls, !controlsEnabled && styles.controlsMuted]}>
           <View style={styles.focusTelemetry}>
-            <Text style={styles.focusMetric}>FPS —</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>{roomConnected ? "PING — ms" : "اتصال محلي"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>P{assignedPlayer ?? 1}</Text>
+            <Text style={styles.focusMetric}>FPS —</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>{roomConnected ? "PING — ms" : "LOCAL"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>P{assignedPlayer ?? 1}</Text>
           </View>
           <CustomizableController
             system="famicom"
@@ -588,20 +575,21 @@ export default function FamicomScreen() {
             }}
           />
         </View>}
-        {!focusMode && <><Pressable onPress={pickRom} disabled={loading || isCompatLaunching} style={({ pressed }) => [styles.pickButton, (pressed || loading || isCompatLaunching) && styles.pressed]}>{loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.pickText}>{romName ? "تغيير ملف اللعبة" : "1. اختيار ملف .nes"}</Text>}</Pressable>{romName && <Text style={styles.romName}>الملف المحلي: {romName}</Text>}{romName && Platform.OS !== "web" && <View style={[styles.utilityRow, physicalHorizontalRow]}><Pressable onPress={saveLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>حفظ محلي</Text></Pressable><Pressable onPress={loadLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>استرجاع الحفظ</Text></Pressable></View>}{romName && Platform.OS !== "web" && <Pressable onPress={launchCompatibilityPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.connectButton, (pressed || isCompatLaunching) && styles.pressed]}>{isCompatLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.connectText}>ملف لا يعمل؟ افتح وضع التوافق الموسّع</Text>}</Pressable>}</>}
+        {!focusMode && <><Pressable onPress={pickRom} disabled={loading || isCompatLaunching} style={({ pressed }) => [styles.pickButton, (pressed || loading || isCompatLaunching) && styles.pressed]}>{loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.pickText}>{romName ? "CHANGE GAME FILE" : "1. CHOOSE .NES FILE"}</Text>}</Pressable>{romName && <Text style={styles.romName}>LOCAL FILE: {romName}</Text>}{romName && Platform.OS !== "web" && <View style={[styles.utilityRow, physicalHorizontalRow]}><Pressable onPress={saveLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>LOCAL SAVE</Text></Pressable><Pressable onPress={loadLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>LOAD SAVE</Text></Pressable></View>}{romName && Platform.OS !== "web" && <Pressable onPress={launchCompatibilityPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.connectButton, (pressed || isCompatLaunching) && styles.pressed]}>{isCompatLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.connectText}>GAME NOT WORKING? OPEN EXTENDED COMPATIBILITY</Text>}</Pressable>}</>}
 
-        {!focusMode && <><View style={styles.statusCard}><Text style={styles.statusTitle}>حالة NetPlay</Text><Text style={styles.statusText}>{networkState}</Text><Text style={styles.progress}>{readyCount} لاعب جاهز من أصل {snapshot?.members.length ?? 0}</Text></View>
-        {romName && (Platform.OS === "web" ? !remoteVerified : !roomConnected) && <Pressable onPress={connectNetPlay} style={({ pressed }) => [styles.connectButton, pressed && styles.pressed]}><Text style={styles.connectText}>{Platform.OS === "web" ? (isHost ? "2. تجهيز اتصال الغرفة" : "2. ربط اللاعب الآخر") : "2. ربط قناة NetPlay"}</Text></Pressable>}
-        {Platform.OS !== "web" && romName && roomConnected && <Text style={styles.connectionLine}>{remoteOnline ? "● اللاعب الآخر متصل بالقناة" : "○ بانتظار اللاعب الآخر ليربط القناة"}</Text>}
-        {Platform.OS !== "web" && romName && roomConnected && <Pressable onPress={markGameReady} disabled={gameReady} style={({ pressed }) => [styles.startButton, (pressed || gameReady) && styles.pressed]}><Text style={styles.startText}>{gameReady ? "تم إعلان الاستعداد" : "3. استعداد"}</Text></Pressable>}
-        {canStart && <Pressable onPress={startSession} disabled={startRoom.isPending} style={({ pressed }) => [styles.startButton, (pressed || startRoom.isPending) && styles.pressed]}>{startRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.startText}>4. بدء اللعب للاعبين</Text>}</Pressable>}
-        {gameReady && remoteVerified && (Platform.OS === "web" ? !isHost : assignedPlayer === 2) && <Text style={styles.waitText}>تم التحقق. انتظر المضيف ليبدأ الجلسة.</Text>}</>}
+        {!focusMode && <><View style={styles.statusCard}><Text style={styles.statusTitle}>NETPLAY STATUS</Text><Text style={styles.statusText}>{networkState}</Text><Text style={styles.progress}>{readyCount} READY OUT OF {snapshot?.members.length ?? 0}</Text></View>
+        {romName && (Platform.OS === "web" ? !remoteVerified : !roomConnected) && <Pressable onPress={connectNetPlay} style={({ pressed }) => [styles.connectButton, pressed && styles.pressed]}><Text style={styles.connectText}>{Platform.OS === "web" ? (isHost ? "2. PREPARE ROOM CONNECTION" : "2. CONNECT TO OTHER PLAYER") : "2. CONNECT NETPLAY CHANNEL"}</Text></Pressable>}
+        {Platform.OS !== "web" && romName && roomConnected && <Text style={styles.connectionLine}>{remoteOnline ? "● OTHER PLAYER CONNECTED" : "○ WAITING FOR OTHER PLAYER"}</Text>}
+        {Platform.OS !== "web" && romName && roomConnected && <Pressable onPress={markGameReady} disabled={gameReady} style={({ pressed }) => [styles.startButton, (pressed || gameReady) && styles.pressed]}><Text style={styles.startText}>{gameReady ? "READY CONFIRMED" : "3. READY"}</Text></Pressable>}
+        {canStart && <Pressable onPress={() => setStartOptionsOpen(true)} disabled={startRoom.isPending} style={({ pressed }) => [styles.startButton, (pressed || startRoom.isPending) && styles.pressed]}>{startRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.startText}>4. START PLAY</Text>}</Pressable>}
+        {startOptionsOpen && <View style={styles.startOptions}><Text style={styles.startOptionsTitle}>START PLAY SETUP</Text><Text style={styles.startOptionsLabel}>ORIENTATION</Text><View style={styles.optionRow}>{(["portrait", "landscape"] as const).map((option) => <Pressable key={option} onPress={() => setStartOrientation(option)} style={[styles.optionButton, startOrientation === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.startOptionsLabel}>SCREEN RATIO</Text><View style={styles.optionRow}>{(["fit", "4:3", "16:9"] as const).map((option) => <Pressable key={option} onPress={() => setScreenAspect(option)} style={[styles.optionButton, screenAspect === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option === "fit" ? "FIT" : option}</Text></Pressable>)}</View><Pressable onPress={async () => { if (Platform.OS !== "web") await MoudieEmulatorModule.setFamicomFocusLandscape(startOrientation === "landscape"); setStartOptionsOpen(false); startSession(); }} style={styles.confirmStartButton}><Text style={styles.confirmStartText}>CONFIRM & START</Text></Pressable></View>}
+        {gameReady && remoteVerified && (Platform.OS === "web" ? !isHost : assignedPlayer === 2) && <Text style={styles.waitText}>VERIFIED. WAIT FOR THE HOST TO START THE SESSION.</Text>}</>}
 
-        {!focusMode && Platform.OS !== "web" && romName && <View style={styles.chatCard}><Text style={styles.chatTitle}>دردشة الغرفة</Text><View style={styles.chatMessages}>{chatMessages.length ? chatMessages.slice(-4).map((message) => <Text key={message.id} style={styles.chatMessage}><Text style={styles.chatSender}>{message.displayName}: </Text>{message.text}</Text>) : <Text style={styles.chatEmpty}>{roomConnected ? "اكتب رسالة للاعب الآخر." : "اربط قناة NetPlay لتفعيل الدردشة."}</Text>}</View><View style={styles.chatComposer}><TextInput value={chatDraft} onChangeText={setChatDraft} editable={roomConnected} placeholder="اكتب رسالة…" placeholderTextColor="#71839A" style={styles.chatInput} textAlign="right" returnKeyType="send" onSubmitEditing={sendChat} /><Pressable onPress={sendChat} disabled={!roomConnected || !chatDraft.trim()} style={({ pressed }) => [styles.chatSend, (pressed || !roomConnected || !chatDraft.trim()) && styles.chatSendDisabled]}><Text style={styles.chatSendText}>إرسال</Text></Pressable></View></View>}
+        {!focusMode && Platform.OS !== "web" && romName && <View style={styles.chatCard}><Text style={styles.chatTitle}>ROOM CHAT</Text><View style={styles.chatMessages}>{chatMessages.length ? chatMessages.slice(-4).map((message) => <Text key={message.id} style={styles.chatMessage}><Text style={styles.chatSender}>{message.displayName}: </Text>{message.text}</Text>) : <Text style={styles.chatEmpty}>{roomConnected ? "Write a message to the other player." : "Connect the NetPlay channel to enable chat."}</Text>}</View><View style={styles.chatComposer}><TextInput value={chatDraft} onChangeText={setChatDraft} editable={roomConnected} placeholder="Write a message…" placeholderTextColor="#71839A" style={styles.chatInput} textAlign="left" returnKeyType="send" onSubmitEditing={sendChat} /><Pressable onPress={sendChat} disabled={!roomConnected || !chatDraft.trim()} style={({ pressed }) => [styles.chatSend, (pressed || !roomConnected || !chatDraft.trim()) && styles.chatSendDisabled]}><Text style={styles.chatSendText}>SEND</Text></Pressable></View></View>}
         {!focusMode && Platform.OS !== "web" && romName && <RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={assignedPlayer === 1} remoteOnline={remoteOnline} />}
 
-        {!focusMode && romName && <View style={[styles.controls, !controlsEnabled && styles.controlsMuted]}><Text style={styles.controlLabel}>{localNativeGameActive ? `التحكم المحلي · أنت اللاعب ${assignedPlayer ?? 1}` : gameActive ? `التحكم · أنت اللاعب ${Platform.OS === "web" ? (isHost ? "الأول" : "الثاني") : assignedPlayer === 1 ? "الأول" : "الثاني"}` : "تظهر أزرار اللعب بعد بدء المضيف للجلسة"}</Text><View style={styles.sizeBar}><Pressable onPress={() => changeControlScale(-0.1)} style={styles.sizeButton}><Text style={styles.sizeText}>−</Text></Pressable><Text style={styles.sizeLabel}>حجم الأزرار {Math.round(controlScale * 100)}%</Text><Pressable onPress={() => changeControlScale(0.1)} style={styles.sizeButton}><Text style={styles.sizeText}>+</Text></Pressable></View><View style={styles.dpad}><View style={styles.dpadRow}>{controllerButton("↑", "UP")}</View><View style={[styles.dpadRow, physicalHorizontalRow]}>{controllerButton("←", "LEFT")}{controllerButton("↓", "DOWN")}{controllerButton("→", "RIGHT")}</View></View><View style={[styles.actionRow, physicalHorizontalRow]}>{controllerButton("B", "B")}{controllerButton("A", "A")}</View><View style={[styles.utilityRow, styles.systemButtonRow]}>{controllerButton("SELECT", "SELECT", "minor")}{controllerButton("START", "START", "minor")}</View><Pressable onPress={() => Platform.OS === "web" ? browserRef.current?.nes.reset() : nativePlayerRef.current?.reset()} style={({ pressed }) => [styles.resetButton, pressed && styles.pressed]}><Text style={styles.resetText}>إعادة تشغيل اللعبة</Text></Pressable></View>}
-        {!focusMode && <View style={styles.warning}><Text style={styles.warningTitle}>طريقة اللعب الآن</Text><Text style={styles.warningText}>{Platform.OS === "web" ? "تجربة NetPlay من المتصفح ما زالت تتطلب اتصالاً ثابتاً وأن يختار اللاعبان الملف نفسه." : "اختارا ملف .nes نفسه، اربطا قناة NetPlay على الهاتفين، ثم يبدأ المضيف الجلسة. تنتقل أزرار المضيف كلاعب 1 والضيف كلاعب 2 عبر الغرفة الخاصة."}</Text></View>}
+        {!focusMode && romName && <View style={[styles.controls, !controlsEnabled && styles.controlsMuted]}><View style={styles.controllerHeader}><Text style={styles.controlLabel}>{localNativeGameActive ? `LOCAL CONTROLS · PLAYER ${assignedPlayer ?? 1}` : gameActive ? `CONTROLS · PLAYER ${Platform.OS === "web" ? (isHost ? 1 : 2) : assignedPlayer ?? 1}` : "CONTROLS APPEAR AFTER THE HOST STARTS PLAY"}</Text><Pressable onPress={() => setFocusControlEditor((value) => !value)} style={styles.editorButton}><Text style={styles.editorButtonText}>{focusControlEditor ? "DONE" : "EDIT"}</Text></Pressable></View><CustomizableController system="famicom" editable={focusControlEditor} onButtonChange={(button, isDown) => { if (button === "UP" || button === "DOWN" || button === "LEFT" || button === "RIGHT" || button === "A" || button === "B" || button === "START" || button === "SELECT") setLocalButton(button, isDown); }} /><Pressable onPress={() => Platform.OS === "web" ? browserRef.current?.nes.reset() : nativePlayerRef.current?.reset()} style={({ pressed }) => [styles.resetButton, pressed && styles.pressed]}><Text style={styles.resetText}>RESET GAME</Text></Pressable></View>}
+        {!focusMode && <View style={styles.warning}><Text style={styles.warningTitle}>HOW TO PLAY</Text><Text style={styles.warningText}>{Platform.OS === "web" ? "Browser NetPlay requires a stable connection and the same game file on both sides." : "Choose the same .nes file, connect the NetPlay channel on both devices, then let the host start the session. Host controls are Player 1 and guest controls are Player 2."}</Text></View>}
       </ScrollView>
     </ScreenContainer>
   );
@@ -616,17 +604,17 @@ const styles = StyleSheet.create({
   focusButton: { backgroundColor: "#183B58", borderWidth: 1, borderColor: "#37799B", borderRadius: 10, paddingVertical: 7, paddingHorizontal: 11 },
   focusButtonActive: { backgroundColor: "#542A80", borderColor: "#B26DFF" },
   focusButtonText: { color: "#D8F4FF", fontSize: 12, fontWeight: "900" },
-  eyebrow: { color: "#62C2EB", fontSize: 12, fontWeight: "900", letterSpacing: 1, textAlign: "right", marginTop: 18 },
-  title: { color: "#F3F7FB", fontSize: 30, fontWeight: "900", textAlign: "right", marginTop: 4 },
-  subtitle: { color: "#9BAFC4", fontSize: 14, lineHeight: 21, textAlign: "right", marginTop: 8 },
+  eyebrow: { color: "#62C2EB", fontSize: 12, fontWeight: "900", letterSpacing: 1, textAlign: "left", marginTop: 18 },
+  title: { color: "#F3F7FB", fontSize: 30, fontWeight: "900", textAlign: "left", marginTop: 4 },
+  subtitle: { color: "#9BAFC4", fontSize: 14, lineHeight: 21, textAlign: "left", marginTop: 8 },
   emulatorFrame: { minHeight: 252, marginTop: 22, backgroundColor: "#05080E", borderRadius: 19, overflow: "hidden", borderWidth: 1, borderColor: "#31465F", alignItems: "center", justifyContent: "center" },
   focusFrame: { marginTop: 4, borderRadius: 12, borderColor: "#1A2635", minHeight: 360 },
   webMount: { width: "100%", aspectRatio: 256 / 240 },
   inGameOverlay: { position: "absolute", right: 10, top: 18, gap: 9 },
   inGameOverlayButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(10, 31, 49, 0.84)", borderWidth: 1, borderColor: "rgba(184, 224, 246, 0.72)", alignItems: "center", justifyContent: "center" },
   inGameOverlayText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
-  inGameChatOverlay: { position: "absolute", right: 10, top: 124, width: 190, padding: 8, borderRadius: 12, backgroundColor: "rgba(6, 16, 27, 0.95)", borderWidth: 1, borderColor: "#4A7895", flexDirection: "row-reverse", gap: 6 },
-  inGameChatInput: { flex: 1, minHeight: 38, color: "#FFFFFF", backgroundColor: "#102236", borderRadius: 8, paddingHorizontal: 8, fontSize: 12, textAlign: "right" },
+  inGameChatOverlay: { position: "absolute", right: 10, top: 124, width: 190, padding: 8, borderRadius: 12, backgroundColor: "rgba(6, 16, 27, 0.95)", borderWidth: 1, borderColor: "#4A7895", flexDirection: "row", gap: 6 },
+  inGameChatInput: { flex: 1, minHeight: 38, color: "#FFFFFF", backgroundColor: "#102236", borderRadius: 8, paddingHorizontal: 8, fontSize: 12, textAlign: "left" },
   inGameChatSend: { minWidth: 48, borderRadius: 8, backgroundColor: "#146C94", alignItems: "center", justifyContent: "center" },
   inGameChatSendText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
   emptyScreen: { position: "absolute", alignItems: "center" },
@@ -646,31 +634,43 @@ const styles = StyleSheet.create({
   focusStateText: { color: "#DCE7F1", fontSize: 11, fontWeight: "900" },
   pickButton: { minHeight: 53, borderRadius: 16, backgroundColor: "#146C94", alignItems: "center", justifyContent: "center", marginTop: 14 },
   pickText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
-  romName: { color: "#83E0B1", fontSize: 12, textAlign: "right", marginTop: 8 },
+  romName: { color: "#83E0B1", fontSize: 12, textAlign: "left", marginTop: 8 },
   statusCard: { backgroundColor: "#162235", borderRadius: 15, padding: 14, marginTop: 16 },
-  statusTitle: { color: "#F4C662", fontSize: 13, fontWeight: "900", textAlign: "right" },
-  statusText: { color: "#C4D0DC", fontSize: 13, lineHeight: 20, textAlign: "right", marginTop: 4 },
-  progress: { color: "#8BB7CF", fontSize: 12, fontWeight: "800", textAlign: "right", marginTop: 9 },
+  statusTitle: { color: "#F4C662", fontSize: 13, fontWeight: "900", textAlign: "left" },
+  statusText: { color: "#C4D0DC", fontSize: 13, lineHeight: 20, textAlign: "left", marginTop: 4 },
+  progress: { color: "#8BB7CF", fontSize: 12, fontWeight: "800", textAlign: "left", marginTop: 9 },
   connectionLine: { color: "#83E0B1", fontSize: 12, fontWeight: "800", textAlign: "center", marginTop: 10 },
   connectButton: { minHeight: 52, borderRadius: 16, backgroundColor: "#2A6D73", alignItems: "center", justifyContent: "center", marginTop: 12 },
   connectText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   startButton: { minHeight: 54, borderRadius: 16, backgroundColor: "#F26B5B", alignItems: "center", justifyContent: "center", marginTop: 12 },
   startText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  startOptions: { marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: "#4A7895", backgroundColor: "#102236", padding: 14 },
+  startOptionsTitle: { color: "#D8F4FF", fontSize: 14, fontWeight: "900" },
+  startOptionsLabel: { color: "#83BFD9", fontSize: 10, fontWeight: "900", marginTop: 12 },
+  optionRow: { flexDirection: "row", gap: 8, marginTop: 7 },
+  optionButton: { flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: "#35546F", backgroundColor: "#172D43" },
+  optionButtonActive: { backgroundColor: "#146C94", borderColor: "#69E8FF" },
+  optionText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
+  confirmStartButton: { minHeight: 46, marginTop: 15, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: "#48C78E" },
+  confirmStartText: { color: "#062817", fontSize: 12, fontWeight: "900" },
   waitText: { color: "#83E0B1", fontSize: 13, fontWeight: "800", textAlign: "center", marginTop: 12 },
   chatCard: { backgroundColor: "#111C2D", borderWidth: 1, borderColor: "#29415B", borderRadius: 16, padding: 13, marginTop: 18 },
-  chatTitle: { color: "#F4C662", fontSize: 13, fontWeight: "900", textAlign: "right" },
+  chatTitle: { color: "#F4C662", fontSize: 13, fontWeight: "900", textAlign: "left" },
   chatMessages: { minHeight: 42, marginTop: 8, gap: 4 },
-  chatMessage: { color: "#DCE7F1", fontSize: 12, lineHeight: 18, textAlign: "right" },
+  chatMessage: { color: "#DCE7F1", fontSize: 12, lineHeight: 18, textAlign: "left" },
   chatSender: { color: "#62C2EB", fontWeight: "900" },
-  chatEmpty: { color: "#8093A7", fontSize: 12, textAlign: "right" },
-  chatComposer: { flexDirection: "row-reverse", gap: 8, marginTop: 10 },
+  chatEmpty: { color: "#8093A7", fontSize: 12, textAlign: "left" },
+  chatComposer: { flexDirection: "row", gap: 8, marginTop: 10 },
   chatInput: { flex: 1, minHeight: 42, color: "#FFFFFF", backgroundColor: "#07101C", borderWidth: 1, borderColor: "#29415B", borderRadius: 12, paddingHorizontal: 11, fontSize: 13 },
   chatSend: { minWidth: 70, borderRadius: 12, backgroundColor: "#146C94", alignItems: "center", justifyContent: "center" },
   chatSendDisabled: { opacity: 0.42 },
   chatSendText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
-  controls: { alignItems: "center", marginTop: 24 },
+  controls: { alignItems: "center", marginTop: 24, width: "100%" },
   controlsMuted: { opacity: 0.52 },
-  controlLabel: { color: "#DCE7F1", fontSize: 14, fontWeight: "900", alignSelf: "flex-end", marginBottom: 13 },
+  controllerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%" },
+  editorButton: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: "#542A80" },
+  editorButtonText: { color: "#F7EFFF", fontSize: 11, fontWeight: "900" },
+  controlLabel: { color: "#DCE7F1", fontSize: 14, fontWeight: "900", marginBottom: 13 },
   sizeBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginBottom: 4 },
   sizeButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#17283A", borderWidth: 1, borderColor: "#3E5C77", alignItems: "center", justifyContent: "center" },
   sizeText: { color: "#FFFFFF", fontSize: 20, fontWeight: "900", lineHeight: 22 },
@@ -689,8 +689,8 @@ const styles = StyleSheet.create({
   resetButton: { width: 76, height: 76, marginTop: 16, borderRadius: 38, borderWidth: 1, borderColor: "#3E5872", alignItems: "center", justifyContent: "center", alignSelf: "center" },
   resetText: { color: "#9BAFC4", fontSize: 10, fontWeight: "800", textAlign: "center" },
   warning: { backgroundColor: "#2A2221", borderLeftWidth: 3, borderLeftColor: "#F4B942", borderRadius: 15, padding: 14, marginTop: 24 },
-  warningTitle: { color: "#F4C662", fontSize: 13, fontWeight: "900", textAlign: "right" },
-  warningText: { color: "#D5C5BD", fontSize: 12, lineHeight: 19, textAlign: "right", marginTop: 4 },
+  warningTitle: { color: "#F4C662", fontSize: 13, fontWeight: "900", textAlign: "left" },
+  warningText: { color: "#D5C5BD", fontSize: 12, lineHeight: 19, textAlign: "left", marginTop: 4 },
   pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
   controlPressed: { opacity: 0.72, transform: [{ scale: 0.94 }] },
 });
