@@ -11,7 +11,7 @@ type NetplaySession = {
   roomId: number;
   memberId: number;
   displayName: string;
-  role: "host" | "player";
+  role: "host" | "player" | "spectator";
   clientKind: "room-ui" | "ps1-player";
 };
 
@@ -98,13 +98,14 @@ export function registerNetplayServer(server: HttpServer) {
     socket.emit("netplay:joined", {
       memberId: session.memberId,
       role: session.role,
-      assignedPlayer: session.role === "host" ? 1 : 2,
+      assignedPlayer: session.role === "host" ? 1 : session.role === "player" ? 2 : null,
       members: snapshot?.members ?? [],
       onlineMemberIds,
     });
     socket.to(channel).emit("netplay:presence", { memberId: session.memberId, displayName: session.displayName, online: true });
 
     socket.on("netplay:input", (payload: InputPayload) => {
+      if (session.role === "spectator") return;
       const input = normalizeNetplayInput(session.role, payload ?? {});
       if (!input) return;
       socket.to(channel).emit("netplay:input", {
@@ -126,7 +127,7 @@ export function registerNetplayServer(server: HttpServer) {
     });
 
     socket.on("netplay:session-ready", (payload: SessionReadyPayload) => {
-      if (session.clientKind !== "room-ui") return;
+      if (session.clientKind !== "room-ui" || session.role === "spectator") return;
       const system = payload?.system === "ps1" || payload?.system === "nes" ? payload.system : null;
       const fingerprint = typeof payload?.fingerprint === "string" ? payload.fingerprint.toLowerCase() : "";
       const coreVersion = typeof payload?.coreVersion === "string" ? payload.coreVersion.trim() : "";
@@ -142,7 +143,10 @@ export function registerNetplayServer(server: HttpServer) {
       if (!system) return;
       const readyPeers = Array.from(io.sockets.adapter.rooms.get(channel) ?? [])
         .map((socketId) => io.sockets.sockets.get(socketId))
-        .filter((peer) => (peer?.data.session as NetplaySession | undefined)?.clientKind === "room-ui")
+        .filter((peer) => {
+          const peerSession = peer?.data.session as NetplaySession | undefined;
+          return peerSession?.clientKind === "room-ui" && peerSession.role !== "spectator";
+        })
         .map((peer) => peer?.data.readySession as ReadySessionData | undefined)
         .filter((ready): ready is ReadySessionData => Boolean(ready && ready.system === system));
       const barrier = createSessionBarrier(readyPeers, Date.now());

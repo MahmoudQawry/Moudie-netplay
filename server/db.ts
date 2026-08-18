@@ -92,7 +92,7 @@ export async function getUserByOpenId(openId: string) {
 export async function createRoom(input: {
   joinCode: string;
   name: string;
-  system: "psp" | "nes" | "sega" | "ps1";
+  system: "psp" | "nes" | "sega" | "ps1" | "arcade";
   hostName: string;
   maxPlayers: number;
   hostTokenHash: string;
@@ -132,6 +132,7 @@ export async function addRoomMember(input: {
   roomId: number;
   displayName: string;
   accessTokenHash: string;
+  role?: "player" | "spectator";
 }) {
   const db = await getDb();
   if (!db) throw new Error("خدمة الغرف غير متاحة حالياً.");
@@ -139,16 +140,18 @@ export async function addRoomMember(input: {
   const result = await db.insert(roomMembers).values({
     roomId: input.roomId,
     displayName: input.displayName,
+    role: input.role ?? "player",
     accessTokenHash: input.accessTokenHash,
   });
   return Number(result[0].insertId);
 }
 
-export async function getRoomMemberCount(roomId: number) {
+export async function getRoomMemberCount(roomId: number, role?: "host" | "player" | "spectator") {
   const db = await getDb();
   if (!db) throw new Error("خدمة الغرف غير متاحة حالياً.");
 
-  const result = await db.select({ total: count() }).from(roomMembers).where(eq(roomMembers.roomId, roomId));
+  const where = role ? and(eq(roomMembers.roomId, roomId), eq(roomMembers.role, role)) : eq(roomMembers.roomId, roomId);
+  const result = await db.select({ total: count() }).from(roomMembers).where(where);
   return Number(result[0]?.total ?? 0);
 }
 

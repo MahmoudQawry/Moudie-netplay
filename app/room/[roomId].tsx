@@ -10,7 +10,7 @@ import { createNetplaySocket } from "@/lib/netplay-socket";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
 import { trpc } from "@/lib/trpc";
 
-const SYSTEM_LABEL: Record<string, string> = { psp: "PSP", nes: "Famicom", sega: "Sega", ps1: "PS1" };
+const SYSTEM_LABEL: Record<string, string> = { psp: "PSP", nes: "Famicom", sega: "Sega", ps1: "PS1", arcade: "Arcade" };
 
 export default function RoomScreen() {
   const { roomId: rawRoomId } = useLocalSearchParams<{ roomId: string }>();
@@ -75,7 +75,9 @@ export default function RoomScreen() {
     );
   }
 
-  const readyCount = snapshot.members.filter((member) => member.isReady).length;
+  const readyCount = snapshot.members.filter((member) => member.role !== "spectator" && member.isReady).length;
+  const playerCount = snapshot.members.filter((member) => member.role !== "spectator").length;
+  const spectatorCount = snapshot.members.filter((member) => member.role === "spectator").length;
   return (
     <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -85,7 +87,7 @@ export default function RoomScreen() {
         </View>
         <Text style={styles.system}>{SYSTEM_LABEL[snapshot.room.system]}</Text>
         <Text style={styles.title}>{snapshot.room.name}</Text>
-        <Text style={styles.caption}>غرفة خاصة · حتى {snapshot.room.maxPlayers} لاعبين</Text>
+        <Text style={styles.caption}>غرفة خاصة · {playerCount}/{snapshot.room.maxPlayers} لاعب{spectatorCount ? ` · ${spectatorCount} مشاهد` : ""}</Text>
 
         <View style={styles.codeCard}>
           <Text style={styles.codeLabel}>رمز الدعوة</Text>
@@ -93,12 +95,12 @@ export default function RoomScreen() {
           <Pressable onPress={share} style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}><Text style={styles.shareText}>مشاركة الرمز</Text></Pressable>
         </View>
 
-        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>اللاعبون</Text><Text style={styles.counter}>{snapshot.members.length}/{snapshot.room.maxPlayers}</Text></View>
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>أعضاء الغرفة</Text><Text style={styles.counter}>{playerCount}/{snapshot.room.maxPlayers} لاعب</Text></View>
         <View style={styles.memberList}>
           {snapshot.members.map((member) => (
             <View key={member.id} style={styles.member}>
               <View style={[styles.avatar, member.role === "host" && styles.avatarHost]}><Text style={styles.avatarText}>{member.displayName.slice(0, 1).toUpperCase()}</Text></View>
-              <View style={styles.memberText}><Text style={styles.memberName}>{member.displayName}{member.role === "host" ? " · المضيف" : ""}</Text><Text style={styles.memberStatus}>{member.isReady ? "التحقق مكتمل" : "بانتظار فحص المحرك"}</Text></View>
+              <View style={styles.memberText}><Text style={styles.memberName}>{member.displayName}{member.role === "host" ? " · المضيف" : member.role === "spectator" ? " · مشاهد" : ""}</Text><Text style={styles.memberStatus}>{member.role === "spectator" ? "يشاهد ويتحدث في الغرفة" : member.isReady ? "التحقق مكتمل" : "بانتظار فحص المحرك"}</Text></View>
               <View style={[styles.readyDot, member.isReady ? styles.ready : styles.pending]} />
             </View>
           ))}
@@ -117,10 +119,10 @@ export default function RoomScreen() {
             <View style={styles.nextCard}>
               <Text style={styles.nextTitle}>المشغّل قيد التحضير</Text>
               <Text style={styles.nextText}>يمكنكما فتح الشات والمكالمة الصوتية الآن أثناء انتظار دمج مشغّل {SYSTEM_LABEL[snapshot.room.system]} الفعلي.</Text>
-              <Text style={styles.progress}>{readyCount} لاعب جاهز من أصل {snapshot.members.length}</Text>
+              <Text style={styles.progress}>{readyCount} لاعب جاهز من أصل {playerCount}</Text>
             </View>
             {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title={`دردشة غرفة ${SYSTEM_LABEL[snapshot.room.system]}`} />
-            <RoomVoiceChat socket={roomConnected ? socketRef.current : null} isHost={Boolean(roomIsHost)} remoteOnline={remoteOnline} /></>}
+            <RoomVoiceChat socket={roomConnected ? socketRef.current : null} isHost={Boolean(roomIsHost)} remoteOnline={remoteOnline} memberId={credential.memberId} members={snapshot.members} /></>}
           </>
         )}
       </ScrollView>

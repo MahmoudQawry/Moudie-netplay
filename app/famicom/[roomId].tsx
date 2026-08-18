@@ -8,17 +8,15 @@ import { StatusBar } from "expo-status-bar";
 import type { Socket } from "socket.io-client";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { FamicomFocusMultitouch } from "@/components/famicom-focus-multitouch";
+import { CustomizableController } from "@/components/customizable-controller";
 import { FamicomNativePlayer, type FamicomNativePlayerHandle } from "@/components/famicom-native-player";
 import { RoomVoiceChat } from "@/components/room-voice-chat";
 import { ScreenContainer } from "@/components/screen-container";
 import { FAMICOM_CORE_VERSION, decodeFamicomMessage, fingerprintRom, isNesFile, peerIdForRoom, type FamicomMessage } from "@/lib/famicom-netplay";
-import { getFocusDpadButtons } from "@/lib/famicom-focus-dpad";
-import { getFocusControlPlacement } from "@/lib/famicom-focus-layout";
 import { FamicomInputCoordinator } from "@/lib/famicom-input-coordinator";
 import { haptic } from "@/lib/haptics";
 import { createNetplaySocket, type RoomChatMessage } from "@/lib/netplay-socket";
-import { NETPLAY_SYNC_INTERVAL_MS, shouldApplyAuthoritativeState } from "@/lib/netplay-sync";
+import { shouldApplyAuthoritativeState } from "@/lib/netplay-sync";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
 import { trpc } from "@/lib/trpc";
 import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorModule";
@@ -91,6 +89,7 @@ export default function FamicomScreen() {
   const [inGameChatOpen, setInGameChatOpen] = useState(false);
   const [inGameMicMuted, setInGameMicMuted] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
+  const [focusControlEditor, setFocusControlEditor] = useState(false);
   const [controlScale, setControlScale] = useState(1);
 
   useEffect(() => {
@@ -560,19 +559,13 @@ export default function FamicomScreen() {
   const localNativeGameActive = Platform.OS !== "web" && Boolean(romBase64) && (!roomConnected || gameActive);
   const controlsEnabled = gameActive || localNativeGameActive;
   const physicalHorizontalRow = { flexDirection: I18nManager.isRTL ? "row-reverse" as const : "row" as const };
-  // The displayed percentage must match the actual Focus controls. The new
-  // separated rows leave enough room for the configured 75–130% range.
-  const focusScale = controlScale;
-  const focusDpadButtons = getFocusDpadButtons(I18nManager.isRTL, focusScale);
-  const focusControlPlacement = getFocusControlPlacement(I18nManager.isRTL);
-
   return (
     <ScreenContainer className={focusMode ? "bg-black px-3" : "px-5"} containerClassName={focusMode ? "bg-black" : undefined} edges={["top", "bottom", "left", "right"]}>
       <StatusBar style="light" hidden={focusMode} animated />
       <ScrollView contentContainerStyle={[styles.content, focusMode && styles.focusContent]}>
         <View style={styles.topActions}>
           <Pressable onPress={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>{focusMode ? "تصغير وضع التركيز" : "‹ العودة إلى الغرفة"}</Text></Pressable>
-          {!focusMode && romName && <Pressable onPress={launchNativeFocusPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.focusButton, (pressed || isCompatLaunching) && styles.pressed]}><Text style={styles.focusButtonText}>{isCompatLaunching ? "جارٍ فتح وضع التركيز…" : "وضع تركيز"}</Text></Pressable>}
+          {focusMode ? <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={({ pressed }) => [styles.focusButton, focusControlEditor && styles.focusButtonActive, pressed && styles.pressed]}><Text style={styles.focusButtonText}>{focusControlEditor ? "حفظ الأزرار" : "تخصيص الأزرار"}</Text></Pressable> : romName && <Pressable onPress={launchNativeFocusPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.focusButton, (pressed || isCompatLaunching) && styles.pressed]}><Text style={styles.focusButtonText}>{isCompatLaunching ? "جارٍ فتح وضع التركيز…" : "وضع تركيز"}</Text></Pressable>}
         </View>
         {!focusMode && <><Text style={styles.eyebrow}>FAMICOM · NETPLAY</Text><Text style={styles.title}>مشغّل اللعبة</Text><Text style={styles.subtitle}>اختر ملف .nes نفسه على الهاتفين. يبقى الملف محلياً ولا يرفعه Moudie NetPlay أو يشاركه.</Text></>}
 
@@ -583,20 +576,17 @@ export default function FamicomScreen() {
           {Platform.OS !== "web" && gameActive && inGameChatOpen && <View style={styles.inGameChatOverlay}><TextInput value={chatDraft} onChangeText={setChatDraft} placeholder="رسالة…" placeholderTextColor="#A7B7C7" style={styles.inGameChatInput} returnKeyType="send" onSubmitEditing={() => { sendChat(); setInGameChatOpen(false); }} /><Pressable onPress={() => { sendChat(); setInGameChatOpen(false); }} style={styles.inGameChatSend}><Text style={styles.inGameChatSendText}>إرسال</Text></Pressable></View>}
         </View>
         {focusMode && romName && <View style={[styles.focusPortraitControls, !controlsEnabled && styles.controlsMuted]}>
-          <FamicomFocusMultitouch scale={focusScale} onButtonChange={setFocusButton} style={styles.focusGameTouchSurface}>
-            <View pointerEvents="none" style={[styles.focusDpadGrid, focusControlPlacement.dpad, { width: 138 * focusScale, height: 138 * focusScale }]}>
-              {focusDpadButtons.map(({ label, button, placement }) => controllerButton(label, button, "main", { position: "absolute", ...placement }, focusScale))}
-            </View>
-            <View pointerEvents="none" style={[styles.focusActionCompact, focusControlPlacement.actions]}>{controllerButton("B", "B", "main", undefined, focusScale)}{controllerButton("A", "A", "main", undefined, focusScale)}</View>
-          </FamicomFocusMultitouch>
-          <View style={styles.focusBottomControls}>
-            <View style={styles.sizeBar}><Pressable onPress={() => changeControlScale(-0.1)} style={styles.sizeButton}><Text style={styles.sizeText}>−</Text></Pressable><Text style={styles.sizeLabel}>{Math.round(controlScale * 100)}%</Text><Pressable onPress={() => changeControlScale(0.1)} style={styles.sizeButton}><Text style={styles.sizeText}>+</Text></Pressable></View>
-            <View style={styles.focusUtilityCompact}>{controllerButton("SELECT", "SELECT", "minor")}{controllerButton("START", "START", "minor")}</View>
-            <View style={styles.focusStateRow}>
-              <Pressable onPress={loadLocalState} style={({ pressed }) => [styles.focusStateButton, pressed && styles.pressed]}><Text style={styles.focusStateText}>استرجاع</Text></Pressable>
-              <Pressable onPress={saveLocalState} style={({ pressed }) => [styles.focusStateButton, pressed && styles.pressed]}><Text style={styles.focusStateText}>حفظ</Text></Pressable>
-            </View>
+          <View style={styles.focusTelemetry}>
+            <Text style={styles.focusMetric}>FPS —</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>{roomConnected ? "PING — ms" : "اتصال محلي"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>P{assignedPlayer ?? 1}</Text>
           </View>
+          <CustomizableController
+            system="famicom"
+            editable={focusControlEditor}
+            onButtonChange={(button, isDown) => {
+              if (button === "UP" || button === "DOWN" || button === "LEFT" || button === "RIGHT" || button === "A" || button === "B") setFocusButton(button, isDown);
+              else if (button === "START" || button === "SELECT") setLocalButton(button, isDown);
+            }}
+          />
         </View>}
         {!focusMode && <><Pressable onPress={pickRom} disabled={loading || isCompatLaunching} style={({ pressed }) => [styles.pickButton, (pressed || loading || isCompatLaunching) && styles.pressed]}>{loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.pickText}>{romName ? "تغيير ملف اللعبة" : "1. اختيار ملف .nes"}</Text>}</Pressable>{romName && <Text style={styles.romName}>الملف المحلي: {romName}</Text>}{romName && Platform.OS !== "web" && <View style={[styles.utilityRow, physicalHorizontalRow]}><Pressable onPress={saveLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>حفظ محلي</Text></Pressable><Pressable onPress={loadLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>استرجاع الحفظ</Text></Pressable></View>}{romName && Platform.OS !== "web" && <Pressable onPress={launchCompatibilityPlayer} disabled={isCompatLaunching} style={({ pressed }) => [styles.connectButton, (pressed || isCompatLaunching) && styles.pressed]}>{isCompatLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.connectText}>ملف لا يعمل؟ افتح وضع التوافق الموسّع</Text>}</Pressable>}</>}
 
@@ -624,6 +614,7 @@ const styles = StyleSheet.create({
   back: { alignSelf: "flex-start", paddingVertical: 8 },
   backText: { color: "#9BAFC4", fontSize: 15, fontWeight: "800" },
   focusButton: { backgroundColor: "#183B58", borderWidth: 1, borderColor: "#37799B", borderRadius: 10, paddingVertical: 7, paddingHorizontal: 11 },
+  focusButtonActive: { backgroundColor: "#542A80", borderColor: "#B26DFF" },
   focusButtonText: { color: "#D8F4FF", fontSize: 12, fontWeight: "900" },
   eyebrow: { color: "#62C2EB", fontSize: 12, fontWeight: "900", letterSpacing: 1, textAlign: "right", marginTop: 18 },
   title: { color: "#F3F7FB", fontSize: 30, fontWeight: "900", textAlign: "right", marginTop: 4 },
@@ -641,7 +632,10 @@ const styles = StyleSheet.create({
   emptyScreen: { position: "absolute", alignItems: "center" },
   emptyIcon: { color: "#62C2EB", fontSize: 42 },
   emptyText: { color: "#8BA0B4", fontSize: 14, marginTop: 8 },
-  focusPortraitControls: { width: "100%", height: 302, position: "relative", marginTop: 15, direction: "ltr" },
+  focusPortraitControls: { width: "100%", height: 390, position: "relative", marginTop: 15, direction: "ltr" },
+  focusTelemetry: { position: "absolute", top: 10, alignSelf: "center", zIndex: 4, flexDirection: "row", gap: 6, alignItems: "center", backgroundColor: "rgba(12, 12, 16, 0.78)", borderWidth: 1, borderColor: "#2C2A35", borderRadius: 13, paddingHorizontal: 11, paddingVertical: 6 },
+  focusMetric: { color: "#EDEAF2", fontSize: 10, fontWeight: "900" },
+  focusMetricDivider: { color: "#665F70", fontSize: 10 },
   focusGameTouchSurface: { position: "absolute", top: 0, left: 0, right: 0, bottom: 116 },
   focusDpadGrid: { position: "absolute", top: 0, direction: "ltr" },
   focusActionCompact: { position: "absolute", top: 29, flexDirection: "row", gap: 10, alignItems: "center", justifyContent: "flex-end", direction: "ltr" },

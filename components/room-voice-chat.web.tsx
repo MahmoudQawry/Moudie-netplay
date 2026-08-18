@@ -5,6 +5,8 @@ type Props = {
   socket: Socket | null;
   isHost: boolean;
   remoteOnline: boolean;
+  memberId?: number;
+  members?: { id: number; displayName: string; role: "host" | "player" | "spectator" }[];
 };
 
 export type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void> };

@@ -25,9 +25,9 @@ export const appRouter = router({
       .input(
         z.object({
           name: z.string().trim().min(2).max(64),
-          system: z.enum(["psp", "nes", "sega", "ps1"]),
+          system: z.enum(["psp", "nes", "sega", "ps1", "arcade"]),
           hostName: z.string().trim().min(2).max(32),
-          maxPlayers: z.number().int().min(2).max(8),
+          maxPlayers: z.number().int().min(2).max(10),
         }),
       )
       .mutation(async ({ input }) => {
@@ -42,19 +42,27 @@ export const appRouter = router({
         return { ...created, hostToken, memberToken };
       }),
     join: publicProcedure
-      .input(z.object({ joinCode: z.string().trim().length(6), displayName: z.string().trim().min(2).max(32) }))
+      .input(z.object({
+        joinCode: z.string().trim().length(6),
+        displayName: z.string().trim().min(2).max(32),
+        joinAs: z.enum(["player", "spectator"]).default("player"),
+      }))
       .mutation(async ({ input }) => {
         const room = await db.findRoomByCode(input.joinCode.toUpperCase());
         if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
-        const memberCount = await db.getRoomMemberCount(room.id);
-        if (memberCount >= room.maxPlayers) throw new Error("الغرفة مكتملة.");
+        if (input.joinAs === "player") {
+          const playerCount = await db.getRoomMemberCount(room.id, "player");
+          // The host always occupies a player seat, so playerCount excludes that one host seat.
+          if (playerCount + 1 >= room.maxPlayers) throw new Error("مقاعد اللعب في الغرفة مكتملة. يمكنك الدخول كمشاهد.");
+        }
         const memberToken = createAccessToken();
         const memberId = await db.addRoomMember({
           roomId: room.id,
           displayName: input.displayName,
+          role: input.joinAs,
           accessTokenHash: hashAccessToken(memberToken),
         });
-        return { roomId: room.id, memberId, memberToken };
+        return { roomId: room.id, memberId, memberToken, role: input.joinAs };
       }),
     snapshot: publicProcedure
       .input(z.object({ roomId: z.number().int().positive(), memberId: z.number().int().positive(), memberToken: z.string().min(20) }))
@@ -93,11 +101,12 @@ export const appRouter = router({
         if (!snapshot || hashAccessToken(input.hostToken) !== snapshot.room.hostTokenHash) {
           throw new Error("لا تملك صلاحية بدء هذه الجلسة.");
         }
-        if (snapshot.members.length < 2 || snapshot.members.some((member) => !member.isReady)) {
+        const players = snapshot.members.filter((member) => member.role !== "spectator");
+        if (players.length < 2 || players.some((member) => !member.isReady)) {
           throw new Error("يجب أن يكون لاعبان على الأقل جاهزين قبل البدء.");
         }
-        const fingerprints = new Set(snapshot.members.map((member) => member.gameFingerprint));
-        const versions = new Set(snapshot.members.map((member) => member.coreVersion));
+        const fingerprints = new Set(players.map((member) => member.gameFingerprint));
+        const versions = new Set(players.map((member) => member.coreVersion));
         if (fingerprints.size !== 1 || fingerprints.has(null) || versions.size !== 1 || versions.has(null)) {
           throw new Error("يجب أن تتطابق اللعبة وإصدار المحرك عند جميع اللاعبين.");
         }

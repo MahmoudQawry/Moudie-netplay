@@ -30,9 +30,8 @@ const env = {
   // App branding - update these values directly (do not use env vars)
   appName: "Moudie NetPlay",
   appSlug: "moudie-netplay",
-  // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
-  // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "/manus-storage/moudie-netplay-icon_a04d0fcf.png",
+  // Local brand asset used by the icon, splash screen, and in-app identity.
+  logoUrl: "./assets/images/moudie-brand-icon.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -42,8 +41,8 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   version: "1.2.0",
-  orientation: "portrait",
-  icon: "./assets/images/icon.png",
+  orientation: "default",
+  icon: "./assets/images/moudie-brand-icon.png",
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
   newArchEnabled: false,
@@ -58,9 +57,9 @@ const config: ExpoConfig = {
     versionCode: 22,
     adaptiveIcon: {
       backgroundColor: "#101827",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
-      backgroundImage: "./assets/images/android-icon-background.png",
-      monochromeImage: "./assets/images/android-icon-monochrome.png",
+      foregroundImage: "./assets/images/moudie-brand-icon.png",
+      backgroundImage: "./assets/images/moudie-brand-icon.png",
+      monochromeImage: "./assets/images/moudie-brand-icon.png",
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
@@ -92,7 +91,7 @@ const config: ExpoConfig = {
   web: {
     bundler: "metro",
     output: "static",
-    favicon: "./assets/images/favicon.png",
+    favicon: "./assets/images/moudie-brand-icon.png",
   },
   plugins: [
     "expo-router",
@@ -112,7 +111,7 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        image: "./assets/images/splash-icon.png",
+        image: "./assets/images/moudie-brand-icon.png",
         imageWidth: 200,
         resizeMode: "contain",
         backgroundColor: "#ffffff",

@@ -1,26 +1,29 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
 import { getProfileName, saveProfileName, saveRoomCredential } from "@/lib/room-storage";
 import { trpc } from "@/lib/trpc";
 
-type SystemId = "psp" | "nes" | "sega" | "ps1";
+type SystemId = "psp" | "nes" | "sega" | "ps1" | "arcade";
 
-const SYSTEMS: { id: SystemId; label: string; detail: string; symbol: string }[] = [
-  { id: "psp", label: "PSP", detail: "PPSSPP NetPlay", symbol: "▲" },
-  { id: "nes", label: "Famicom", detail: "NES / RetroArch", symbol: "●" },
-  { id: "sega", label: "Sega", detail: "Genesis / RetroArch", symbol: "◆" },
-  { id: "ps1", label: "PS1", detail: "قيد اختبار NetPlay", symbol: "■" },
+const SYSTEMS: { id: SystemId; label: string; detail: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; accent: string }[] = [
+  { id: "ps1", label: "PS1", detail: "PlayStation", icon: "gamepad-variant", accent: "#C05DFF" },
+  { id: "psp", label: "PSP", detail: "Portable", icon: "gamepad-outline", accent: "#38D4FF" },
+  { id: "nes", label: "NES", detail: "Famicom", icon: "controller-classic-outline", accent: "#FF727A" },
+  { id: "sega", label: "SEGA", detail: "Genesis", icon: "gamepad-variant-outline", accent: "#70E59A" },
+  { id: "arcade", label: "ARCADE", detail: "Arcade", icon: "controller-classic-outline", accent: "#FFAA38" },
 ];
 
 export default function CreateRoomScreen() {
-  const [system, setSystem] = useState<SystemId>("psp");
+  const [system, setSystem] = useState<SystemId>("ps1");
   const [name, setName] = useState("جلسة الأصدقاء");
   const [hostName, setHostName] = useState("");
-  const [maxPlayers, setMaxPlayers] = useState(2);
+  const [maxPlayers, setMaxPlayers] = useState(10);
   const createRoom = trpc.rooms.create.useMutation();
 
   const create = async () => {
@@ -31,19 +34,9 @@ export default function CreateRoomScreen() {
       return;
     }
     try {
-      const room = await createRoom.mutateAsync({
-        name: name.trim(),
-        system,
-        hostName: normalizedHost,
-        maxPlayers,
-      });
+      const room = await createRoom.mutateAsync({ name: name.trim(), system, hostName: normalizedHost, maxPlayers });
       await saveProfileName(normalizedHost);
-      await saveRoomCredential({
-        roomId: room.roomId,
-        memberId: room.memberId,
-        memberToken: room.memberToken,
-        hostToken: room.hostToken,
-      });
+      await saveRoomCredential({ roomId: room.roomId, memberId: room.memberId, memberToken: room.memberToken, hostToken: room.hostToken });
       haptic.success();
       router.replace({ pathname: "/room/[roomId]", params: { roomId: String(room.roomId) } });
     } catch (error) {
@@ -53,96 +46,90 @@ export default function CreateRoomScreen() {
   };
 
   return (
-    <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
-          <Text style={styles.backText}>‹ رجوع</Text>
-        </Pressable>
-        <Text style={styles.eyebrow}>غرفة خاصة</Text>
-        <Text style={styles.title}>أنشئ جلسة جديدة</Text>
-        <Text style={styles.subtitle}>سيظهر رمز دعوة قصير يمكنك مشاركته مع أصدقائك.</Text>
-
-        <Text style={styles.label}>النظام</Text>
-        <View style={styles.systemGrid}>
-          {SYSTEMS.map((item) => {
-            const selected = system === item.id;
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() => {
-                  haptic.selection();
-                  setSystem(item.id);
-                }}
-                style={({ pressed }) => [styles.systemCard, selected && styles.systemCardSelected, pressed && styles.pressed]}
-              >
-                <Text style={[styles.systemSymbol, selected && styles.systemTextSelected]}>{item.symbol}</Text>
-                <Text style={[styles.systemTitle, selected && styles.systemTextSelected]}>{item.label}</Text>
-                <Text style={[styles.systemDetail, selected && styles.systemDetailSelected]}>{item.detail}</Text>
-              </Pressable>
-            );
-          })}
+    <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
+      <NeonCircuitBackground />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><MaterialCommunityIcons name="arrow-right" size={21} color="#F8F5FF" /></Pressable>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>إنشاء غرفة</Text></View>
+          <View style={styles.headerSpace} />
         </View>
 
-        <Text style={styles.label}>اسم الغرفة</Text>
-        <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="مثال: سباق مساء الجمعة" placeholderTextColor="#74869C" returnKeyType="done" textAlign="right" />
-        <Text style={styles.label}>اسمك الظاهر</Text>
-        <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="سيظهر لأصدقائك" placeholderTextColor="#74869C" returnKeyType="done" textAlign="right" />
+        <View style={styles.panel}>
+          <Text style={styles.panelLead}>اختر المحاكي</Text>
+          <Text style={styles.panelSub}>اختر نظام اللعب. لكل نظام أزرار تحكم مخصصة داخل المحاكي.</Text>
+          <View style={styles.systemGrid}>
+            {SYSTEMS.map((item) => {
+              const selected = system === item.id;
+              return (
+                <Pressable key={item.id} onPress={() => { haptic.selection(); setSystem(item.id); }} style={({ pressed }) => [styles.systemCard, selected && { borderColor: item.accent, backgroundColor: `${item.accent}18` }, pressed && styles.pressed]}>
+                  <MaterialCommunityIcons name={item.icon} size={26} color={item.accent} />
+                  <View style={styles.systemCopy}><Text style={[styles.systemTitle, { color: selected ? item.accent : "#F4F0FF" }]}>{item.label}</Text><Text style={styles.systemDetail}>{item.detail}</Text></View>
+                  {selected && <View style={[styles.selectedDot, { backgroundColor: item.accent }]} />}
+                </Pressable>
+              );
+            })}
+          </View>
 
-        <Text style={styles.label}>عدد اللاعبين</Text>
-        <View style={styles.capacityRow}>
-          {[2, 4, 6, 8].map((value) => (
-            <Pressable
-              key={value}
-              onPress={() => {
-                haptic.selection();
-                setMaxPlayers(value);
-              }}
-              style={({ pressed }) => [styles.capacity, maxPlayers === value && styles.capacitySelected, pressed && styles.pressed]}
-            >
-              <Text style={[styles.capacityText, maxPlayers === value && styles.capacityTextSelected]}>{value}</Text>
-            </Pressable>
-          ))}
-        </View>
+          <Text style={styles.label}>اسم الغرفة</Text>
+          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="مثال: سباق مساء الجمعة" placeholderTextColor="#827B97" returnKeyType="done" textAlign="right" />
+          <Text style={styles.label}>اسمك الظاهر</Text>
+          <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="سيظهر لأصدقائك" placeholderTextColor="#827B97" returnKeyType="done" textAlign="right" />
 
-        <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>خصوصية الملفات</Text>
-          <Text style={styles.noticeText}>لا ترفع الغرفة أي لعبة. سيُطلب من كل لاعب اختيار ملفه المحلي المتطابق قبل تشغيل الجلسة.</Text>
+          <View style={styles.capacityHeading}><Text style={styles.labelInline}>سعة الغرفة</Text><Text style={styles.capacityHint}>حتى 10 أعضاء</Text></View>
+          <View style={styles.capacityRow}>
+            {[2, 4, 6, 8, 10].map((value) => (
+              <Pressable key={value} onPress={() => { haptic.selection(); setMaxPlayers(value); }} style={({ pressed }) => [styles.capacity, maxPlayers === value && styles.capacitySelected, pressed && styles.pressed]}><Text style={[styles.capacityText, maxPlayers === value && styles.capacityTextSelected]}>{value}</Text></Pressable>
+            ))}
+          </View>
+
+          <View style={styles.featureRow}>
+            <View style={styles.feature}><MaterialCommunityIcons name="microphone-outline" size={16} color="#69E8FF" /><Text style={styles.featureText}>صوت</Text></View>
+            <View style={styles.feature}><MaterialCommunityIcons name="message-text-outline" size={16} color="#C58AFF" /><Text style={styles.featureText}>دردشة</Text></View>
+            <View style={styles.feature}><MaterialCommunityIcons name="eye-outline" size={16} color="#FFD16A" /><Text style={styles.featureText}>مشاهدة</Text></View>
+          </View>
+
+          <Pressable onPress={create} disabled={createRoom.isPending} style={({ pressed }) => [styles.primaryButton, (pressed || createRoom.isPending) && styles.buttonPressed]}>
+            {createRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>أنشئ الغرفة وادخل المحاكي</Text><MaterialCommunityIcons name="arrow-left" size={20} color="#FFFFFF" /></>}
+          </Pressable>
         </View>
-        <Pressable onPress={create} disabled={createRoom.isPending} style={({ pressed }) => [styles.primaryButton, (pressed || createRoom.isPending) && styles.primaryPressed]}>
-          {createRoom.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>إنشاء الغرفة والحصول على الرمز</Text>}
-        </Pressable>
       </ScrollView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingVertical: 10, paddingBottom: 28 },
-  back: { alignSelf: "flex-start", paddingVertical: 8, paddingHorizontal: 2, marginBottom: 18 },
-  backText: { color: "#9BAFC4", fontSize: 16, fontWeight: "700" },
-  eyebrow: { color: "#62C2EB", fontSize: 13, fontWeight: "800", letterSpacing: 0.8, textAlign: "right" },
-  title: { color: "#F3F7FB", fontSize: 30, lineHeight: 38, fontWeight: "800", textAlign: "right", marginTop: 5 },
-  subtitle: { color: "#9BAFC4", fontSize: 15, lineHeight: 22, textAlign: "right", marginTop: 8, marginBottom: 24 },
-  label: { color: "#DCE7F1", fontSize: 15, fontWeight: "800", textAlign: "right", marginTop: 18, marginBottom: 9 },
-  systemGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  systemCard: { width: "47.7%", minHeight: 116, backgroundColor: "#1D2A3C", borderRadius: 18, padding: 14, borderWidth: 1, borderColor: "#30445E" },
-  systemCardSelected: { backgroundColor: "#146C94", borderColor: "#61C7F1" },
-  systemSymbol: { color: "#62C2EB", fontSize: 18, fontWeight: "900", textAlign: "right" },
-  systemTitle: { color: "#F3F7FB", fontSize: 18, fontWeight: "800", textAlign: "right", marginTop: 6 },
-  systemDetail: { color: "#9BAFC4", fontSize: 11, textAlign: "right", marginTop: 4 },
-  systemTextSelected: { color: "#FFFFFF" },
-  systemDetailSelected: { color: "#DDF5FF" },
-  input: { backgroundColor: "#1D2A3C", borderWidth: 1, borderColor: "#30445E", borderRadius: 14, paddingHorizontal: 14, minHeight: 52, color: "#F3F7FB", fontSize: 16 },
-  capacityRow: { flexDirection: "row", gap: 9 },
-  capacity: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 12, backgroundColor: "#1D2A3C", borderRadius: 13, borderWidth: 1, borderColor: "#30445E" },
-  capacitySelected: { backgroundColor: "#F26B5B", borderColor: "#FFB3A9" },
-  capacityText: { color: "#DCE7F1", fontSize: 16, fontWeight: "800" },
+  content: { paddingTop: 10, paddingBottom: 32 },
+  header: { height: 57, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  back: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: "#1A102D", borderWidth: 1, borderColor: "#412960" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandIcon: { width: 41, height: 41, borderRadius: 12, borderWidth: 1, borderColor: "#594174" },
+  title: { color: "#FFFFFF", fontSize: 25, fontWeight: "900" },
+  headerSpace: { width: 40 },
+  panel: { backgroundColor: "rgba(19, 10, 36, 0.93)", borderWidth: 1, borderColor: "#55377F", borderRadius: 27, padding: 17, marginTop: 12, shadowColor: "#8E49E6", shadowOpacity: 0.23, shadowRadius: 18, elevation: 4 },
+  panelLead: { color: "#F8F4FF", fontSize: 19, fontWeight: "900", textAlign: "right" },
+  panelSub: { color: "#B8B0CA", fontSize: 12, textAlign: "right", lineHeight: 18, marginTop: 4 },
+  systemGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 16 },
+  systemCard: { width: "47.7%", minHeight: 82, padding: 12, borderRadius: 17, borderWidth: 1, borderColor: "#302044", backgroundColor: "#110A20", flexDirection: "row", alignItems: "center", gap: 9 },
+  systemCopy: { flex: 1, alignItems: "flex-end" },
+  systemTitle: { fontSize: 15, fontWeight: "900", textAlign: "right" },
+  systemDetail: { color: "#9F96B2", fontSize: 10, fontWeight: "700", textAlign: "right", marginTop: 3 },
+  selectedDot: { width: 8, height: 8, borderRadius: 4, position: "absolute", top: 10, left: 10 },
+  label: { color: "#ECE7F9", fontSize: 13, fontWeight: "900", textAlign: "right", marginTop: 17, marginBottom: 7 },
+  input: { minHeight: 51, backgroundColor: "#0E091A", borderRadius: 14, borderWidth: 1, borderColor: "#302144", paddingHorizontal: 14, color: "#F8F4FF", fontSize: 15 },
+  capacityHeading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 17, marginBottom: 7 },
+  labelInline: { color: "#ECE7F9", fontSize: 13, fontWeight: "900" },
+  capacityHint: { color: "#67E1FF", fontSize: 10, fontWeight: "800" },
+  capacityRow: { flexDirection: "row", gap: 7 },
+  capacity: { flex: 1, minHeight: 39, borderRadius: 12, borderWidth: 1, borderColor: "#332349", backgroundColor: "#110A20", alignItems: "center", justifyContent: "center" },
+  capacitySelected: { borderColor: "#A955F7", backgroundColor: "#4B2377" },
+  capacityText: { color: "#A69DB8", fontSize: 13, fontWeight: "900" },
   capacityTextSelected: { color: "#FFFFFF" },
-  notice: { backgroundColor: "#162235", borderLeftWidth: 3, borderLeftColor: "#F4B942", borderRadius: 14, padding: 14, marginTop: 22 },
-  noticeTitle: { color: "#F4C662", fontSize: 13, fontWeight: "800", textAlign: "right" },
-  noticeText: { color: "#C4D0DC", fontSize: 13, lineHeight: 20, textAlign: "right", marginTop: 5 },
-  primaryButton: { marginTop: 22, minHeight: 54, borderRadius: 16, backgroundColor: "#146C94", alignItems: "center", justifyContent: "center" },
-  primaryPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
-  primaryText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
+  featureRow: { flexDirection: "row", justifyContent: "space-around", backgroundColor: "#100A1D", borderRadius: 14, marginTop: 16, paddingVertical: 10, borderWidth: 1, borderColor: "#29203B" },
+  feature: { flexDirection: "row", alignItems: "center", gap: 5 },
+  featureText: { color: "#BBB3C9", fontSize: 11, fontWeight: "800" },
+  primaryButton: { minHeight: 54, borderRadius: 17, marginTop: 18, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, backgroundColor: "#A54DF3" },
+  primaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   pressed: { opacity: 0.72 },
+  buttonPressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
 });
