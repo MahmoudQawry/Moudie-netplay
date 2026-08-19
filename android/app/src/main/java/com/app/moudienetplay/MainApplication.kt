@@ -2,6 +2,7 @@ package com.app.moudienetplay
 
 import android.app.Application
 import android.content.res.Configuration
+import android.util.Log
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -40,6 +41,11 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    val priorUncaughtHandler = Thread.getDefaultUncaughtExceptionHandler()
+    Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+      Log.e("MoudieStartup", "Uncaught startup failure on ${thread.name}", error)
+      priorUncaughtHandler?.uncaughtException(thread, error)
+    }
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {

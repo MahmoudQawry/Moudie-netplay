@@ -24,15 +24,19 @@ describe("Android startup splash safeguards", () => {
     expect(config).not.toContain('"expo-splash-screen"');
   });
 
-  it("lets the native Moudie recovery layer detect a mounted React root without importing the emulator module from startup", () => {
+  it("uses a plain Expo activity with no native overlay or pre-draw startup gate", () => {
     const activity = readProjectFile("android/app/src/main/java/com/app/moudienetplay/MainActivity.kt");
-    const rootLayout = readProjectFile("app/_layout.tsx");
-    expect(activity).toContain("installNativeStartupOverlay()");
-    expect(activity).toContain("fun markReactContentReady()");
-    expect(activity).toContain("hasMountedReactContent");
-    expect(activity).toContain("ReactRootView");
-    expect(activity).toContain("WAITING FOR APP…");
-    expect(rootLayout).not.toContain("MoudieEmulatorModule.markStartupReady()");
+    expect(activity).toContain("super.onCreate(null)");
+    expect(activity).toContain("ReactActivityDelegateWrapper");
+    expect(activity).not.toContain("addContentView");
+    expect(activity).not.toContain("WAITING FOR APP");
+    expect(activity).not.toContain("ReactRootView");
+  });
+
+  it("records uncaught native startup failures without installing another visual overlay", () => {
+    const application = readProjectFile("android/app/src/main/java/com/app/moudienetplay/MainApplication.kt");
+    expect(application).toContain("Thread.setDefaultUncaughtExceptionHandler");
+    expect(application).toContain('Log.e("MoudieStartup"');
   });
 
   it("delays the animated Moudie envelope until after the lobby and native recovery layers are visible", () => {
