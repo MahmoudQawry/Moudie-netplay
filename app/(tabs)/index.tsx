@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { MoudieLaunchIntro } from "@/components/moudie-launch-intro";
 import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
@@ -17,8 +16,7 @@ export default function LobbyScreen() {
   }, []);
 
   return (
-    <MoudieLaunchIntro>
-      <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
+    <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
         <NeonCircuitBackground />
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
@@ -70,8 +68,7 @@ export default function LobbyScreen() {
           <Text style={styles.tipText}>In every game mode, use EDIT to move controls and SIZE − / + to resize them. Portrait and landscape layouts are saved separately.</Text>
         </View>
         </ScrollView>
-      </ScreenContainer>
-    </MoudieLaunchIntro>
+    </ScreenContainer>
   );
 }
 
