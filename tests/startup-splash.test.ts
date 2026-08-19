@@ -24,15 +24,15 @@ describe("Android startup splash safeguards", () => {
     expect(config).not.toContain('"expo-splash-screen"');
   });
 
-  it("keeps a native Moudie recovery layer visible until React Native commits the root route", () => {
+  it("lets the native Moudie recovery layer detect a mounted React root without importing the emulator module from startup", () => {
     const activity = readProjectFile("android/app/src/main/java/com/app/moudienetplay/MainActivity.kt");
     const rootLayout = readProjectFile("app/_layout.tsx");
-    const module = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/MoudieEmulatorModule.kt");
     expect(activity).toContain("installNativeStartupOverlay()");
     expect(activity).toContain("fun markReactContentReady()");
+    expect(activity).toContain("hasMountedReactContent");
+    expect(activity).toContain("ReactRootView");
     expect(activity).toContain("WAITING FOR APP…");
-    expect(rootLayout).toContain("MoudieEmulatorModule.markStartupReady()");
-    expect(module).toContain('Function("markStartupReady")');
+    expect(rootLayout).not.toContain("MoudieEmulatorModule.markStartupReady()");
   });
 
   it("delays the animated Moudie envelope until after the lobby and native recovery layers are visible", () => {

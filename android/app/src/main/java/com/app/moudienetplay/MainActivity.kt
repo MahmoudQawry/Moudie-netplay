@@ -25,7 +25,19 @@ class MainActivity : ReactActivity() {
   private val startupHandler = Handler(Looper.getMainLooper())
   private var startupOverlay: View? = null
   private var startupStatus: TextView? = null
-  private var reactContentReady = false
+  private val reactRootProbe = object : Runnable {
+    override fun run() {
+      val overlay = startupOverlay ?: return
+      val content = findViewById<ViewGroup>(android.R.id.content)
+      if (hasMountedReactContent(content)) {
+        markReactContentReady()
+        return
+      }
+      // Keep the status layer visible only while the actual React root has not
+      // mounted. It no longer depends on the custom emulator module.
+      if (overlay.parent != null) startupHandler.postDelayed(this, 120L)
+    }
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     // Do not install Expo's native splash gate here. Its pre-draw listener can
@@ -37,10 +49,9 @@ class MainActivity : ReactActivity() {
     installNativeStartupOverlay()
   }
 
-  /** Called only after React Native has committed the root route tree. */
+  /** Releases the native status layer after a ReactRootView has mounted. */
   fun markReactContentReady() {
     runOnUiThread {
-      reactContentReady = true
       startupHandler.removeCallbacksAndMessages(null)
       val overlay = startupOverlay ?: return@runOnUiThread
       startupOverlay = null
@@ -96,13 +107,19 @@ class MainActivity : ReactActivity() {
     overlay.setOnClickListener { startupStatus?.text = "WAITING FOR APP…" }
     addContentView(overlay, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     startupOverlay = overlay
-    if (reactContentReady) {
-      markReactContentReady()
-      return
-    }
+    startupHandler.post(reactRootProbe)
     startupHandler.postDelayed({
       if (startupOverlay != null) startupStatus?.text = "WAITING FOR APP…"
     }, 3_500L)
+  }
+
+  private fun hasMountedReactContent(view: View?): Boolean {
+    if (view == null) return false
+    val isReactRoot = view.javaClass.name.contains("ReactRootView")
+    if (isReactRoot && view.width > 0 && view.height > 0 && view is ViewGroup && view.childCount > 0) return true
+    return (view as? ViewGroup)?.let { group ->
+      (0 until group.childCount).any { index -> hasMountedReactContent(group.getChildAt(index)) }
+    } ?: false
   }
 
   private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

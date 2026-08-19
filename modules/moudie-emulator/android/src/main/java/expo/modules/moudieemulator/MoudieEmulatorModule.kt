@@ -15,16 +15,6 @@ class MoudieEmulatorModule : Module() {
     Name("MoudieEmulator")
     Events("nativeOverlayAction")
 
-    Function("markStartupReady") {
-      // Keep this reflection-based so the reusable emulator module does not
-      // depend on the Android application module at compile time.
-      val activity = appContext.currentActivity ?: return@Function null
-      activity.runOnUiThread {
-        runCatching { activity.javaClass.getMethod("markReactContentReady").invoke(activity) }
-      }
-      null
-    }
-
     Function("getRuntimeStatus") {
       val context = appContext.reactContext
       val availablePlayers = context?.let { runtimeContext ->

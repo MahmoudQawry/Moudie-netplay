@@ -30,7 +30,6 @@ export type PlayerLaunchOptions = {
 };
 
 declare class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEvents> {
-  markStartupReady(): void;
   getRuntimeStatus(): EmulatorRuntimeStatus;
   getBiosStatus(): Record<string, { required: boolean; available: boolean; files?: string[]; message: string }>;
   getPs1LaunchStatus(): { available: boolean; message: string };
@@ -59,7 +58,6 @@ function unavailableModule(): MoudieEmulatorModule {
   const unavailable = "The emulator module is not ready in this build. Reinstall the latest complete APK.";
   const reject = () => Promise.reject(new Error(unavailable));
   return {
-    markStartupReady: () => undefined,
     getRuntimeStatus: () => ({ runtime: "android-native", supportedSystems: [], nativeBuildRequired: true }) as EmulatorRuntimeStatus,
     getBiosStatus: () => ({}),
     getPs1LaunchStatus: () => ({ available: false, message: unavailable }),
