@@ -26,7 +26,8 @@ export function MoudieLaunchIntro({ children }: Props) {
 
   useEffect(() => {
     if (!routeReady) return;
-    setVisible(true);
+    // Let the lobby paint and the native recovery layer fade first. The
+    // animation is presentation-only and must never be the first app frame.
     const sequence = Animated.sequence([
       Animated.delay(180),
       Animated.timing(envelope, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
@@ -36,9 +37,12 @@ export function MoudieLaunchIntro({ children }: Props) {
         Animated.timing(signature, { toValue: 1, duration: 280, delay: 180, useNativeDriver: true }),
       ]),
     ]);
-    sequence.start();
-    const dismiss = setTimeout(() => setVisible(false), 2500);
-    return () => { sequence.stop(); clearTimeout(dismiss); };
+    const reveal = setTimeout(() => {
+      setVisible(true);
+      sequence.start();
+    }, 650);
+    const dismiss = setTimeout(() => setVisible(false), 3800);
+    return () => { sequence.stop(); clearTimeout(reveal); clearTimeout(dismiss); };
   }, [cardValues, envelope, routeReady, seal, signature]);
 
   return <View style={styles.root} onLayout={() => setRouteReady(true)}>

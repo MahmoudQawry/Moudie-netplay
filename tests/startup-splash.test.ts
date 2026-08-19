@@ -24,16 +24,30 @@ describe("Android startup splash safeguards", () => {
     expect(config).not.toContain('"expo-splash-screen"');
   });
 
-  it("keeps the animated Moudie envelope out of the recovery startup route", () => {
+  it("keeps a native Moudie recovery layer visible until React Native commits the root route", () => {
+    const activity = readProjectFile("android/app/src/main/java/com/app/moudienetplay/MainActivity.kt");
+    const rootLayout = readProjectFile("app/_layout.tsx");
+    const module = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/MoudieEmulatorModule.kt");
+    expect(activity).toContain("installNativeStartupOverlay()");
+    expect(activity).toContain("fun markReactContentReady()");
+    expect(activity).toContain("WAITING FOR APP…");
+    expect(rootLayout).toContain("MoudieEmulatorModule.markStartupReady()");
+    expect(module).toContain('Function("markStartupReady")');
+  });
+
+  it("delays the animated Moudie envelope until after the lobby and native recovery layers are visible", () => {
     const rootLayout = readProjectFile("app/_layout.tsx");
     const lobby = readProjectFile("app/(tabs)/index.tsx");
     const intro = readProjectFile("components/moudie-launch-intro.tsx");
     const recovery = readProjectFile("components/startup-recovery-boundary.tsx");
     ["PS1", "PSP", "NES", "SEGA", "ARCADE", "SKIP INTRO", "Moudie"].forEach((label) => expect(intro).toContain(label));
-    expect(intro).toContain("setTimeout(() => setVisible(false), 2500)");
+    expect(intro).toContain("const reveal = setTimeout(() => {");
+    expect(intro).toContain("setVisible(true);");
+    expect(intro).toContain("setTimeout(() => setVisible(false), 3800)");
     expect(recovery).toContain("TRY AGAIN");
     expect(recovery).toContain("MOUDIE IS READY");
     expect(rootLayout).not.toContain("MoudieLaunchIntro");
-    expect(lobby).not.toContain("MoudieLaunchIntro");
+    expect(lobby).toContain('import { MoudieLaunchIntro } from "@/components/moudie-launch-intro"');
+    expect(lobby).toContain("<MoudieLaunchIntro>");
   });
 });

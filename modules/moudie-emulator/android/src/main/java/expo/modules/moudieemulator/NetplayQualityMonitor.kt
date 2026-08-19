@@ -43,6 +43,7 @@ class NetplayQualityMonitor(
   private var smoothedRtt: Double? = null
   private var smoothedJitter: Double? = null
   private var running = false
+  private var hasRun = false
   private var listenerInstalled = false
 
   private val pongListener = Emitter.Listener { args ->
@@ -70,6 +71,8 @@ class NetplayQualityMonitor(
       listenerInstalled = true
     }
     if (running) return
+    if (hasRun) resetAfterReconnect()
+    hasRun = true
     running = true
     handler.post(probe)
   }
@@ -84,6 +87,15 @@ class NetplayQualityMonitor(
     if (listenerInstalled) socket.off("netplay:quality-pong", pongListener)
     listenerInstalled = false
     pending.clear()
+  }
+
+  private fun resetAfterReconnect() {
+    pending.clear()
+    outcomes.clear()
+    previousRtt = null
+    smoothedRtt = null
+    smoothedJitter = null
+    onQuality(NetplayQuality())
   }
 
   private fun receivePong(sequence: Long) {
