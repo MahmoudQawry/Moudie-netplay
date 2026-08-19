@@ -87,6 +87,8 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private var universalNetplayClient: UniversalNetplayClient? = null
   private var localPlayerIndex = 0
   private var lockstepNetplay = false
+  private var netplayInputDelayFrames = NETPLAY_INPUT_DELAY_FRAMES
+  private var netplayQuality = NetplayQuality()
   @Volatile private var lastNetplaySyncId = -1L
   private val lockstepActive = AtomicBoolean(false)
   private val lockstepHandler = Handler(Looper.getMainLooper())
@@ -111,7 +113,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       val elapsed = frameTimeNanos - frameWindowStartedAt
       if (elapsed >= 1_000_000_000L) {
         val fps = (framesInWindow * 1_000_000_000L / elapsed).coerceAtMost(120L)
-        if (::metricPill.isInitialized) metricPill.text = if (lockstepNetplay) "FPS $fps   •   ROOM PING   •   P${localPlayerIndex + 1}" else "FPS $fps   •   LOCAL PING   •   P1"
+        updateMetricPill(fps)
         frameWindowStartedAt = frameTimeNanos
         framesInWindow = 0
       }
@@ -185,6 +187,12 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     headerView = createHeader().also { it.tag = "moudie-player-header" }
     if (settingsMode) root.addView(headerView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(48), Gravity.TOP))
     metricPill = createMetricPill()
+    root.addView(metricPill, FrameLayout.LayoutParams(
+      FrameLayout.LayoutParams.WRAP_CONTENT,
+      dp(32),
+      Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+    ).apply { topMargin = dp(14) })
+    updateMetricPill(null)
     addController()
     attachGameplaySocialOverlay()
     setContentView(root)
@@ -256,6 +264,11 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       onRemoteState = { encoded, syncId, encoding -> restoreNetplayState(encoded, syncId, encoding) },
       onChat = { displayName, text -> runOnUiThread { showToast("$displayName: $text") } },
       onStatus = { message -> runOnUiThread { showToast(message) } },
+      onQuality = { quality -> runOnUiThread {
+        netplayQuality = quality
+        if (!lockstepActive.get()) netplayInputDelayFrames = quality.recommendedInputDelayFrames()
+        updateMetricPill(null)
+      } },
     ).also { it.connect() }
   }
 
@@ -327,7 +340,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     synchronized(remoteFrameMasks) { remoteFrameMasks.clear() }
     synchronized(localFrameMasks) {
       localFrameMasks.clear()
-      repeat(NETPLAY_INPUT_DELAY_FRAMES.toInt()) { frame ->
+      repeat(netplayInputDelayFrames.toInt()) { frame ->
         localFrameMasks[frame.toLong()] = 0
         universalNetplayClient?.sendInputFrame(frame.toLong(), 0)
       }
@@ -369,7 +382,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     override fun run() {
       if (!lockstepActive.get() || !::retroView.isInitialized) return
       val localMask = currentLocalMask()
-      val targetFrame = nextLockstepFrame + NETPLAY_INPUT_DELAY_FRAMES
+      val targetFrame = nextLockstepFrame + netplayInputDelayFrames
       synchronized(localFrameMasks) { localFrameMasks[targetFrame] = localMask }
       universalNetplayClient?.sendInputFrame(targetFrame, localMask)
       val scheduledLocalMask = synchronized(localFrameMasks) { localFrameMasks.remove(nextLockstepFrame) ?: 0 }
@@ -439,12 +452,19 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   }
 
   private fun createMetricPill(): TextView = TextView(this).apply {
-    text = "FPS —   •   LOCAL PING   •   P1"
+    text = "FPS —   •   LOCAL   •   P1"
     textSize = 10f
     gravity = Gravity.CENTER
     setTextColor(Color.rgb(194, 243, 255))
     setPadding(dp(12), 0, dp(12), 0)
     background = roundedBackground(Color.argb(130, 2, 12, 24), Color.argb(125, 21, 178, 238), 16)
+  }
+
+  private fun updateMetricPill(fps: Long?) {
+    if (!::metricPill.isInitialized) return
+    val fpsLabel = fps?.toString() ?: "—"
+    val network = if (lockstepNetplay) netplayQuality.compactLabel() else "LOCAL"
+    metricPill.text = "FPS $fpsLabel   •   $network   •   P${localPlayerIndex + 1}"
   }
 
   private fun addController() {

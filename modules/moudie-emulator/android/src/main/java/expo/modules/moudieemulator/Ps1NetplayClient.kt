@@ -24,8 +24,10 @@ class Ps1NetplayClient(
   private val onRemoteState: (encodedState: String, syncId: Long, encoding: String) -> Unit,
   private val onChat: (displayName: String, text: String) -> Unit,
   private val onStatus: (String) -> Unit,
+  private val onQuality: (NetplayQuality) -> Unit,
 ) {
   private var socket: Socket? = null
+  private var qualityMonitor: NetplayQualityMonitor? = null
 
   fun connect() {
     val options = IO.Options().apply {
@@ -33,10 +35,10 @@ class Ps1NetplayClient(
       transports = arrayOf("websocket", "polling")
       reconnection = true
       timeout = 5_000
-      reconnectionAttempts = 1
-      reconnectionDelay = 300
-      reconnectionDelayMax = 500
-      randomizationFactor = 0.0
+      reconnectionAttempts = 12
+      reconnectionDelay = 500
+      reconnectionDelayMax = 4_000
+      randomizationFactor = 0.25
       auth = hashMapOf(
         "roomId" to config.roomId.toString(),
         "memberId" to config.memberId.toString(),
@@ -44,10 +46,13 @@ class Ps1NetplayClient(
         "clientKind" to "ps1-player",
       )
     }
-    socket = IO.socket(config.serverUrl, options).apply {
+    val connectedSocket = IO.socket(config.serverUrl, options)
+    qualityMonitor = NetplayQualityMonitor(connectedSocket, onQuality)
+    socket = connectedSocket.apply {
       on(Socket.EVENT_CONNECT) {
         emit("netplay:ps1-ready", JSONObject().put("fingerprint", config.fingerprint).put("coreVersion", config.coreVersion))
-        onStatus("PS1 channel connected. Wait for room readiness confirmation before starting the player.")
+        qualityMonitor?.resume()
+        onStatus("PS1 channel connected. The room will resynchronize if this is a recovered connection.")
       }
       on("netplay:ps1-session-bootstrap") { onBootstrap() }
       on("netplay:ps1-waiting") { args ->
@@ -94,8 +99,8 @@ class Ps1NetplayClient(
         val text = payload.optString("text", "").trim()
         if (text.isNotEmpty()) onChat(payload.optString("displayName", "Other player"), text)
       }
-      on(Socket.EVENT_CONNECT_ERROR) { onStatus("PS1 channel did not connect in the fast-start window. Check the room connection and restart the session.") }
-      on(Socket.EVENT_DISCONNECT) { onStatus("PS1 room connection closed; this device continues local play until the channel returns.") }
+      on(Socket.EVENT_CONNECT_ERROR) { onStatus("PS1 channel is retrying. Check the room connection if it does not return.") }
+      on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause(); onStatus("PS1 room channel paused; reconnecting and resynchronizing automatically…") }
       connect()
     }
   }
@@ -122,6 +127,8 @@ class Ps1NetplayClient(
   }
 
   fun close() {
+    qualityMonitor?.close()
+    qualityMonitor = null
     socket?.off()
     socket?.disconnect()
     socket = null

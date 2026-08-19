@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -101,6 +102,24 @@ class PS1PlayerActivity : ComponentActivity() {
   private var nextLockstepFrame = 0L
   private val appliedMasksByPort = mutableMapOf<Int, Int>()
   private var lockstepNetplay = false
+  private var netplayInputDelayFrames = NETPLAY_INPUT_DELAY_FRAMES
+  private var netplayQuality = NetplayQuality()
+  private lateinit var metricPill: TextView
+  private var frameWindowStartedAt = 0L
+  private var framesInWindow = 0
+  private val frameMeter = object : Choreographer.FrameCallback {
+    override fun doFrame(frameTimeNanos: Long) {
+      if (frameWindowStartedAt == 0L) frameWindowStartedAt = frameTimeNanos
+      framesInWindow += 1
+      val elapsed = frameTimeNanos - frameWindowStartedAt
+      if (elapsed >= 1_000_000_000L) {
+        updateMetricPill((framesInWindow * 1_000_000_000L / elapsed).coerceAtMost(120L))
+        frameWindowStartedAt = frameTimeNanos
+        framesInWindow = 0
+      }
+      Choreographer.getInstance().postFrameCallback(this)
+    }
+  }
   private var micOverlayMuted = true
   private var micOverlayButton: TextView? = null
   private var speakerOverlayEnabled = false
@@ -190,6 +209,13 @@ class PS1PlayerActivity : ComponentActivity() {
       Gravity.FILL,
     ))
     attachGameplayOverlay()
+    metricPill = createMetricPill()
+    root.addView(metricPill, FrameLayout.LayoutParams(
+      FrameLayout.LayoutParams.WRAP_CONTENT,
+      dp(32),
+      Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+    ).apply { topMargin = dp(14) })
+    updateMetricPill(null)
     setContentView(root)
     root.post { applyAspectRatio(); restoreScreenLayout(); enableScreenEditor() }
     connectNetplayIfConfigured()
@@ -215,8 +241,14 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   override fun onPause() {
+    Choreographer.getInstance().removeFrameCallback(frameMeter)
     if (::retroView.isInitialized && !isChangingConfigurations) saveState(silent = true)
     super.onPause()
+  }
+
+  override fun onResume() {
+    super.onResume()
+    Choreographer.getInstance().postFrameCallback(frameMeter)
   }
 
   override fun onDestroy() {
@@ -255,6 +287,11 @@ class PS1PlayerActivity : ComponentActivity() {
       onRemoteState = { encoded, syncId, encoding -> restoreNetplayState(encoded, syncId, encoding) },
       onChat = { displayName, text -> runOnUiThread { showToast("$displayName: $text") } },
       onStatus = { message -> runOnUiThread { showToast(message) } },
+      onQuality = { quality -> runOnUiThread {
+        netplayQuality = quality
+        if (!lockstepActive.get()) netplayInputDelayFrames = quality.recommendedInputDelayFrames()
+        updateMetricPill(null)
+      } },
     ).also { it.connect() }
   }
 
@@ -328,7 +365,7 @@ class PS1PlayerActivity : ComponentActivity() {
     synchronized(remoteFrameMasks) { remoteFrameMasks.clear() }
     synchronized(localFrameMasks) {
       localFrameMasks.clear()
-      repeat(NETPLAY_INPUT_DELAY_FRAMES.toInt()) { frame ->
+      repeat(netplayInputDelayFrames.toInt()) { frame ->
         localFrameMasks[frame.toLong()] = 0
         netplayClient?.sendInputFrame(frame.toLong(), 0)
       }
@@ -381,7 +418,7 @@ class PS1PlayerActivity : ComponentActivity() {
     override fun run() {
       if (!lockstepActive.get() || !::retroView.isInitialized) return
       val localMask = currentLocalMask()
-      val targetFrame = nextLockstepFrame + NETPLAY_INPUT_DELAY_FRAMES
+      val targetFrame = nextLockstepFrame + netplayInputDelayFrames
       synchronized(localFrameMasks) { localFrameMasks[targetFrame] = localMask }
       netplayClient?.sendInputFrame(targetFrame, localMask)
       val scheduledLocalMask = synchronized(localFrameMasks) { localFrameMasks.remove(nextLockstepFrame) ?: 0 }
@@ -603,6 +640,26 @@ class PS1PlayerActivity : ComponentActivity() {
       }
       true
     }
+  }
+
+  private fun createMetricPill(): TextView = TextView(this).apply {
+    textSize = 10f
+    gravity = Gravity.CENTER
+    setTextColor(Color.rgb(194, 243, 255))
+    setPadding(dp(12), 0, dp(12), 0)
+    background = GradientDrawable().apply {
+      shape = GradientDrawable.RECTANGLE
+      cornerRadius = dp(16).toFloat()
+      setColor(Color.argb(130, 2, 12, 24))
+      setStroke(dp(1), Color.argb(125, 21, 178, 238))
+    }
+  }
+
+  private fun updateMetricPill(fps: Long?) {
+    if (!::metricPill.isInitialized) return
+    val fpsLabel = fps?.toString() ?: "—"
+    val network = if (lockstepNetplay) netplayQuality.compactLabel() else "LOCAL"
+    metricPill.text = "FPS $fpsLabel   •   $network   •   P${localPlayerIndex + 1}"
   }
 
   private fun attachGameplayOverlay() {

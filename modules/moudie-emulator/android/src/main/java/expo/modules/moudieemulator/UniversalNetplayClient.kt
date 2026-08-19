@@ -28,8 +28,10 @@ class UniversalNetplayClient(
   private val onRemoteState: (encodedState: String, syncId: Long, encoding: String) -> Unit,
   private val onChat: (displayName: String, text: String) -> Unit,
   private val onStatus: (String) -> Unit,
+  private val onQuality: (NetplayQuality) -> Unit,
 ) {
   private var socket: Socket? = null
+  private var qualityMonitor: NetplayQualityMonitor? = null
 
   fun connect() {
     val options = IO.Options().apply {
@@ -37,10 +39,10 @@ class UniversalNetplayClient(
       transports = arrayOf("websocket", "polling")
       reconnection = true
       timeout = 5_000
-      reconnectionAttempts = 1
-      reconnectionDelay = 300
-      reconnectionDelayMax = 500
-      randomizationFactor = 0.0
+      reconnectionAttempts = 12
+      reconnectionDelay = 500
+      reconnectionDelayMax = 4_000
+      randomizationFactor = 0.25
       auth = hashMapOf(
         "roomId" to config.roomId.toString(),
         "memberId" to config.memberId.toString(),
@@ -48,13 +50,16 @@ class UniversalNetplayClient(
         "clientKind" to "universal-player",
       )
     }
-    socket = IO.socket(config.serverUrl, options).apply {
+    val connectedSocket = IO.socket(config.serverUrl, options)
+    qualityMonitor = NetplayQualityMonitor(connectedSocket, onQuality)
+    socket = connectedSocket.apply {
       on(Socket.EVENT_CONNECT) {
         emit("netplay:universal-ready", JSONObject()
           .put("system", config.system)
           .put("fingerprint", config.fingerprint)
           .put("coreVersion", config.coreVersion))
-        onStatus("${config.system.uppercase()} room channel connected. Waiting for both devices to verify the same game.")
+        qualityMonitor?.resume()
+        onStatus("${config.system.uppercase()} room channel connected. The room will resynchronize if this is a recovered connection.")
       }
       on("netplay:universal-session-bootstrap") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
@@ -97,8 +102,8 @@ class UniversalNetplayClient(
         val text = payload.optString("text", "").trim()
         if (text.isNotEmpty()) onChat(payload.optString("displayName", "Other player"), text)
       }
-      on(Socket.EVENT_CONNECT_ERROR) { onStatus("This emulator did not connect in the fast-start window. Check the room connection and restart the session.") }
-      on(Socket.EVENT_DISCONNECT) { onStatus("Room channel disconnected. This device continues local play until the channel reconnects.") }
+      on(Socket.EVENT_CONNECT_ERROR) { onStatus("This emulator channel is retrying. Check the room connection if it does not return.") }
+      on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause(); onStatus("Room channel paused; reconnecting and resynchronizing automatically…") }
       connect()
     }
   }
@@ -125,6 +130,8 @@ class UniversalNetplayClient(
   }
 
   fun close() {
+    qualityMonitor?.close()
+    qualityMonitor = null
     socket?.off()
     socket?.disconnect()
     socket = null

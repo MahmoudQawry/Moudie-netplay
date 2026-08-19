@@ -24,8 +24,9 @@ describe("Android startup splash safeguards", () => {
     expect(config).not.toContain('"expo-splash-screen"');
   });
 
-  it("keeps the animated Moudie envelope sequence isolated until the root startup path is proven on-device", () => {
+  it("mounts the animated Moudie envelope only after the lobby route is available", () => {
     const rootLayout = readProjectFile("app/_layout.tsx");
+    const lobby = readProjectFile("app/(tabs)/index.tsx");
     const intro = readProjectFile("components/moudie-launch-intro.tsx");
     const recovery = readProjectFile("components/startup-recovery-boundary.tsx");
     ["PS1", "PSP", "NES", "SEGA", "ARCADE", "SKIP INTRO", "Moudie"].forEach((label) => expect(intro).toContain(label));
@@ -33,5 +34,7 @@ describe("Android startup splash safeguards", () => {
     expect(recovery).toContain("TRY AGAIN");
     expect(recovery).toContain("MOUDIE IS READY");
     expect(rootLayout).not.toContain("MoudieLaunchIntro");
+    expect(lobby).toContain('import { MoudieLaunchIntro } from "@/components/moudie-launch-intro"');
+    expect(lobby).toContain("<MoudieLaunchIntro>");
   });
 });

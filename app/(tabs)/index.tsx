@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { MoudieLaunchIntro } from "@/components/moudie-launch-intro";
 import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
@@ -16,9 +17,10 @@ export default function LobbyScreen() {
   }, []);
 
   return (
-    <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
-      <NeonCircuitBackground />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <MoudieLaunchIntro>
+      <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
+        <NeonCircuitBackground />
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.brandRow}>
             <Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} resizeMode="cover" />
@@ -67,8 +69,9 @@ export default function LobbyScreen() {
           <MaterialCommunityIcons name="gesture-tap-hold" size={22} color="#65E7FF" />
           <Text style={styles.tipText}>In every game mode, use EDIT to move controls and SIZE − / + to resize them. Portrait and landscape layouts are saved separately.</Text>
         </View>
-      </ScrollView>
-    </ScreenContainer>
+        </ScrollView>
+      </ScreenContainer>
+    </MoudieLaunchIntro>
   );
 }
 

@@ -77,10 +77,12 @@ describe("online room launch safeguards", () => {
     expect(universal).toContain('resizeSelectedItem(-.1f)');
     expect(ps1).toContain('controlsContainer.addView(createFreeControlCanvas()');
     expect(ps1).toContain('keepControlVisible(view)');
-    expect(ps1Client).toContain('reconnectionAttempts = 1');
-    expect(ps1Client).toContain('reconnectionDelayMax = 500');
-    expect(universalClient).toContain('reconnectionAttempts = 1');
-    expect(universalClient).toContain('reconnectionDelayMax = 500');
+    expect(ps1Client).toContain('reconnectionAttempts = 12');
+    expect(ps1Client).toContain('reconnectionDelayMax = 4_000');
+    expect(ps1Client).toContain('NetplayQualityMonitor');
+    expect(universalClient).toContain('reconnectionAttempts = 12');
+    expect(universalClient).toContain('reconnectionDelayMax = 4_000');
+    expect(universalClient).toContain('NetplayQualityMonitor');
     expect(ps1Room).toContain("prepareFastLaunch(\"ps1\"");
     expect(nativeRoom).toContain("prepareFastLaunch(system as EmulatorSystem");
   });

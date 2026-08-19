@@ -16,12 +16,14 @@ import { ScreenContainer } from "@/components/screen-container";
 import { FAMICOM_CORE_VERSION, decodeFamicomMessage, fingerprintRom, isNesFile, peerIdForRoom, type FamicomMessage } from "@/lib/famicom-netplay";
 import { FamicomInputCoordinator } from "@/lib/famicom-input-coordinator";
 import { haptic } from "@/lib/haptics";
+import { emptyQuality, formatNetplayQuality, startNetplayQualityMonitor, type NetplayQuality } from "@/lib/netplay-quality";
 import { createNetplaySocket, type RoomChatMessage } from "@/lib/netplay-socket";
 import { shouldApplyAuthoritativeState } from "@/lib/netplay-sync";
 import { setRealtimeRoomReady } from "@/lib/realtime-room-service";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
 import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
 import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorModule";
+import { useFpsMeter } from "@/hooks/use-fps-meter";
 
 type JsNesModule = {
   Browser: new (options: { container: HTMLElement; romData: ArrayBuffer }) => {
@@ -63,6 +65,7 @@ export default function FamicomScreen() {
   const peerRef = useRef<PeerInstance | null>(null);
   const connectionRef = useRef<Connection | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const qualityStopRef = useRef<(() => void) | null>(null);
   const voiceChatRef = useRef<RoomVoiceChatHandle | null>(null);
   const assignedPlayerRef = useRef<1 | 2 | null>(null);
   const fingerprintRef = useRef<string | null>(null);
@@ -97,6 +100,7 @@ export default function FamicomScreen() {
   const [startOrientation, setStartOrientation] = useState<"portrait" | "landscape">("landscape");
   const [screenAspect, setScreenAspect] = useState<"fit" | "4:3" | "16:9">("4:3");
   const [screenLayout, setScreenLayout] = useState<ScreenLayout>({ x: 0, y: 0, scale: 1 });
+  const [netplayQuality, setNetplayQuality] = useState<NetplayQuality>(() => emptyQuality());
   const screenLayoutRef = useRef<ScreenLayout>({ x: 0, y: 0, scale: 1 });
   const screenDragOriginRef = useRef<ScreenLayout>({ x: 0, y: 0, scale: 1 });
 
@@ -117,6 +121,8 @@ export default function FamicomScreen() {
       });
       connectionRef.current?.close();
       peerRef.current?.destroy();
+      qualityStopRef.current?.();
+      qualityStopRef.current = null;
       socketRef.current?.disconnect();
       if (netplaySyncTimeoutRef.current) clearTimeout(netplaySyncTimeoutRef.current);
       browserRef.current?.destroy();
@@ -124,6 +130,7 @@ export default function FamicomScreen() {
   }, [roomId]);
 
   const screenStorageKey = `moudie.famicom.screen.v1.${startOrientation}`;
+  const fps = useFpsMeter();
   useEffect(() => { screenLayoutRef.current = screenLayout; }, [screenLayout]);
   useEffect(() => {
     let mounted = true;
@@ -307,6 +314,9 @@ export default function FamicomScreen() {
       setNetworkState("Connecting the room NetPlay channel…");
       const socket = createNetplaySocket({ roomId, memberId: credential.memberId, memberToken: credential.memberToken });
       socketRef.current = socket;
+      qualityStopRef.current?.();
+      setNetplayQuality(emptyQuality());
+      qualityStopRef.current = startNetplayQualityMonitor(socket, setNetplayQuality);
       socket.on("connect", () => {
         setRoomConnected(true);
         setNetworkState("The room channel is ready. Wait for the other player to join and choose the same file.");
@@ -580,7 +590,7 @@ export default function FamicomScreen() {
         {focusMode && romName && <View style={[styles.focusPortraitControls, !controlsEnabled && styles.controlsMuted]}>
           {focusControlEditor && <View style={{ position: "absolute", top: 8, right: 8, zIndex: 6, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(8, 18, 31, 0.9)", borderWidth: 1, borderColor: "#4A7895", borderRadius: 11, padding: 5 }}><Text style={{ color: "#CFEAFF", fontSize: 9, fontWeight: "900", marginHorizontal: 2 }}>SCREEN</Text><Pressable onPress={() => adjustScreenScale(-0.05)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#1B4965", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>−</Text></Pressable><Pressable onPress={() => adjustScreenScale(0.05)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#1B4965", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>+</Text></Pressable></View>}
           <View style={styles.focusTelemetry}>
-            <Text style={styles.focusMetric}>FPS —</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>{roomConnected ? "PING — ms" : "LOCAL"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>P{assignedPlayer ?? 1}</Text>
+            <Text style={styles.focusMetric}>FPS {fps ?? "—"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>{roomConnected ? formatNetplayQuality(netplayQuality) : "LOCAL"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>P{assignedPlayer ?? 1}</Text>
           </View>
           <CustomizableController
             system="famicom"
