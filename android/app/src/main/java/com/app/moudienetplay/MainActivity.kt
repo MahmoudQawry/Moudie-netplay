@@ -1,10 +1,7 @@
 package com.app.moudienetplay
-import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -14,26 +11,13 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
-  private val startupHandler = Handler(Looper.getMainLooper())
-  private val startupSplashFallback = Runnable { SplashScreenManager.hide() }
-
   override fun onCreate(savedInstanceState: Bundle?) {
-    // Set the theme to AppTheme BEFORE onCreate to support
-    // coloring the background, status bar, and navigation bar.
-    // This is required for expo-splash-screen.
-    // setTheme(R.style.AppTheme);
-    // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-f3ff59a738c56c9a6119210cb55f0b613eb8b6af
-    SplashScreenManager.registerOnActivity(this)
-    // @generated end expo-splashscreen
-    // Android 12+ can otherwise retain the system splash indefinitely if the
-    // first React frame is delayed by a device-specific startup condition.
-    startupHandler.postDelayed(startupSplashFallback, 4000L)
+    // Do not install Expo's native splash gate here. Its pre-draw listener can
+    // keep Android 12+ on the launcher logo when React Native initialization
+    // stalls on a device. The regular app theme lets Android hand off to the
+    // activity immediately, so a failure is observable instead of masked by a
+    // permanently retained system splash.
     super.onCreate(null)
-  }
-
-  override fun onDestroy() {
-    startupHandler.removeCallbacks(startupSplashFallback)
-    super.onDestroy()
   }
 
   /**

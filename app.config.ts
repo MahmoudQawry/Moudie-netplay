@@ -40,7 +40,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.4.13",
+  version: "1.4.14",
   orientation: "default",
   icon: "./assets/images/moudie-brand-icon.png",
   scheme: env.scheme,
@@ -54,7 +54,7 @@ const config: ExpoConfig = {
       }
   },
   android: {
-    versionCode: 36,
+    versionCode: 37,
     adaptiveIcon: {
       backgroundColor: "#101827",
       foregroundImage: "./assets/images/moudie-brand-icon.png",
@@ -106,18 +106,6 @@ const config: ExpoConfig = {
       "@config-plugins/react-native-webrtc",
       {
         microphonePermission: "اسمح لـ Moudie NetPlay باستخدام الميكروفون للتحدث داخل الغرف الخاصة.",
-      },
-    ],
-    [
-      "expo-splash-screen",
-      {
-        image: "./assets/images/moudie-brand-icon.png",
-        imageWidth: 200,
-        resizeMode: "contain",
-        backgroundColor: "#ffffff",
-        dark: {
-          backgroundColor: "#000000",
-        },
       },
     ],
     [

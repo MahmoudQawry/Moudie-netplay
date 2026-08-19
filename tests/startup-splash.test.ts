@@ -13,12 +13,15 @@ describe("Android startup splash safeguards", () => {
     expect(rootLayout).toContain('if (Platform.OS !== "web") return;');
   });
 
-  it("uses a bounded native fallback so device-specific startup delays cannot retain the Android logo indefinitely", () => {
+  it("does not install Expo's native pre-draw splash gate that can retain the Android logo", () => {
     const activity = readProjectFile("android/app/src/main/java/com/app/moudienetplay/MainActivity.kt");
-    expect(activity).toContain("SplashScreenManager.registerOnActivity(this)");
-    expect(activity).toContain("startupHandler.postDelayed(startupSplashFallback, 4000L)");
-    expect(activity).toContain("Runnable { SplashScreenManager.hide() }");
-    expect(activity).toContain("startupHandler.removeCallbacks(startupSplashFallback)");
+    const manifest = readProjectFile("android/app/src/main/AndroidManifest.xml");
+    const config = readProjectFile("app.config.ts");
+    expect(activity).not.toContain("SplashScreenManager.registerOnActivity(this)");
+    expect(activity).not.toContain("SplashScreenManager.hide()");
+    expect(manifest).toContain('android:theme="@style/AppTheme"');
+    expect(manifest).not.toContain('android:theme="@style/Theme.App.SplashScreen"');
+    expect(config).not.toContain('"expo-splash-screen"');
   });
 
   it("keeps the animated Moudie envelope sequence isolated until the root startup path is proven on-device", () => {
