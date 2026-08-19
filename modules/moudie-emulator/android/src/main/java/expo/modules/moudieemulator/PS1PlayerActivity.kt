@@ -161,7 +161,10 @@ class PS1PlayerActivity : ComponentActivity() {
     }
 
     retroView = GLRetroView(this, gameData)
-    retroView.renderMode = if (settingsMode) GLSurfaceView.RENDERMODE_CONTINUOUSLY else GLSurfaceView.RENDERMODE_WHEN_DIRTY
+    // Keep the core rendering until the shared initial state is confirmed. A
+    // single dirty-frame render could leave serialization waiting behind core
+    // initialization and turn room launch into a long, opaque delay.
+    retroView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
     lifecycle.addObserver(retroView)
     lifecycleScope.launch {
       retroView.getGLRetroErrors().collect { errorCode ->
@@ -180,11 +183,11 @@ class PS1PlayerActivity : ComponentActivity() {
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.TOP,
     ))
-    controlsContainer = FrameLayout(this).apply { addView(createControls()) }
+    controlsContainer = FrameLayout(this).apply { addView(createFreeControlCanvas()) }
     root.addView(controlsContainer, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
-      if (settingsMode) FrameLayout.LayoutParams.MATCH_PARENT else FrameLayout.LayoutParams.WRAP_CONTENT,
-      if (settingsMode) Gravity.FILL else Gravity.BOTTOM,
+      FrameLayout.LayoutParams.MATCH_PARENT,
+      Gravity.FILL,
     ))
     attachGameplayOverlay()
     setContentView(root)
@@ -509,8 +512,8 @@ class PS1PlayerActivity : ComponentActivity() {
     selectedHud = null
     root.removeView(topControls)
     controlsContainer.removeAllViews()
-    controlsContainer.addView(createControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-    controlsContainer.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM)
+    controlsContainer.addView(createFreeControlCanvas(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    controlsContainer.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.FILL)
     attachGameplayOverlay()
     showToast("PS1 controls were saved for this orientation. You are ready to play.")
   }
@@ -523,7 +526,7 @@ class PS1PlayerActivity : ComponentActivity() {
     topControls.addView(createTopControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
     root.addView(topControls, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
     controlsContainer.removeAllViews()
-    controlsContainer.addView(createControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    controlsContainer.addView(createFreeControlCanvas(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
     controlsContainer.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.FILL)
     attachGameplayOverlay()
     showToast("Edit mode: drag or pinch every control, CHAT, MIC, SPEAKER, OPTIONS, or the game screen. Tap ✓ when finished.")
@@ -827,6 +830,7 @@ class PS1PlayerActivity : ComponentActivity() {
       val storedScale = controlPreferences.getFloat("$key.scale", 1f)
       view.scaleX = storedScale
       view.scaleY = storedScale
+      keepControlVisible(view)
     }
     view.setOnTouchListener { _, event ->
       scaler.onTouchEvent(event)
@@ -845,7 +849,7 @@ class PS1PlayerActivity : ComponentActivity() {
             view.translationX = originX + event.rawX - downX
             view.translationY = originY + event.rawY - downY
           }
-          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> persistControlLayout(view, controlId)
+          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { keepControlVisible(view); persistControlLayout(view, controlId) }
         }
         return@setOnTouchListener true
       }
@@ -869,6 +873,18 @@ class PS1PlayerActivity : ComponentActivity() {
       .putFloat("$key.y", view.translationY)
       .putFloat("$key.scale", view.scaleX)
       .apply()
+  }
+
+  private fun keepControlVisible(view: View) {
+    val parent = view.parent as? View ?: return
+    if (parent.width <= 0 || parent.height <= 0) return
+    val edge = dp(8).toFloat()
+    val minX = -view.left + edge
+    val maxX = parent.width - view.left - view.width - edge
+    val minY = -view.top + edge
+    val maxY = parent.height - view.top - view.height - edge
+    view.translationX = view.translationX.coerceIn(minX, maxX)
+    view.translationY = view.translationY.coerceIn(minY, maxY)
   }
 
   private fun controlBackground(shape: TouchButtonShape): GradientDrawable = GradientDrawable().apply {

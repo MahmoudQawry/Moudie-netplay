@@ -28,6 +28,8 @@ describe("online room launch safeguards", () => {
     const ps1Room = readProjectFile("app/ps1/[roomId].tsx");
     const module = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/MoudieEmulatorModule.kt");
     const moduleBridge = readProjectFile("modules/moudie-emulator/src/MoudieEmulatorModule.ts");
+    const ps1Client = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/Ps1NetplayClient.kt");
+    const universalClient = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/UniversalNetplayClient.kt");
     const library = readProjectFile("app/library/[system].tsx");
     const oauth = readProjectFile("constants/oauth.ts");
 
@@ -73,6 +75,12 @@ describe("online room launch safeguards", () => {
     expect(ps1).toContain('RENDERMODE_CONTINUOUSLY');
     expect(ps1).toContain('resizeSelectedControl(-.1f)');
     expect(universal).toContain('resizeSelectedItem(-.1f)');
+    expect(ps1).toContain('controlsContainer.addView(createFreeControlCanvas()');
+    expect(ps1).toContain('keepControlVisible(view)');
+    expect(ps1Client).toContain('reconnectionAttempts = 1');
+    expect(ps1Client).toContain('reconnectionDelayMax = 500');
+    expect(universalClient).toContain('reconnectionAttempts = 1');
+    expect(universalClient).toContain('reconnectionDelayMax = 500');
     expect(ps1Room).toContain("prepareFastLaunch(\"ps1\"");
     expect(nativeRoom).toContain("prepareFastLaunch(system as EmulatorSystem");
   });

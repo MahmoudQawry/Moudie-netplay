@@ -32,9 +32,11 @@ class Ps1NetplayClient(
       path = "/api/netplay"
       transports = arrayOf("websocket", "polling")
       reconnection = true
-      reconnectionAttempts = 12
-      reconnectionDelay = 1_000
-      reconnectionDelayMax = 8_000
+      timeout = 5_000
+      reconnectionAttempts = 1
+      reconnectionDelay = 300
+      reconnectionDelayMax = 500
+      randomizationFactor = 0.0
       auth = hashMapOf(
         "roomId" to config.roomId.toString(),
         "memberId" to config.memberId.toString(),
@@ -92,7 +94,7 @@ class Ps1NetplayClient(
         val text = payload.optString("text", "").trim()
         if (text.isNotEmpty()) onChat(payload.optString("displayName", "Other player"), text)
       }
-      on(Socket.EVENT_CONNECT_ERROR) { onStatus("Could not connect PS1 to the room. Check internet access and reopen the player.") }
+      on(Socket.EVENT_CONNECT_ERROR) { onStatus("PS1 channel did not connect in the fast-start window. Check the room connection and restart the session.") }
       on(Socket.EVENT_DISCONNECT) { onStatus("PS1 room connection closed; this device continues local play until the channel returns.") }
       connect()
     }
