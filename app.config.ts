@@ -40,7 +40,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.2.0",
+  version: "1.4.7",
   orientation: "default",
   icon: "./assets/images/moudie-brand-icon.png",
   scheme: env.scheme,
@@ -54,7 +54,7 @@ const config: ExpoConfig = {
       }
   },
   android: {
-    versionCode: 22,
+    versionCode: 30,
     adaptiveIcon: {
       backgroundColor: "#101827",
       foregroundImage: "./assets/images/moudie-brand-icon.png",

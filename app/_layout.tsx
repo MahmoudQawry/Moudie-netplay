@@ -1,7 +1,6 @@
 import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -19,9 +18,6 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 
-// Must run before the React tree mounts so native SplashScreen ownership is deterministic.
-void SplashScreen.preventAutoHideAsync().catch(() => undefined);
-
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
@@ -36,24 +32,14 @@ export default function RootLayout() {
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
 
-  // A release APK embeds the JavaScript bundle. Once this root mounts, always
-  // release the native splash—even if preview-only runtime setup has an issue.
+  // This runtime hook is only relevant to browser previews. It must not retain
+  // Android's native splash screen while React Native is loading the first view.
   useEffect(() => {
-    let active = true;
-    const dismissSplash = setTimeout(() => {
-      if (!active) return;
-      try {
-        initManusRuntime();
-      } catch (error) {
-        console.warn("Optional preview runtime initialization failed.", error);
-      } finally {
-        SplashScreen.hideAsync().catch(() => undefined);
-      }
-    }, 300);
-    return () => {
-      active = false;
-      clearTimeout(dismissSplash);
-    };
+    try {
+      initManusRuntime();
+    } catch (error) {
+      console.warn("Optional preview runtime initialization failed.", error);
+    }
   }, []);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
