@@ -31,6 +31,9 @@ describe("Android startup splash safeguards", () => {
     const recovery = readProjectFile("components/startup-recovery-boundary.tsx");
     ["PS1", "PSP", "NES", "SEGA", "ARCADE", "SKIP INTRO", "Moudie"].forEach((label) => expect(intro).toContain(label));
     expect(intro).toContain("setTimeout(() => setVisible(false), 2500)");
+    expect(intro).toContain("const [routeReady, setRouteReady] = useState(false)");
+    expect(intro).toContain("const [visible, setVisible] = useState(false)");
+    expect(intro).toContain("onLayout={() => setRouteReady(true)}");
     expect(recovery).toContain("TRY AGAIN");
     expect(recovery).toContain("MOUDIE IS READY");
     expect(rootLayout).not.toContain("MoudieLaunchIntro");

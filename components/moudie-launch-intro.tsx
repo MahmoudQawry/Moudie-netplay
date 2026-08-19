@@ -15,13 +15,18 @@ const cards: { label: string; color: string; icon: IntroIconName }[] = [
 
 /** A short, JavaScript-rendered launch sequence; it never blocks the route tree behind it. */
 export function MoudieLaunchIntro({ children }: Props) {
-  const [visible, setVisible] = useState(true);
+  // The lobby must paint first. This keeps JavaScript animation completely out
+  // of the critical startup path, including on slower Android devices.
+  const [routeReady, setRouteReady] = useState(false);
+  const [visible, setVisible] = useState(false);
   const envelope = useRef(new Animated.Value(0)).current;
   const seal = useRef(new Animated.Value(0)).current;
   const signature = useRef(new Animated.Value(0)).current;
   const cardValues = useRef(cards.map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
+    if (!routeReady) return;
+    setVisible(true);
     const sequence = Animated.sequence([
       Animated.delay(180),
       Animated.timing(envelope, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
@@ -34,9 +39,9 @@ export function MoudieLaunchIntro({ children }: Props) {
     sequence.start();
     const dismiss = setTimeout(() => setVisible(false), 2500);
     return () => { sequence.stop(); clearTimeout(dismiss); };
-  }, [cardValues, envelope, seal, signature]);
+  }, [cardValues, envelope, routeReady, seal, signature]);
 
-  return <View style={styles.root}>
+  return <View style={styles.root} onLayout={() => setRouteReady(true)}>
     {children}
     {visible && <Animated.View style={styles.overlay} accessibilityLabel="Moudie animated launch">
       <View style={styles.circuitGlow} />
