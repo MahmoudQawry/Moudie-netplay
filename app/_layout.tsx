@@ -7,8 +7,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
-import { MoudieLaunchIntro } from "@/components/moudie-launch-intro";
-import { StartupRecoveryBoundary } from "@/components/startup-recovery-boundary";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -120,5 +118,5 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 
-  return <StartupRecoveryBoundary><MoudieLaunchIntro>{themedContent}</MoudieLaunchIntro></StartupRecoveryBoundary>;
+  return themedContent;
 }
