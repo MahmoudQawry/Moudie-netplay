@@ -174,7 +174,7 @@ class PS1PlayerActivity : ComponentActivity() {
     }
     root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     topControls = createTopControls()
-    root.addView(topControls, FrameLayout.LayoutParams(
+    if (settingsMode) root.addView(topControls, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.TOP,
@@ -499,11 +499,28 @@ class PS1PlayerActivity : ComponentActivity() {
   private fun finishControlSetup() {
     controlEditMode = false
     settingsMode = false
+    retroView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
     selectedEditableControl = null
-    topControls.removeAllViews()
-    topControls.addView(createTopControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+    root.removeView(topControls)
+    controlsContainer.removeAllViews()
+    controlsContainer.addView(createControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+    controlsContainer.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM)
     attachGameplayOverlay()
     showToast("PS1 controls were saved for this orientation. You are ready to play.")
+  }
+  private fun beginGameplayEditor() {
+    if (settingsMode) return
+    settingsMode = true
+    controlEditMode = true
+    retroView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+    topControls.removeAllViews()
+    topControls.addView(createTopControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+    root.addView(topControls, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+    controlsContainer.removeAllViews()
+    controlsContainer.addView(createControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    controlsContainer.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.FILL)
+    attachGameplayOverlay()
+    showToast("Edit mode: drag or pinch every control, CHAT, MIC, SPEAKER, OPTIONS, or the game screen. Tap ✓ when finished.")
   }
 
   private fun resizeSelectedControl(delta: Float) {
@@ -587,7 +604,7 @@ class PS1PlayerActivity : ComponentActivity() {
       val button = DraggableHudButton(this, controlPreferences, "ps1", id, label, editing = { settingsMode }, action = action).also { it.restore() }
       if (id == "microphone") micOverlayButton = button
       if (id == "speaker") speakerOverlayButton = button
-      root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
+      root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12 + index * 58, top = 12))
       gameplayHud += button
     }
   }
@@ -612,8 +629,8 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private fun showGameplayOptions() {
     android.app.AlertDialog.Builder(this)
-      .setItems(arrayOf("SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
-        when (index) { 0 -> saveState(silent = false); 1 -> loadState(); else -> finish() }
+      .setItems(arrayOf("EDIT CONTROLS & SCREEN", "SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
+        when (index) { 0 -> beginGameplayEditor(); 1 -> saveState(silent = false); 2 -> loadState(); else -> finish() }
       }
       .show()
   }

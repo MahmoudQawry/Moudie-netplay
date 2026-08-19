@@ -19,8 +19,10 @@ const env = {
 
 // Native APKs do not have a browser origin from which to derive the backend URL.
 // Keep this deployed project URL as a safe fallback while allowing build-time override.
-const NATIVE_API_FALLBACK_URL = "https://moudienet-huy5wdcy.manus.space";
 const NATIVE_NETPLAY_SERVICE_URL = "https://moudienet-7h7tawvf.manus.space";
+// REST room credentials and Socket.IO must target the same published service.
+// A split backend makes native players connect with credentials unknown to the relay.
+const NATIVE_API_FALLBACK_URL = NATIVE_NETPLAY_SERVICE_URL;
 
 export const OAUTH_PORTAL_URL = env.portal;
 export const OAUTH_SERVER_URL = env.server;

@@ -27,6 +27,7 @@ describe("online room launch safeguards", () => {
     const nativeRoom = readProjectFile("app/native/[system]/[roomId].tsx");
     const module = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/MoudieEmulatorModule.kt");
     const library = readProjectFile("app/library/[system].tsx");
+    const oauth = readProjectFile("constants/oauth.ts");
 
     expect(hud).toContain("$systemId.$orientation.hud.$controlId");
     expect(hud).not.toContain("coerceIn(.65f, 1.75f)");
@@ -46,7 +47,10 @@ describe("online room launch safeguards", () => {
     expect(famicomHud).toContain("onSave");
     expect(famicomHud).toContain("onLoad");
     expect(famicomHud).toContain("onExit");
+    expect(famicomHud).toContain("onEditLayout");
+    expect(famicomHud).toContain("EDIT CONTROLS & SCREEN");
     expect(famicomRoom).toContain("screenPanResponder.panHandlers");
+    expect(famicomRoom).toContain("onEditLayout={() => { setFocusMode(true); setFocusControlEditor(true);");
     expect(famicomRoom).toContain("moudie.famicom.screen.v1.${startOrientation}");
     expect(controller).not.toContain("Math.max(0, Math.min(100");
     expect(controller).not.toContain("Math.max(30, Math.min(94");
@@ -58,5 +62,7 @@ describe("online room launch safeguards", () => {
     expect(famicom).toContain("retroView.setOnTouchListener");
     expect(library).not.toContain("CHOOSE FILE & CONFIGURE");
     expect(famicomRoom).toContain('nativePlayerRef.current?.requestState("netplay")');
+    expect(oauth).toContain("const NATIVE_API_FALLBACK_URL = NATIVE_NETPLAY_SERVICE_URL");
+    [ps1, universal, famicom].forEach((player) => expect(player).toContain('"EDIT CONTROLS & SCREEN"'));
   });
 });

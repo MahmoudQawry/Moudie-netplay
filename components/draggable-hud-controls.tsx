@@ -16,6 +16,7 @@ type Props = {
   onToggleSpeaker: () => void;
   onSave: () => void;
   onLoad: () => void;
+  onEditLayout: () => void;
   onExit: () => void;
 };
 
@@ -27,7 +28,7 @@ const defaults: Layout = {
   options: { x: 0, y: 56, scale: 1 },
 };
 
-export function DraggableHudControls({ system, editable, microphoneMuted, speakerEnabled, onToggleChat, onToggleMicrophone, onToggleSpeaker, onSave, onLoad, onExit }: Props) {
+export function DraggableHudControls({ system, editable, microphoneMuted, speakerEnabled, onToggleChat, onToggleMicrophone, onToggleSpeaker, onSave, onLoad, onEditLayout, onExit }: Props) {
   const { width, height } = useWindowDimensions();
   const orientation = width >= height ? "landscape" : "portrait";
   const storageKey = `moudie.hud-layout.v2.${system}.${orientation}`;
@@ -101,6 +102,7 @@ export function DraggableHudControls({ system, editable, microphoneMuted, speake
       </View>;
     })}
     {optionsOpen && !editable && <View style={[styles.optionsMenu, { top: 76 + optionsPosition.y, right: 10 - optionsPosition.x }]}>
+      <Pressable onPress={() => { setOptionsOpen(false); onEditLayout(); }} style={styles.menuItem}><Text style={styles.menuText}>EDIT CONTROLS & SCREEN</Text></Pressable>
       <Pressable onPress={onSave} style={styles.menuItem}><Text style={styles.menuText}>SAVE</Text></Pressable>
       <Pressable onPress={onLoad} style={styles.menuItem}><Text style={styles.menuText}>LOAD</Text></Pressable>
       <Pressable onPress={onExit} style={[styles.menuItem, styles.exitItem]}><Text style={styles.menuText}>EXIT</Text></Pressable>

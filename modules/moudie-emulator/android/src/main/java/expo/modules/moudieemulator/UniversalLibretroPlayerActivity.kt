@@ -182,9 +182,8 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     gameFrame = FrameLayout(this).apply { addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)) }
     root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     headerView = createHeader().also { it.tag = "moudie-player-header" }
-    root.addView(headerView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(48), Gravity.TOP))
+    if (settingsMode) root.addView(headerView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(48), Gravity.TOP))
     metricPill = createMetricPill()
-    root.addView(metricPill, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(32), Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = dp(54) })
     addController()
     attachGameplaySocialOverlay()
     setContentView(root)
@@ -513,10 +512,18 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     settingsMode = false
     selectedControl = null
     root.removeView(headerView)
+    attachGameplaySocialOverlay()
+    showToast("Controller layouts saved separately for this orientation. You are ready to play.")
+  }
+  private fun beginGameplayEditor() {
+    if (settingsMode) return
+    settingsMode = true
+    customizationEnabled = true
+    root.removeView(headerView)
     headerView = createHeader().also { it.tag = "moudie-player-header" }
     root.addView(headerView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(48), Gravity.TOP))
     attachGameplaySocialOverlay()
-    showToast("Controller layouts saved separately for this orientation. You are ready to play.")
+    showToast("Edit mode: drag or pinch every control, CHAT, MIC, SPEAKER, OPTIONS, or the game screen. Tap SAVE & PLAY when finished.")
   }
 
   private fun applyAspectRatio() {
@@ -597,15 +604,15 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       val button = DraggableHudButton(this, preferences, definition.system, id, label, editing = { settingsMode }, action = action).also { it.restore() }
       if (id == "microphone") micOverlayButton = button
       if (id == "speaker") speakerOverlayButton = button
-      root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
+      root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12 + index * 58, top = 12))
       gameplayHud += button
     }
   }
 
   private fun showGameplayOptions() {
     AlertDialog.Builder(this)
-      .setItems(arrayOf("SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
-        when (index) { 0 -> saveState(silent = false); 1 -> loadState(); else -> finish() }
+      .setItems(arrayOf("EDIT CONTROLS & SCREEN", "SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
+        when (index) { 0 -> beginGameplayEditor(); 1 -> saveState(silent = false); 2 -> loadState(); else -> finish() }
       }
       .show()
   }

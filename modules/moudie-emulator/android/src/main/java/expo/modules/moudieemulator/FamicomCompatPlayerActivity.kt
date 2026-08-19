@@ -42,6 +42,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
   private lateinit var root: FrameLayout
   private lateinit var gameFrame: FrameLayout
   private lateinit var controlsContainer: FrameLayout
+  private lateinit var headerView: LinearLayout
   private lateinit var controlPreferences: android.content.SharedPreferences
   private lateinit var stateDirectory: File
   private val controlProfile = EmulatorControlProfiles.FAMICOM
@@ -101,7 +102,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
       addView(retroView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
     }
     root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-    root.addView(createHeader(gameFile), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+    headerView = createHeader(gameFile)
     attachGameplayHud()
     controlsContainer = FrameLayout(this)
     root.addView(controlsContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
@@ -161,15 +162,15 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     )
     actions.forEachIndexed { index, (label, id, action) ->
       val hud = DraggableHudButton(this, controlPreferences, "famicom", id, label, editing = { controlEditMode }, action = action).also { it.restore() }
-      root.addView(hud, hud.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12, top = 56 + index * 46))
+      root.addView(hud, hud.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12 + index * 58, top = 12))
       gameplayHud += hud
     }
   }
 
   private fun showGameplayOptions() {
     android.app.AlertDialog.Builder(this)
-      .setItems(arrayOf("SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
-        when (index) { 0 -> saveState(); 1 -> loadState(); else -> finish() }
+      .setItems(arrayOf("EDIT CONTROLS & SCREEN", "SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
+        when (index) { 0 -> toggleControlEditing(); 1 -> saveState(); 2 -> loadState(); else -> finish() }
       }
       .show()
   }
@@ -292,6 +293,8 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
   private fun toggleControlEditing() {
     controlEditMode = !controlEditMode
     editToggleButton?.text = if (controlEditMode) "DONE" else "EDIT"
+    if (controlEditMode) root.addView(headerView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+    else root.removeView(headerView)
     showToast(if (controlEditMode) "Edit mode: tap a control, then drag, pinch, or use − / +." else "Control layout saved for this orientation.")
   }
 
