@@ -78,6 +78,13 @@ internal class DraggableHudButton(
     }
   }
 
+  fun resizeBy(delta: Float) {
+    val next = max(.35f, scaleX + delta)
+    scaleX = next
+    scaleY = next
+    persist()
+  }
+
   private val storageKey: String
     get() {
       val orientation = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait"

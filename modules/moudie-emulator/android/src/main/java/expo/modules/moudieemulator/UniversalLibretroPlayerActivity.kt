@@ -75,6 +75,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private var settingsMode = false
   private val controlButtons = mutableListOf<MovableControlButton>()
   private var selectedControl: MovableControlButton? = null
+  private var selectedHud: DraggableHudButton? = null
   private var aspectMode = "fit"
   private var micMuted = true
   private var micOverlayButton: TextView? = null
@@ -269,7 +270,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   private fun sendInitialNetplayState() {
     Thread {
-      Thread.sleep(300)
+      Thread.sleep(120)
       if (!::retroView.isInitialized || localPlayerIndex != 0) return@Thread
       runCatching { Base64.encodeToString(gzip(retroView.serializeState()), Base64.NO_WRAP) }
         .onSuccess { encoded -> runOnUiThread {
@@ -343,13 +344,13 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private val bootstrapRetry = object : Runnable {
     override fun run() {
       if (localPlayerIndex == 0 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
-      if (bootstrapRequestAttempts >= 20) {
-        showToast("Initial-state confirmation is delayed. Keep both devices in the player and ask the host to start again.")
+      if (bootstrapRequestAttempts >= 12) {
+        showToast("Initial-state confirmation exceeded the fast-start window. Keep both players in the player and restart the room session.")
         return
       }
       bootstrapRequestAttempts += 1
       universalNetplayClient?.requestState(-1L)
-      bootstrapHandler.postDelayed(this, 1_000L)
+      bootstrapHandler.postDelayed(this, 750L)
     }
   }
 
@@ -421,6 +422,8 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       maxLines = 1
     }, LinearLayout.LayoutParams(0, dp(38), 1f))
     if (settingsMode) {
+      addView(headerButton("−") { resizeSelectedItem(-.1f) }, LinearLayout.LayoutParams(dp(38), dp(38)))
+      addView(headerButton("+") { resizeSelectedItem(.1f) }, LinearLayout.LayoutParams(dp(38), dp(38)))
       addView(headerButton("SAVE & PLAY") { finishControlSetup() }, LinearLayout.LayoutParams(dp(98), dp(38)))
     }
   }
@@ -511,9 +514,23 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     customizationEnabled = false
     settingsMode = false
     selectedControl = null
+    selectedHud = null
     root.removeView(headerView)
     attachGameplaySocialOverlay()
     showToast("Controller layouts saved separately for this orientation. You are ready to play.")
+  }
+  private fun resizeSelectedItem(delta: Float) {
+    selectedControl?.let { control ->
+      control.resizeBy(delta)
+      showToast("${control.controlId()} size ${(control.scaleX * 100).toInt()}% saved.")
+      return
+    }
+    selectedHud?.let { hud ->
+      hud.resizeBy(delta)
+      showToast("HUD size ${(hud.scaleX * 100).toInt()}% saved.")
+      return
+    }
+    showToast("Tap a control or HUD item first, then use − or + to resize it.")
   }
   private fun beginGameplayEditor() {
     if (settingsMode) return
@@ -601,7 +618,11 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       Triple("OPTIONS", "options") { showGameplayOptions() },
     )
     actions.forEachIndexed { index, (label, id, action) ->
-      val button = DraggableHudButton(this, preferences, definition.system, id, label, editing = { settingsMode }, action = action).also { it.restore() }
+      val button = DraggableHudButton(this, preferences, definition.system, id, label, editing = { settingsMode }, action = action, selected = { view, _ ->
+        selectedControl = null
+        selectedHud = view as? DraggableHudButton
+        showToast("HUD selected. Use − or + to resize it, or drag and pinch freely.")
+      }).also { it.restore() }
       if (id == "microphone") micOverlayButton = button
       if (id == "speaker") speakerOverlayButton = button
       root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12 + index * 58, top = 12))
@@ -716,6 +737,12 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   private inner class MovableControlButton(context: Context, private val control: EmulatorTouchButton) : TextView(context) {
     fun controlId(): String = control.id
+    fun resizeBy(delta: Float) {
+      val next = max(.35f, scaleX + delta)
+      scaleX = next
+      scaleY = next
+      persistLayout(this, control.id)
+    }
     private var dragging = false
     private var downX = 0f
     private var downY = 0f
@@ -754,6 +781,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
           dragging = false
           if (customizationEnabled) {
             selectedControl = this
+            selectedHud = null
             showToast("${control.id} selected. Drag or pinch to resize it; this layout is saved for the current orientation.")
           } else sendLocalKey(KeyEvent.ACTION_DOWN, control.keyCode)
           return true

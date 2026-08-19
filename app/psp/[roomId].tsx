@@ -74,9 +74,11 @@ export default function PSPRoomScreen() {
       if (Platform.OS === "web") throw new Error("PSP room verification is available in the Android APK only.");
       setStatus("Checking the local PSP file fingerprint…");
       const fingerprint = await MoudieEmulatorModule.fingerprintNativeGame("psp", asset.uri, asset.name);
+      setStatus("Preparing the PSP core and local file now for a fast synchronized start…");
+      await MoudieEmulatorModule.prepareFastLaunch("psp", asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false); setStartRequested(false);
-      setStatus("File verified. Tap READY after every active player selects the same file."); haptic.success();
+      setStatus("File, core, and local launch cache are ready. Tap READY after every active player selects the same file."); haptic.success();
     } catch (error) { haptic.error(); Alert.alert("Could not choose PSP game", error instanceof Error ? error.message : "Try again."); setStatus("Choose a supported legal PSP file from this device."); }
     finally { setPicking(false); }
   };

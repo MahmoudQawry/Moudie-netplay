@@ -341,7 +341,7 @@ export default function FamicomScreen() {
         setNetworkState("Game compatibility confirmed. Synchronizing the shared starting state…");
         netplaySyncTimeoutRef.current = setTimeout(() => {
           setNetworkState("The shared Famicom state is delayed. Keep both players in the game, verify the same .nes file, then restart the room session.");
-        }, 15_000);
+        }, 12_000);
       });
       socket.on("netplay:session-start-refused", (payload: { message?: string }) => {
         setNetworkState(payload.message ?? "Waiting for the other player to confirm the game file and core.");

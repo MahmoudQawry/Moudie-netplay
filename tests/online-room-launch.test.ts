@@ -25,11 +25,14 @@ describe("online room launch safeguards", () => {
     const famicomRoom = readProjectFile("app/famicom/[roomId].tsx");
     const controller = readProjectFile("components/customizable-controller.tsx");
     const nativeRoom = readProjectFile("app/native/[system]/[roomId].tsx");
+    const ps1Room = readProjectFile("app/ps1/[roomId].tsx");
     const module = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/MoudieEmulatorModule.kt");
+    const moduleBridge = readProjectFile("modules/moudie-emulator/src/MoudieEmulatorModule.ts");
     const library = readProjectFile("app/library/[system].tsx");
     const oauth = readProjectFile("constants/oauth.ts");
 
     expect(hud).toContain("$systemId.$orientation.hud.$controlId");
+    expect(hud).toContain("fun resizeBy(delta: Float)");
     expect(hud).not.toContain("coerceIn(.65f, 1.75f)");
     [ps1, universal, famicom].forEach((player) => {
       expect(player).toContain("Triple(\"OPTIONS\"");
@@ -55,6 +58,9 @@ describe("online room launch safeguards", () => {
     expect(controller).not.toContain("Math.max(0, Math.min(100");
     expect(controller).not.toContain("Math.max(30, Math.min(94");
     expect(module).toContain('AsyncFunction("prepareNativeCore")');
+    expect(module).toContain('AsyncFunction("prepareFastLaunch")');
+    expect(module).toContain('val sourceKey = MessageDigest.getInstance("SHA-256")');
+    expect(moduleBridge).toContain("prepareFastLaunch(system: EmulatorSystem");
     expect(nativeRoom).toContain("INSTALL MAME ARCADE CORE");
     expect(ps1).toContain("createFreeControlCanvas()");
     expect(ps1).toContain("retroView.setOnTouchListener");
@@ -64,5 +70,10 @@ describe("online room launch safeguards", () => {
     expect(famicomRoom).toContain('nativePlayerRef.current?.requestState("netplay")');
     expect(oauth).toContain("const NATIVE_API_FALLBACK_URL = NATIVE_NETPLAY_SERVICE_URL");
     [ps1, universal, famicom].forEach((player) => expect(player).toContain('"EDIT CONTROLS & SCREEN"'));
+    expect(ps1).toContain('RENDERMODE_CONTINUOUSLY');
+    expect(ps1).toContain('resizeSelectedControl(-.1f)');
+    expect(universal).toContain('resizeSelectedItem(-.1f)');
+    expect(ps1Room).toContain("prepareFastLaunch(\"ps1\"");
+    expect(nativeRoom).toContain("prepareFastLaunch(system as EmulatorSystem");
   });
 });

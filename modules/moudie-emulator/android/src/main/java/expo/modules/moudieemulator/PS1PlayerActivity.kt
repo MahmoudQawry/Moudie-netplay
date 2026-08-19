@@ -80,6 +80,7 @@ class PS1PlayerActivity : ComponentActivity() {
   private var controlEditMode = false
   private var settingsMode = false
   private var selectedEditableControl: Pair<TextView, String>? = null
+  private var selectedHud: DraggableHudButton? = null
   private var aspectMode = "fit"
   private lateinit var topControls: FrameLayout
   private val gameplayHud = mutableListOf<View>()
@@ -264,7 +265,7 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private fun sendInitialNetplayState() {
     Thread {
-      Thread.sleep(300)
+      Thread.sleep(120)
       if (!::retroView.isInitialized || localPlayerIndex != 0) return@Thread
       runCatching {
         val compressed = gzip(retroView.serializeState())
@@ -352,13 +353,13 @@ class PS1PlayerActivity : ComponentActivity() {
   private val bootstrapRetry = object : Runnable {
     override fun run() {
       if (localPlayerIndex == 0 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
-      if (bootstrapRequestAttempts >= 20) {
-        showToast("Initial-state confirmation is delayed. Keep both devices in-game and request session start again.")
+      if (bootstrapRequestAttempts >= 12) {
+        showToast("Initial-state confirmation exceeded the fast-start window. Keep both players in-game and restart the room session.")
         return
       }
       bootstrapRequestAttempts += 1
       netplayClient?.requestState(-1L)
-      bootstrapHandler.postDelayed(this, 1_000L)
+      bootstrapHandler.postDelayed(this, 750L)
     }
   }
 
@@ -493,14 +494,19 @@ class PS1PlayerActivity : ComponentActivity() {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(12), 0, 0, 0)
       }, LinearLayout.LayoutParams(0, dp(38), 1f))
+      if (settingsMode) {
+        addView(button("−", KeyEvent.KEYCODE_UNKNOWN, dp(38), onClick = { resizeSelectedControl(-.1f) }))
+        addView(button("+", KeyEvent.KEYCODE_UNKNOWN, dp(38), onClick = { resizeSelectedControl(.1f) }))
+      }
     }
   }
 
   private fun finishControlSetup() {
     controlEditMode = false
     settingsMode = false
-    retroView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+    retroView.renderMode = if (lockstepActive.get()) GLSurfaceView.RENDERMODE_WHEN_DIRTY else GLSurfaceView.RENDERMODE_CONTINUOUSLY
     selectedEditableControl = null
+    selectedHud = null
     root.removeView(topControls)
     controlsContainer.removeAllViews()
     controlsContainer.addView(createControls(), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
@@ -525,16 +531,21 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private fun resizeSelectedControl(delta: Float) {
     val selected = selectedEditableControl
-    if (selected == null) {
-      showToast("Tap a control in EDIT mode, then use − or + to resize that control only.")
+    if (selected != null) {
+      val (view, controlId) = selected
+      val next = max(.35f, view.scaleX + delta)
+      view.scaleX = next
+      view.scaleY = next
+      persistControlLayout(view, controlId)
+      showToast("$controlId size ${(next * 100).toInt()}% saved.")
       return
     }
-    val (view, controlId) = selected
-    val next = max(.35f, view.scaleX + delta)
-    view.scaleX = next
-    view.scaleY = next
-    persistControlLayout(view, controlId)
-    showToast("$controlId size ${(next * 100).toInt()}% saved.")
+    selectedHud?.let { hud ->
+      hud.resizeBy(delta)
+      showToast("HUD size ${(hud.scaleX * 100).toInt()}% saved.")
+      return
+    }
+    showToast("Tap a control or HUD item in EDIT mode, then use − or + to resize it.")
   }
 
   private fun applyAspectRatio() {
@@ -601,7 +612,11 @@ class PS1PlayerActivity : ComponentActivity() {
       Triple("OPTIONS", "options") { showGameplayOptions() },
     )
     actions.forEachIndexed { index, (label, id, action) ->
-      val button = DraggableHudButton(this, controlPreferences, "ps1", id, label, editing = { settingsMode }, action = action).also { it.restore() }
+      val button = DraggableHudButton(this, controlPreferences, "ps1", id, label, editing = { settingsMode }, action = action, selected = { view, _ ->
+        selectedEditableControl = null
+        selectedHud = view as? DraggableHudButton
+        showToast("HUD selected. Use − or + to resize it, or drag and pinch freely.")
+      }).also { it.restore() }
       if (id == "microphone") micOverlayButton = button
       if (id == "speaker") speakerOverlayButton = button
       root.addView(button, button.layoutParams(Gravity.RIGHT or Gravity.TOP, right = 12 + index * 58, top = 12))
@@ -819,6 +834,7 @@ class PS1PlayerActivity : ComponentActivity() {
         when (event.actionMasked) {
           MotionEvent.ACTION_DOWN -> {
             selectedEditableControl = view to controlId
+            selectedHud = null
             showToast("$controlId selected. Drag or pinch to resize it for this orientation.")
             downX = event.rawX
             downY = event.rawY

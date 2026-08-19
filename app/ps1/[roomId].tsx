@@ -122,10 +122,12 @@ export default function PS1Screen() {
       if (Platform.OS === "web") throw new Error("PS1 game verification and room preparation are available in the Android APK only.");
       setStatus("Checking the local PS1 game fingerprint to verify that the other player selected the same file…");
       const fingerprint = await MoudieEmulatorModule.fingerprintPS1Game(asset.uri, asset.name);
+      setStatus("Preparing the PS1 core and local file now for a fast synchronized start…");
+      await MoudieEmulatorModule.prepareFastLaunch("ps1", asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false);
       setStartRequested(false);
-      setStatus("The file and its fingerprint are ready. Tap READY after all active players select the same file.");
+      setStatus("The file, PS1 core, and fingerprint are ready. Tap READY for a fast synchronized start.");
       haptic.success();
     } catch (error) {
       haptic.error();

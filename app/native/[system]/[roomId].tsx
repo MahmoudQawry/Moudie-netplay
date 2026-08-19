@@ -69,8 +69,10 @@ export default function NativeRoomScreen() {
       if (Platform.OS === "web") throw new Error("Room verification is available in the Android APK only.");
       setStatus("Checking the local game fingerprint…");
       const fingerprint = await MoudieEmulatorModule.fingerprintNativeGame(system as EmulatorSystem, asset.uri, asset.name);
+      setStatus("Preparing the emulator core and local file now for a fast synchronized start…");
+      await MoudieEmulatorModule.prepareFastLaunch(system as EmulatorSystem, asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint }); setReady(false);
-      setStatus("File verified. Tap READY after every active player chooses the same file.");
+      setStatus("File, core, and local launch cache are ready. Tap READY after every active player chooses the same file.");
     } catch (error) { const message = error instanceof Error ? error.message : "Try again."; Alert.alert("Could not choose game", message); setStatus(message); }
     finally { setPicking(false); }
   };

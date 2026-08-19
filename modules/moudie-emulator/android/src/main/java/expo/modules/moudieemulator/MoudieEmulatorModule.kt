@@ -108,6 +108,25 @@ class MoudieEmulatorModule : Module() {
       )
     }
 
+    AsyncFunction("prepareFastLaunch") { system: String, uri: String, fileName: String ->
+      require(uri.isNotBlank()) { "Choose a local game file first." }
+      val activity = appContext.currentActivity ?: throw IllegalStateException("Open the emulator setup after the app is visible on screen.")
+      val gamePath = if (system == "ps1") {
+        val launchStatus = getPs1LaunchStatus()
+        require(launchStatus["available"] == true) { launchStatus["message"] as String }
+        preparePS1GameFile(activity.cacheDir, uri, fileName)
+      } else {
+        val definition = NativeCoreCatalog.forSystem(system)
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        require(extension in definition.extensions) { "Choose a ${definition.title} file with a supported extension." }
+        NativeCoreCatalog.findCore(activity, definition)
+          ?: NativeCoreCatalog.downloadCore(activity, definition)
+          ?: throw IllegalStateException("Could not prepare ${definition.coreName}. Check storage and try again.")
+        prepareGameFile(activity.cacheDir, uri, fileName, "moudie-${definition.system}-games")
+      }
+      mapOf("system" to system, "gamePath" to gamePath, "message" to "${fileName.take(48)} is prepared for fast launch.")
+    }
+
     AsyncFunction("launchPS1Game") { uri: String, fileName: String, netplay: Map<String, Any>?, playerOptions: Map<String, Any>? ->
       require(uri.isNotBlank()) { "Choose a local PS1 game file first." }
       val activity = appContext.currentActivity ?: throw IllegalStateException("Open the PS1 player from the app after it is visible on screen.")
@@ -326,11 +345,15 @@ class MoudieEmulatorModule : Module() {
 
     val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(100).ifBlank { "ps1-game.bin" }
     val gameDirectory = File(cacheDir, directoryName).apply { mkdirs() }
-    val copiedGame = File(gameDirectory, "${System.currentTimeMillis()}-$safeName")
+    val sourceKey = MessageDigest.getInstance("SHA-256").digest("$rawUri:$fileName".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 0xff) }.take(16)
+    val copiedGame = File(gameDirectory, "$sourceKey-$safeName")
+    if (copiedGame.isFile && copiedGame.length() > 0L) return copiedGame.absolutePath
+    val temporary = File(gameDirectory, "$sourceKey-$safeName.tmp")
     val resolver = appContext.reactContext?.contentResolver ?: throw IllegalStateException("Could not open the device file provider.")
     resolver.openInputStream(parsedUri)?.use { input ->
-      FileOutputStream(copiedGame).use { output -> input.copyTo(output) }
+      FileOutputStream(temporary).use { output -> input.copyTo(output); output.fd.sync() }
     } ?: throw IllegalArgumentException("Could not read the PS1 game file.")
+    if (!temporary.renameTo(copiedGame)) { temporary.copyTo(copiedGame, overwrite = true); temporary.delete() }
     require(copiedGame.length() > 0) { "The PS1 game file is empty or unreadable." }
     return copiedGame.absolutePath
   }
