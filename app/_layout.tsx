@@ -7,6 +7,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
+import { MoudieLaunchIntro } from "@/components/moudie-launch-intro";
+import { StartupRecoveryBoundary } from "@/components/startup-recovery-boundary";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -35,6 +37,7 @@ export default function RootLayout() {
   // This runtime hook is only relevant to browser previews. It must not retain
   // Android's native splash screen while React Native is loading the first view.
   useEffect(() => {
+    if (Platform.OS !== "web") return;
     try {
       initManusRuntime();
     } catch (error) {
@@ -101,9 +104,8 @@ export default function RootLayout() {
 
   const shouldOverrideSafeArea = Platform.OS === "web";
 
-  if (shouldOverrideSafeArea) {
-    return (
-      <ThemeProvider>
+  const themedContent = shouldOverrideSafeArea ? (
+    <ThemeProvider>
         <SafeAreaProvider initialMetrics={providerInitialMetrics}>
           <SafeAreaFrameContext.Provider value={frame}>
             <SafeAreaInsetsContext.Provider value={insets}>
@@ -111,13 +113,12 @@ export default function RootLayout() {
             </SafeAreaInsetsContext.Provider>
           </SafeAreaFrameContext.Provider>
         </SafeAreaProvider>
-      </ThemeProvider>
-    );
-  }
-
-  return (
+    </ThemeProvider>
+  ) : (
     <ThemeProvider>
       <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
     </ThemeProvider>
   );
+
+  return <StartupRecoveryBoundary><MoudieLaunchIntro>{themedContent}</MoudieLaunchIntro></StartupRecoveryBoundary>;
 }

@@ -3,8 +3,6 @@ import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -14,9 +12,6 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
-  private val startupHandler = Handler(Looper.getMainLooper())
-  private val startupSplashFallback = Runnable { SplashScreenManager.hide() }
-
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
@@ -25,15 +20,7 @@ class MainActivity : ReactActivity() {
     // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-f3ff59a738c56c9a6119210cb55f0b613eb8b6af
     SplashScreenManager.registerOnActivity(this)
     // @generated end expo-splashscreen
-    // Do not leave users blocked on the branded splash if JavaScript fails before
-    // the first React view appears. React Native normally dismisses it sooner.
-    startupHandler.postDelayed(startupSplashFallback, 4000L)
     super.onCreate(null)
-  }
-
-  override fun onDestroy() {
-    startupHandler.removeCallbacks(startupSplashFallback)
-    super.onDestroy()
   }
 
   /**

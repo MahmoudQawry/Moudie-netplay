@@ -10,12 +10,24 @@ describe("Android startup splash safeguards", () => {
     const rootLayout = readProjectFile("app/_layout.tsx");
     expect(rootLayout).not.toContain("preventAutoHideAsync");
     expect(rootLayout).not.toContain("SplashScreen.hideAsync");
+    expect(rootLayout).toContain("MoudieLaunchIntro");
+    expect(rootLayout).toContain("StartupRecoveryBoundary");
+    expect(rootLayout).toContain('if (Platform.OS !== "web") return;');
   });
 
-  it("provides a native timeout fallback that releases the splash screen", () => {
+  it("lets Android hand the splash to the first React frame rather than revealing an empty screen early", () => {
     const activity = readProjectFile("android/app/src/main/java/com/app/moudienetplay/MainActivity.kt");
-    expect(activity).toContain("startupHandler.postDelayed(startupSplashFallback, 4000L)");
-    expect(activity).toContain("Runnable { SplashScreenManager.hide() }");
-    expect(activity).toContain("startupHandler.removeCallbacks(startupSplashFallback)");
+    expect(activity).toContain("SplashScreenManager.registerOnActivity(this)");
+    expect(activity).not.toContain("startupHandler.postDelayed");
+    expect(activity).not.toContain("SplashScreenManager.hide()");
+  });
+
+  it("ships an animated Moudie envelope sequence that can always be skipped and a visible recovery screen", () => {
+    const intro = readProjectFile("components/moudie-launch-intro.tsx");
+    const recovery = readProjectFile("components/startup-recovery-boundary.tsx");
+    ["PS1", "PSP", "NES", "SEGA", "ARCADE", "SKIP INTRO", "Moudie"].forEach((label) => expect(intro).toContain(label));
+    expect(intro).toContain("setTimeout(() => setVisible(false), 2500)");
+    expect(recovery).toContain("TRY AGAIN");
+    expect(recovery).toContain("MOUDIE IS READY");
   });
 });
