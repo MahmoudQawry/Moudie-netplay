@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "../shared/const.js";
-import { MIN_ACTIVE_PLAYERS, MAX_ACTIVE_PLAYERS, MAX_ROOM_MEMBERS, MAX_SPECTATORS } from "../shared/room-capacity.js";
+import { MIN_ACTIVE_PLAYERS, roomCapacityFor, roomMemberLimit, canStartOnlineSession, type RoomSystem } from "../shared/room-capacity.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
@@ -8,6 +8,8 @@ import { EMULATOR_ROOM_CAPABILITIES } from "./emulator-capabilities";
 import { createRoomMediaToken } from "./livekit";
 import { createAccessToken, createJoinCode, hashAccessToken } from "./rooms";
 import { z } from "zod";
+
+const roomSystemSchema = z.enum(["psp", "nes", "sega", "ps1", "arcade"]);
 
 export const appRouter = router({
   system: systemRouter,
@@ -26,23 +28,30 @@ export const appRouter = router({
       .input(
         z.object({
           name: z.string().trim().min(2).max(64),
-          system: z.enum(["psp", "nes", "sega", "ps1", "arcade"]),
+          system: roomSystemSchema,
           hostName: z.string().trim().min(2).max(32),
-          maxPlayers: z.literal(MAX_ACTIVE_PLAYERS).default(MAX_ACTIVE_PLAYERS),
         }),
       )
       .mutation(async ({ input }) => {
-        const capability = EMULATOR_ROOM_CAPABILITIES[input.system];
-        if (capability.maxRoomMembers < MAX_ROOM_MEMBERS) throw new Error("هذا المحاكي لا يدعم سعة الغرفة المطلوبة.");
+        const system = input.system as RoomSystem;
+        const capacity = roomCapacityFor(system);
+        if (capacity.minPlayers !== MIN_ACTIVE_PLAYERS) throw new Error("إعداد سعة هذه الغرفة غير صالح.");
         const hostToken = createAccessToken();
         const memberToken = createAccessToken();
         const created = await db.createRoom({
           ...input,
+          maxPlayers: capacity.maxPlayers,
           joinCode: createJoinCode(),
           hostTokenHash: hashAccessToken(hostToken),
           memberTokenHash: hashAccessToken(memberToken),
         });
-        return { ...created, hostToken, memberToken };
+        return {
+          ...created,
+          hostToken,
+          memberToken,
+          maxPlayers: capacity.maxPlayers,
+          maxSpectators: capacity.maxSpectators,
+        };
       }),
     join: publicProcedure
       .input(z.object({
@@ -53,15 +62,23 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const room = await db.findRoomByCode(input.joinCode.toUpperCase());
         if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
+        const system = room.system as RoomSystem;
+        const capacity = roomCapacityFor(system);
         const totalMembers = await db.getRoomMemberCount(room.id);
-        if (totalMembers >= MAX_ROOM_MEMBERS) throw new Error("الغرفة مكتملة: 8 لاعبين و4 مشاهدين كحد أقصى.");
+        if (totalMembers >= roomMemberLimit(system)) {
+          throw new Error(`الغرفة مكتملة: ${capacity.maxPlayers} لاعبين و${capacity.maxSpectators} مشاهدين كحد أقصى.`);
+        }
         if (input.joinAs === "player") {
           const playerCount = await db.getRoomMemberCount(room.id, "player");
-          // The host always occupies one active seat, so playerCount excludes the host.
-          if (playerCount + 1 >= MAX_ACTIVE_PLAYERS) throw new Error("مقاعد اللعب الثمانية مكتملة. يمكنك الدخول كمشاهد.");
+          const activePlayersIncludingHost = playerCount + 1;
+          if (activePlayersIncludingHost >= capacity.maxPlayers) {
+            throw new Error(`مقاعد اللعب (${capacity.maxPlayers}) مكتملة. يمكنك الدخول كمشاهد.`);
+          }
         } else {
           const spectatorCount = await db.getRoomMemberCount(room.id, "spectator");
-          if (spectatorCount >= MAX_SPECTATORS) throw new Error("مقاعد المشاهدة الأربعة مكتملة.");
+          if (spectatorCount >= capacity.maxSpectators) {
+            throw new Error(`مقاعد المشاهدة (${capacity.maxSpectators}) مكتملة.`);
+          }
         }
         const memberToken = createAccessToken();
         const memberId = await db.addRoomMember({
@@ -70,7 +87,7 @@ export const appRouter = router({
           role: input.joinAs,
           accessTokenHash: hashAccessToken(memberToken),
         });
-        return { roomId: room.id, memberId, memberToken, role: input.joinAs };
+        return { roomId: room.id, memberId, memberToken, role: input.joinAs, maxPlayers: capacity.maxPlayers, maxSpectators: capacity.maxSpectators };
       }),
     snapshot: publicProcedure
       .input(z.object({ roomId: z.number().int().positive(), memberId: z.number().int().positive(), memberToken: z.string().min(20) }))
@@ -79,7 +96,12 @@ export const appRouter = router({
         if (!member || member.roomId !== input.roomId) throw new Error("لا تملك صلاحية عرض هذه الغرفة.");
         const snapshot = await db.getRoomSnapshot(input.roomId);
         if (!snapshot) throw new Error("الغرفة لم تعد موجودة.");
-        return snapshot;
+        const system = snapshot.room.system as RoomSystem;
+        const capacity = roomCapacityFor(system);
+        return {
+          room: { ...snapshot.room, maxPlayers: capacity.maxPlayers, maxSpectators: capacity.maxSpectators },
+          members: snapshot.members,
+        };
       }),
     mediaToken: publicProcedure
       .input(z.object({ roomId: z.number().int().positive(), memberId: z.number().int().positive(), memberToken: z.string().min(20) }))
@@ -114,9 +136,11 @@ export const appRouter = router({
         if (!snapshot || hashAccessToken(input.hostToken) !== snapshot.room.hostTokenHash) {
           throw new Error("لا تملك صلاحية بدء هذه الجلسة.");
         }
+        const system = snapshot.room.system as RoomSystem;
+        const capacity = roomCapacityFor(system);
         const players = snapshot.members.filter((member) => member.role !== "spectator");
-        if (players.length < MIN_ACTIVE_PLAYERS || players.length > MAX_ACTIVE_PLAYERS || players.some((member) => !member.isReady)) {
-          throw new Error("يجب أن يكون لاعبان إلى ثمانية لاعبين نشطين جاهزين قبل البدء.");
+        if (!canStartOnlineSession(system, players.length) || players.some((member) => !member.isReady)) {
+          throw new Error(`يجب أن يكون من ${capacity.minPlayers} إلى ${capacity.maxPlayers} لاعبين نشطين جاهزين قبل البدء.`);
         }
         const fingerprints = new Set(players.map((member) => member.gameFingerprint));
         const versions = new Set(players.map((member) => member.coreVersion));
