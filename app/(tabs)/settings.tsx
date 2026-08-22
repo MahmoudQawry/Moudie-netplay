@@ -39,18 +39,18 @@ export default function SettingsScreen() {
         <Text style={styles.label}>{ar ? "لغة البرنامج" : "APP LANGUAGE"}</Text>
         <View style={styles.languageRow}>
           <Pressable onPress={() => void changeLanguage("ar")} style={({ pressed }) => [styles.languageOption, language === "ar" && styles.languageSelected, pressed && styles.pressed]} accessibilityRole="button" accessibilityState={{ selected: language === "ar" }}>
-            <Text style={[styles.languageCode, language === "ar" && styles.languageCodeSelected]}>ع</Text>
+            <Text style={styles.flag}>🇪🇬</Text>
             <View style={styles.languageCopy}>
               <Text style={styles.languageTitle}>{ar ? "العربية" : "Arabic"}</Text>
-              <Text style={styles.languageHint}>{ar ? "واجهة عربية" : "Arabic interface"}</Text>
+              <Text style={styles.languageHint}>{ar ? "مصر · واجهة عربية" : "Egypt · Arabic interface"}</Text>
             </View>
             {language === "ar" && <Text style={styles.check}>✓</Text>}
           </Pressable>
           <Pressable onPress={() => void changeLanguage("en")} style={({ pressed }) => [styles.languageOption, language === "en" && styles.languageSelected, pressed && styles.pressed]} accessibilityRole="button" accessibilityState={{ selected: language === "en" }}>
-            <Text style={[styles.languageCode, language === "en" && styles.languageCodeSelected]}>A</Text>
+            <Text style={styles.flag}>🇺🇸</Text>
             <View style={styles.languageCopy}>
               <Text style={styles.languageTitle}>{ar ? "الإنجليزية" : "English"}</Text>
-              <Text style={styles.languageHint}>{ar ? "واجهة إنجليزية" : "English interface"}</Text>
+              <Text style={styles.languageHint}>{ar ? "الولايات المتحدة · واجهة إنجليزية" : "United States · English interface"}</Text>
             </View>
             {language === "en" && <Text style={styles.check}>✓</Text>}
           </Pressable>
@@ -89,8 +89,7 @@ const styles = StyleSheet.create({
   languageRow: { gap: 9 },
   languageOption: { minHeight: 64, borderRadius: 15, borderWidth: 1, borderColor: "#30445E", backgroundColor: "#162235", paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 11 },
   languageSelected: { borderColor: "#7B58C7", backgroundColor: "#211A38" },
-  languageCode: { width: 38, height: 38, borderRadius: 12, backgroundColor: "#24354A", color: "#B9C9D8", fontSize: 19, fontWeight: "900", textAlign: "center", textAlignVertical: "center", overflow: "hidden" },
-  languageCodeSelected: { backgroundColor: "#5A2C91", color: "#FFFFFF" },
+  flag: { fontSize: 28, width: 42, textAlign: "center" },
   languageCopy: { flex: 1 },
   languageTitle: { color: "#F3F7FB", fontSize: 14, fontWeight: "900" },
   languageHint: { color: "#8799AC", fontSize: 10, marginTop: 3 },
