@@ -4,6 +4,8 @@ import InCallManager from "react-native-incall-manager";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { getApiBaseUrl } from "@/constants/oauth";
+
 registerGlobals();
 
 type VoiceMember = { id: number; displayName: string; role: "host" | "player" | "spectator" };
@@ -17,6 +19,14 @@ type Props = {
   memberId?: number;
   members?: VoiceMember[];
 };
+
+type RoomSocketAuth = { roomId?: unknown; memberId?: unknown; memberToken?: unknown };
+
+function readSocketAuth(socket: unknown): RoomSocketAuth | null {
+  if (!socket || typeof socket !== "object") return null;
+  const auth = (socket as { auth?: unknown }).auth;
+  return auth && typeof auth === "object" ? auth as RoomSocketAuth : null;
+}
 
 function VoiceControls({ memberRole }: Props) {
   const { isMicrophoneEnabled, localParticipant } = useLocalParticipant();
@@ -72,8 +82,47 @@ function VoiceControls({ memberRole }: Props) {
   );
 }
 
-export function RoomVoiceChat({ mediaToken, memberRole, ...compat }: Props) {
-  void compat;
+export function RoomVoiceChat({ mediaToken: suppliedToken, memberRole: suppliedRole, socket, memberId }: Props) {
+  const [mediaToken, setMediaToken] = useState<MediaToken | null | undefined>(suppliedToken);
+  const [memberRole, setMemberRole] = useState<VoiceMember["role"] | undefined>(suppliedRole);
+
+  useEffect(() => {
+    if (suppliedToken) {
+      setMediaToken(suppliedToken);
+      return;
+    }
+    const auth = readSocketAuth(socket);
+    const roomId = Number(auth?.roomId);
+    const authMemberId = Number(auth?.memberId ?? memberId);
+    const memberToken = typeof auth?.memberToken === "string" ? auth.memberToken : "";
+    if (!Number.isInteger(roomId) || roomId <= 0 || !Number.isInteger(authMemberId) || authMemberId <= 0 || memberToken.length < 20) {
+      setMediaToken(null);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await fetch(`${getApiBaseUrl()}/api/trpc/rooms.mediaToken`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ json: { roomId, memberId: authMemberId, memberToken } }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const envelope = await response.json() as { result?: { data?: { json?: MediaToken } } };
+        const token = envelope.result?.data?.json;
+        if (!cancelled) {
+          setMediaToken(token ?? { configured: false, message: "تعذر تجهيز قناة الصوت." });
+          if (token?.canPublish === false) setMemberRole("spectator");
+        }
+      } catch {
+        if (!cancelled) setMediaToken({ configured: false, message: "تعذر الاتصال بخدمة الصوت الجماعي." });
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [suppliedToken, socket, memberId]);
+
   if (!mediaToken?.configured || !mediaToken.url || !mediaToken.token) {
     return (
       <View style={styles.card}>
