@@ -14,7 +14,7 @@ data class Ps1NetplayConfig(
   val playerIndex: Int,
 )
 
-/** Authenticated relay used only for control inputs and save-state bootstrap, never game files. */
+/** Authenticated PS1 relay for control inputs/state; a separate dedicated relay measures quality. */
 class Ps1NetplayClient(
   private val config: Ps1NetplayConfig,
   private val onBootstrap: () -> Unit,
@@ -27,6 +27,7 @@ class Ps1NetplayClient(
   private val onQuality: (NetplayQuality) -> Unit,
 ) {
   private var socket: Socket? = null
+  private var qualitySocket: Socket? = null
   private var qualityMonitor: NetplayQualityMonitor? = null
 
   fun connect() {
@@ -35,7 +36,7 @@ class Ps1NetplayClient(
       transports = arrayOf("websocket", "polling")
       reconnection = true
       timeout = 5_000
-      reconnectionAttempts = 12
+      reconnectionAttempts = 20
       reconnectionDelay = 500
       reconnectionDelayMax = 4_000
       randomizationFactor = 0.25
@@ -47,17 +48,15 @@ class Ps1NetplayClient(
       )
     }
     val connectedSocket = IO.socket(config.serverUrl, options)
-    qualityMonitor = NetplayQualityMonitor(connectedSocket, onQuality)
     socket = connectedSocket.apply {
       on(Socket.EVENT_CONNECT) {
         emit("netplay:ps1-ready", JSONObject().put("fingerprint", config.fingerprint).put("coreVersion", config.coreVersion))
-        qualityMonitor?.resume()
         onStatus("PS1 channel connected. The room will resynchronize if this is a recovered connection.")
       }
       on("netplay:ps1-session-bootstrap") { onBootstrap() }
       on("netplay:ps1-waiting") { args ->
         val payload = args.firstOrNull() as? JSONObject
-        onStatus(payload?.optString("message")?.ifBlank { "Waiting for the other active player to open the matching game." } ?: "Waiting for the other active player to open the matching game.")
+        onStatus(payload?.optString("message")?.ifBlank { "Waiting for every active player to open the matching game." } ?: "Waiting for every active player to open the matching game.")
       }
       on("netplay:session-start-refused") { args ->
         val payload = args.firstOrNull() as? JSONObject
@@ -100,17 +99,39 @@ class Ps1NetplayClient(
         if (text.isNotEmpty()) onChat(payload.optString("displayName", "Other player"), text)
       }
       on(Socket.EVENT_CONNECT_ERROR) { onStatus("PS1 channel is retrying. Check the room connection if it does not return.") }
-      on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause(); onStatus("PS1 room channel paused; reconnecting and resynchronizing automatically…") }
+      on(Socket.EVENT_DISCONNECT) { onStatus("PS1 room channel paused; reconnecting and resynchronizing automatically…") }
       connect()
     }
+
+    val qualityOptions = IO.Options().apply {
+      path = "/api/universal-netplay"
+      transports = arrayOf("websocket", "polling")
+      reconnection = true
+      timeout = 5_000
+      reconnectionAttempts = 20
+      reconnectionDelay = 500
+      reconnectionDelayMax = 4_000
+      randomizationFactor = 0.25
+      auth = hashMapOf(
+        "roomId" to config.roomId.toString(),
+        "memberId" to config.memberId.toString(),
+        "memberToken" to config.memberToken,
+      )
+    }
+    val qSocket = IO.socket(config.serverUrl, qualityOptions)
+    qualitySocket = qSocket
+    qualityMonitor = NetplayQualityMonitor(qSocket, onQuality, "universal:quality-probe", "universal:quality-pong")
+    qSocket.on(Socket.EVENT_CONNECT) { qualityMonitor?.resume() }
+    qSocket.on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause() }
+    qSocket.connect()
   }
 
   fun sendInputFrame(frame: Long, mask: Int) {
-    socket?.emit("netplay:ps1-input", JSONObject().put("frame", frame).put("mask", mask))
+    if (frame >= 0L && mask in 0..0xffff) socket?.emit("netplay:ps1-input", JSONObject().put("frame", frame).put("mask", mask))
   }
 
   fun sendState(encodedState: String, syncId: Long, encoding: String) {
-    socket?.emit("netplay:ps1-state", JSONObject().put("snapshot", encodedState).put("syncId", syncId).put("encoding", encoding))
+    if (encodedState.isNotBlank() && syncId >= 0L) socket?.emit("netplay:ps1-state", JSONObject().put("snapshot", encodedState).put("syncId", syncId).put("encoding", encoding))
   }
 
   fun requestState(minimumSyncId: Long = -1L) {
@@ -118,7 +139,7 @@ class Ps1NetplayClient(
   }
 
   fun acknowledgeState(syncId: Long) {
-    socket?.emit("netplay:ps1-sync-ack", JSONObject().put("syncId", syncId))
+    if (syncId >= 0L) socket?.emit("netplay:ps1-sync-ack", JSONObject().put("syncId", syncId))
   }
 
   fun sendChat(text: String) {
@@ -132,5 +153,8 @@ class Ps1NetplayClient(
     socket?.off()
     socket?.disconnect()
     socket = null
+    qualitySocket?.off()
+    qualitySocket?.disconnect()
+    qualitySocket = null
   }
 }
