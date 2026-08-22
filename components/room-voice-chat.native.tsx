@@ -10,16 +10,7 @@ registerGlobals();
 
 type VoiceMember = { id: number; displayName: string; role: "host" | "player" | "spectator" };
 type MediaToken = { configured: boolean; url?: string; roomName?: string; token?: string; canPublish?: boolean; message?: string };
-type Props = {
-  mediaToken?: MediaToken | null;
-  memberRole?: VoiceMember["role"];
-  socket?: unknown;
-  isHost?: boolean;
-  remoteOnline?: boolean;
-  memberId?: number;
-  members?: VoiceMember[];
-};
-
+type Props = { mediaToken?: MediaToken | null; memberRole?: VoiceMember["role"]; socket?: unknown; isHost?: boolean; remoteOnline?: boolean; memberId?: number; members?: VoiceMember[] };
 type RoomSocketAuth = { roomId?: unknown; memberId?: unknown; memberToken?: unknown };
 
 function readSocketAuth(socket: unknown): RoomSocketAuth | null {
@@ -39,20 +30,18 @@ function VoiceControls({ memberRole }: Props) {
     AudioSession.startAudioSession().catch(() => undefined);
     InCallManager.start({ media: "audio" });
     InCallManager.setForceSpeakerphoneOn(true);
+    // Keep the microphone muted until the player explicitly enables it.
+    localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
     return () => {
       InCallManager.stop();
       AudioSession.stopAudioSession().catch(() => undefined);
     };
-  }, []);
+  }, [localParticipant]);
 
   const toggleMic = async () => {
     if (memberRole === "spectator" || busy) return;
     setBusy(true);
-    try {
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
-    } finally {
-      setBusy(false);
-    }
+    try { await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled); } finally { setBusy(false); }
   };
 
   const toggleSpeaker = () => {
@@ -77,7 +66,7 @@ function VoiceControls({ memberRole }: Props) {
           <Text style={styles.actionLabel}>{speaker ? "SPEAKER ON" : "SPEAKER OFF"}</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>Voice uses the LiveKit SFU with Opus voice encoding, redundant audio packets, continuous transmission, and Android communication routing. Echo cancellation, noise suppression and automatic gain control remain enabled at the WebRTC capture layer.</Text>
+      <Text style={styles.hint}>LiveKit SFU + Opus voice, 96 kbps ceiling, RED redundancy and DTX disabled. Android communication routing plus WebRTC echo cancellation, noise suppression and automatic gain control are kept active for clear voice.</Text>
     </View>
   );
 }
@@ -87,10 +76,7 @@ export function RoomVoiceChat({ mediaToken: suppliedToken, memberRole: suppliedR
   const [memberRole, setMemberRole] = useState<VoiceMember["role"] | undefined>(suppliedRole);
 
   useEffect(() => {
-    if (suppliedToken) {
-      setMediaToken(suppliedToken);
-      return;
-    }
+    if (suppliedToken) { setMediaToken(suppliedToken); return; }
     const auth = readSocketAuth(socket);
     const roomId = Number(auth?.roomId);
     const authMemberId = Number(auth?.memberId ?? memberId);
@@ -124,13 +110,7 @@ export function RoomVoiceChat({ mediaToken: suppliedToken, memberRole: suppliedR
   }, [suppliedToken, socket, memberId]);
 
   if (!mediaToken?.configured || !mediaToken.url || !mediaToken.token) {
-    return (
-      <View style={styles.card}>
-        <Text style={styles.title}>ROOM VOICE</Text>
-        <Text style={styles.status}>{mediaToken?.message ?? "خدمة الصوت الجماعي لم تُجهّز بعد على الخادم."}</Text>
-        <Text style={styles.hint}>الإنتاج يحتاج LIVEKIT_URL وLIVEKIT_API_KEY وLIVEKIT_API_SECRET على الخادم فقط. المفتاح السري لا يدخل التطبيق.</Text>
-      </View>
-    );
+    return <View style={styles.card}><Text style={styles.title}>ROOM VOICE</Text><Text style={styles.status}>{mediaToken?.message ?? "خدمة الصوت الجماعي لم تُجهّز بعد على الخادم."}</Text><Text style={styles.hint}>الإنتاج يحتاج LIVEKIT_URL وLIVEKIT_API_KEY وLIVEKIT_API_SECRET على الخادم فقط. المفتاح السري لا يدخل التطبيق.</Text></View>;
   }
 
   return (
@@ -138,17 +118,9 @@ export function RoomVoiceChat({ mediaToken: suppliedToken, memberRole: suppliedR
       serverUrl={mediaToken.url}
       token={mediaToken.token}
       connect
-      audio={false}
+      audio={true}
       video={false}
-      options={{
-        adaptiveStream: true,
-        publishDefaults: {
-          audioPreset: { maxBitrate: 96000 },
-          dtx: false,
-          red: true,
-          forceStereo: false,
-        },
-      }}
+      options={{ adaptiveStream: true, publishDefaults: { audioPreset: { maxBitrate: 96000 }, dtx: false, red: true, forceStereo: false } }}
     >
       <VoiceControls memberRole={memberRole} />
     </LiveKitRoom>
