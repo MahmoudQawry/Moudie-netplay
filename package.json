@@ -1,5 +1,5 @@
 {
-  "name": "moudie-netplay",
+  "name": "app-template",
   "version": "1.0.0",
   "private": true,
   "main": "expo-router/entry",
@@ -21,9 +21,6 @@
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^13.0.0",
     "@expo/vector-icons": "^15.0.3",
-    "@livekit/react-native": "^2.12.0",
-    "@livekit/react-native-expo-plugin": "^1.0.2",
-    "@livekit/react-native-webrtc": "^144.1.2",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.8.12",
     "@react-navigation/elements": "^2.9.2",
@@ -56,7 +53,6 @@
     "express": "^4.22.1",
     "jose": "6.1.0",
     "jsnes": "2.1.0",
-    "livekit-client": "^2.19.0",
     "livekit-server-sdk": "^2.17.0",
     "mysql2": "^3.16.0",
     "nativewind": "^4.2.1",
@@ -78,6 +74,8 @@
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "superjson": "^1.13.3",
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss": "^3.4.17",
     "zod": "^4.2.1"
   },
   "devDependencies": {
@@ -93,7 +91,6 @@
     "drizzle-kit": "^0.31.8",
     "esbuild": "^0.25.12",
     "eslint": "^9.39.2",
-    "eslint-config-expo": "~10.0.0",
     "prettier": "^3.7.4",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
