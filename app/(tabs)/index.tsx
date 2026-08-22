@@ -50,7 +50,7 @@ export default function LobbyScreen() {
           <View style={styles.header}>
             <View style={styles.brandRow}>
               <Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} resizeMode="cover" />
-              <View><Text style={styles.brand}>MOUDIE</Text><Text style={styles.brandSub}>CLASSIC ERA · NETPLAY</Text></View>
+              <View><Text style={styles.brand}>MOUDIE</Text><Text style={styles.brandSub}>CLASSIC ERA · NETPLAY</Text><Text style={styles.slogan}>Old Equal Gold</Text></View>
             </View>
             <Pressable onPress={() => router.push("/(tabs)/settings")} style={({ pressed }) => [styles.profile, pressed && styles.pressed]} accessibilityLabel="Open settings">
               <MaterialCommunityIcons name="account-circle-outline" size={22} color="#B978FF" />
@@ -65,6 +65,7 @@ export default function LobbyScreen() {
               <Text style={styles.heroEyebrow}>{copy.retro}</Text>
               <Text style={styles.heroTitle}>{copy.title}</Text>
               <Text style={styles.heroText}>{copy.intro}</Text>
+              <Text style={styles.heroSlogan}>Old Equal Gold</Text>
             </View>
           </View>
 
@@ -110,6 +111,7 @@ const styles = StyleSheet.create({
   brandIcon: { width: 42, height: 42, borderRadius: 13, borderWidth: 1, borderColor: "#7A54D6" },
   brand: { color: "#F5F2FF", fontSize: 17, lineHeight: 19, letterSpacing: 1.3, fontWeight: "900" },
   brandSub: { color: "#6AE8FF", fontSize: 8, letterSpacing: 1.2, fontWeight: "900" },
+  slogan: { color: "#A77CFF", fontSize: 8, letterSpacing: 0.8, fontWeight: "900", marginTop: 2 },
   profile: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#17132A", borderWidth: 1, borderColor: "#342B58", paddingVertical: 7, paddingHorizontal: 10, borderRadius: 18 },
   profileName: { color: "#DBD6EF", fontSize: 11, fontWeight: "800", maxWidth: 92 },
   hero: { minHeight: 222, overflow: "hidden", backgroundColor: "#160D2B", borderRadius: 28, borderWidth: 1, borderColor: "#4D327A", padding: 20, flexDirection: "row", alignItems: "center" },
@@ -121,6 +123,7 @@ const styles = StyleSheet.create({
   heroEyebrow: { color: "#84F0FF", fontSize: 10, fontWeight: "900" },
   heroTitle: { color: "#FFFFFF", fontSize: 26, lineHeight: 32, fontWeight: "900", marginTop: 7 },
   heroText: { color: "#C3BCD9", fontSize: 12, lineHeight: 18, marginTop: 8 },
+  heroSlogan: { color: "#78EFFF", fontSize: 12, fontWeight: "900", letterSpacing: 1.1, marginTop: 12 },
   modeList: { gap: 10, marginTop: 18 },
   modeCard: { overflow: "hidden", minHeight: 87, paddingHorizontal: 15, borderRadius: 20, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 12 },
   localCard: { backgroundColor: "#0C2234", borderColor: "#176080" },
