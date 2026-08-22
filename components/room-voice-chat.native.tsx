@@ -1,7 +1,7 @@
 import { AudioSession, LiveKitRoom, registerGlobals, useConnectionState, useLocalParticipant, useParticipants } from "@livekit/react-native";
 import { ConnectionState } from "livekit-client";
 import InCallManager from "react-native-incall-manager";
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getApiBaseUrl } from "@/constants/oauth";
@@ -10,6 +10,7 @@ registerGlobals();
 
 type VoiceMember = { id: number; displayName: string; role: "host" | "player" | "spectator" };
 type MediaToken = { configured: boolean; url?: string; roomName?: string; token?: string; canPublish?: boolean; message?: string };
+type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void>; setSpeakerEnabled: (enabled: boolean) => Promise<void> };
 type Props = { mediaToken?: MediaToken | null; memberRole?: VoiceMember["role"]; socket?: unknown; isHost?: boolean; remoteOnline?: boolean; memberId?: number; members?: VoiceMember[] };
 type RoomSocketAuth = { roomId?: unknown; memberId?: unknown; memberToken?: unknown };
 
@@ -30,7 +31,6 @@ function VoiceControls({ memberRole }: Props) {
     AudioSession.startAudioSession().catch(() => undefined);
     InCallManager.start({ media: "audio" });
     InCallManager.setForceSpeakerphoneOn(true);
-    // Keep the microphone muted until the player explicitly enables it.
     localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
     return () => {
       InCallManager.stop();
@@ -71,9 +71,17 @@ function VoiceControls({ memberRole }: Props) {
   );
 }
 
-export function RoomVoiceChat({ mediaToken: suppliedToken, memberRole: suppliedRole, socket, memberId }: Props) {
+export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function RoomVoiceChat({ mediaToken: suppliedToken, memberRole: suppliedRole, socket, memberId }: Props, ref) {
   const [mediaToken, setMediaToken] = useState<MediaToken | null | undefined>(suppliedToken);
   const [memberRole, setMemberRole] = useState<VoiceMember["role"] | undefined>(suppliedRole);
+
+  // The current emulator screens keep a ref for lifecycle compatibility. The voice controls
+  // remain user-driven inside the LiveKit room; these methods are safe no-ops until a shared
+  // control bridge is required, which avoids invalid ref props during Android compilation.
+  useImperativeHandle(ref, () => ({
+    setMicrophoneEnabled: async () => undefined,
+    setSpeakerEnabled: async (enabled: boolean) => { InCallManager.setForceSpeakerphoneOn(enabled); },
+  }), []);
 
   useEffect(() => {
     if (suppliedToken) { setMediaToken(suppliedToken); return; }
@@ -125,7 +133,7 @@ export function RoomVoiceChat({ mediaToken: suppliedToken, memberRole: suppliedR
       <VoiceControls memberRole={memberRole} />
     </LiveKitRoom>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: { backgroundColor: "#160D29", borderWidth: 1, borderColor: "#4B3370", borderRadius: 18, padding: 14, marginTop: 16 },
