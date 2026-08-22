@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "../shared/const.js";
-import { MAX_ACTIVE_PLAYERS, MAX_ROOM_MEMBERS, MAX_SPECTATORS } from "../shared/room-capacity.js";
+import { MIN_ACTIVE_PLAYERS, MAX_ACTIVE_PLAYERS, MAX_ROOM_MEMBERS, MAX_SPECTATORS } from "../shared/room-capacity.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
@@ -10,16 +10,13 @@ import { createAccessToken, createJoinCode, hashAccessToken } from "./rooms";
 import { z } from "zod";
 
 export const appRouter = router({
-  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
   }),
 
@@ -57,14 +54,14 @@ export const appRouter = router({
         const room = await db.findRoomByCode(input.joinCode.toUpperCase());
         if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
         const totalMembers = await db.getRoomMemberCount(room.id);
-        if (totalMembers >= MAX_ROOM_MEMBERS) throw new Error("الغرفة مكتملة: 8 لاعبين و8 مشاهدين كحد أقصى.");
+        if (totalMembers >= MAX_ROOM_MEMBERS) throw new Error("الغرفة مكتملة: 8 لاعبين و4 مشاهدين كحد أقصى.");
         if (input.joinAs === "player") {
           const playerCount = await db.getRoomMemberCount(room.id, "player");
           // The host always occupies one active seat, so playerCount excludes the host.
           if (playerCount + 1 >= MAX_ACTIVE_PLAYERS) throw new Error("مقاعد اللعب الثمانية مكتملة. يمكنك الدخول كمشاهد.");
         } else {
           const spectatorCount = await db.getRoomMemberCount(room.id, "spectator");
-          if (spectatorCount >= MAX_SPECTATORS) throw new Error("مقاعد المشاهدة الثمانية مكتملة.");
+          if (spectatorCount >= MAX_SPECTATORS) throw new Error("مقاعد المشاهدة الأربعة مكتملة.");
         }
         const memberToken = createAccessToken();
         const memberId = await db.addRoomMember({
@@ -92,15 +89,13 @@ export const appRouter = router({
         return createRoomMediaToken({ roomId: input.roomId, memberId: member.id, displayName: member.displayName, role: member.role });
       }),
     setReady: publicProcedure
-      .input(
-        z.object({
-          memberId: z.number().int().positive(),
-          memberToken: z.string().min(20),
-          isReady: z.boolean(),
-          gameFingerprint: z.string().min(16).max(128).optional(),
-          coreVersion: z.string().trim().min(1).max(64).optional(),
-        }),
-      )
+      .input(z.object({
+        memberId: z.number().int().positive(),
+        memberToken: z.string().min(20),
+        isReady: z.boolean(),
+        gameFingerprint: z.string().min(16).max(128).optional(),
+        coreVersion: z.string().trim().min(1).max(64).optional(),
+      }))
       .mutation(async ({ input }) => {
         const success = await db.updateMemberReadiness({
           memberId: input.memberId,
@@ -120,7 +115,7 @@ export const appRouter = router({
           throw new Error("لا تملك صلاحية بدء هذه الجلسة.");
         }
         const players = snapshot.members.filter((member) => member.role !== "spectator");
-        if (players.length < 2 || players.length > MAX_ACTIVE_PLAYERS || players.some((member) => !member.isReady)) {
+        if (players.length < MIN_ACTIVE_PLAYERS || players.length > MAX_ACTIVE_PLAYERS || players.some((member) => !member.isReady)) {
           throw new Error("يجب أن يكون لاعبان إلى ثمانية لاعبين نشطين جاهزين قبل البدء.");
         }
         const fingerprints = new Set(players.map((member) => member.gameFingerprint));
