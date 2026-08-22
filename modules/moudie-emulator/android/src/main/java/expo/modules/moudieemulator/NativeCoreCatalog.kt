@@ -35,7 +35,7 @@ object NativeCoreCatalog {
       libraryNames = listOf("fceumm_libretro_android.so"),
       extensions = setOf("nes", "fds", "zip"),
       netplay = "retroarch",
-      maxControllerSlots = 4,
+      maxControllerSlots = 2,
       profile = EmulatorControlProfiles.FAMICOM,
       systemDirectory = "moudie-nes/system",
     ),
