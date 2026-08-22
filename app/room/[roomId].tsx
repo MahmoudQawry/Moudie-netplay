@@ -10,11 +10,13 @@ import { createNetplaySocket } from "@/lib/netplay-socket";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
 import { trpc } from "@/lib/trpc";
 import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
-import { MAX_ACTIVE_PLAYERS, MAX_SPECTATORS } from "@/shared/room-capacity";
+import { roomCapacityFor } from "@/shared/room-capacity";
 
 const SYSTEM_LABEL: Record<string, string> = { psp: "PSP", nes: "Famicom / NES", sega: "Sega Genesis", ps1: "PlayStation 1", arcade: "Arcade" };
 
 type MediaToken = { configured: boolean; url?: string; roomName?: string; token?: string; canPublish?: boolean; message?: string };
+
+type RoomSystem = "nes" | "ps1" | "psp" | "sega" | "arcade";
 
 export default function RoomScreen() {
   const { roomId: rawRoomId } = useLocalSearchParams<{ roomId: string }>();
@@ -86,6 +88,8 @@ export default function RoomScreen() {
     );
   }
 
+  const system = snapshot.room.system as RoomSystem;
+  const capacity = roomCapacityFor(system);
   const readyCount = snapshot.members.filter((member) => member.role !== "spectator" && member.isReady).length;
   const playerCount = snapshot.members.filter((member) => member.role !== "spectator").length;
   const spectatorCount = snapshot.members.filter((member) => member.role === "spectator").length;
@@ -98,7 +102,7 @@ export default function RoomScreen() {
         </View>
         <Text style={styles.system}>{SYSTEM_LABEL[snapshot.room.system]}</Text>
         <Text style={styles.title}>{snapshot.room.name}</Text>
-        <Text style={styles.caption}>PRIVATE ROOM · {playerCount}/{MAX_ACTIVE_PLAYERS} PLAYERS · {spectatorCount}/{MAX_SPECTATORS} SPECTATORS</Text>
+        <Text style={styles.caption}>PRIVATE ROOM · {playerCount}/{capacity.maxPlayers} PLAYERS · {spectatorCount}/{capacity.maxSpectators} SPECTATORS</Text>
 
         <View style={styles.codeCard}>
           <Text style={styles.codeLabel}>INVITE CODE</Text>
@@ -106,7 +110,7 @@ export default function RoomScreen() {
           <Pressable onPress={share} style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}><Text style={styles.shareText}>SHARE CODE</Text></Pressable>
         </View>
 
-        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ROOM MEMBERS</Text><Text style={styles.counter}>{playerCount}/{MAX_ACTIVE_PLAYERS} PLAYERS · {spectatorCount}/{MAX_SPECTATORS} SPECTATORS</Text></View>
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ROOM MEMBERS</Text><Text style={styles.counter}>{playerCount}/{capacity.maxPlayers} PLAYERS · {spectatorCount}/{capacity.maxSpectators} SPECTATORS</Text></View>
         <View style={styles.memberList}>
           {snapshot.members.map((member) => (
             <View key={member.id} style={styles.member}>
