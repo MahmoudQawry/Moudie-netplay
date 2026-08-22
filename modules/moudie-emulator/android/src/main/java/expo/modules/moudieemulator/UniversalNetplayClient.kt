@@ -27,6 +27,14 @@ class UniversalNetplayClient(
   private val onStatus: (String) -> Unit,
   private val onQuality: (NetplayQuality) -> Unit,
 ) {
+  companion object {
+    // Online rooms for the universal emulator systems are capped at six active
+    // players. Keep the client defensive even if a malformed server payload is
+    // received so an invalid seventh/eighth seat can never enter the lockstep map.
+    private const val MIN_ACTIVE_PLAYERS = 2
+    private const val MAX_ACTIVE_PLAYERS = 6
+  }
+
   private var socket: Socket? = null
   private var qualityMonitor: NetplayQualityMonitor? = null
 
@@ -60,7 +68,8 @@ class UniversalNetplayClient(
       on("universal:bootstrap") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val ids = payload.playerMemberIds()
-        if (ids.size in 2..8) onBootstrap(ids)
+        if (ids.size in MIN_ACTIVE_PLAYERS..MAX_ACTIVE_PLAYERS) onBootstrap(ids)
+        else onStatus("The room sent an invalid active-player list; waiting for a valid session.")
       }
       on("universal:waiting") { args ->
         val payload = args.firstOrNull() as? JSONObject
@@ -74,7 +83,8 @@ class UniversalNetplayClient(
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val startAt = payload.optLong("startAt", -1L)
         val ids = payload.playerMemberIds()
-        if (startAt > 0L && ids.size in 2..8) onSessionGo(startAt, ids)
+        if (startAt > 0L && ids.size in MIN_ACTIVE_PLAYERS..MAX_ACTIVE_PLAYERS) onSessionGo(startAt, ids)
+        else if (startAt > 0L) onStatus("The room sent an invalid active-player count; session start was ignored.")
       }
       on("universal:state-request") { onStateRequest() }
       on("universal:input") { args ->
@@ -132,6 +142,6 @@ class UniversalNetplayClient(
         val memberId = values.optInt(index, 0)
         if (memberId > 0) add(memberId)
       }
-    }
+    }.distinct()
   }
 }
