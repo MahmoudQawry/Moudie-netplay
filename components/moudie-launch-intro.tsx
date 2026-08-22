@@ -75,10 +75,10 @@ export function MoudieLaunchIntro({ children }: Props) {
             <Text style={styles.languageTitle}>Choose your language</Text>
             <Text style={styles.languageSubtitle}>اختر لغة البرنامج</Text>
             <Pressable onPress={() => void chooseLanguage("ar")} style={({ pressed }) => [styles.languageButton, pressed && styles.buttonPressed]}>
-              <Text style={styles.languagePrimary}>العربية</Text><Text style={styles.languageSecondary}>Arabic</Text>
+              <Text style={styles.languagePrimary}>🇪🇬  العربية</Text><Text style={styles.languageSecondary}>Egypt · Arabic</Text>
             </Pressable>
             <Pressable onPress={() => void chooseLanguage("en")} style={({ pressed }) => [styles.languageButton, styles.languageButtonAlt, pressed && styles.buttonPressed]}>
-              <Text style={styles.languagePrimary}>English</Text><Text style={styles.languageSecondary}>الإنجليزية</Text>
+              <Text style={styles.languagePrimary}>🇺🇸  English</Text><Text style={styles.languageSecondary}>United States · English</Text>
             </Pressable>
             <Text style={styles.languageNote}>You can change this later from Settings.</Text>
           </View>
