@@ -8,7 +8,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
 import { getProfileName, saveProfileName, saveRoomCredential } from "@/lib/room-storage";
 import { createRealtimeRoom } from "@/lib/realtime-room-service";
-import { MAX_ACTIVE_PLAYERS, MAX_SPECTATORS } from "@/shared/room-capacity";
+import { roomCapacityFor } from "@/shared/room-capacity";
 
 type SystemId = "psp" | "nes" | "sega" | "ps1" | "arcade";
 
@@ -25,6 +25,7 @@ export default function CreateRoomScreen() {
   const [name, setName] = useState("Friends Session");
   const [hostName, setHostName] = useState("");
   const [creating, setCreating] = useState(false);
+  const capacity = roomCapacityFor(system);
 
   const create = async () => {
     const normalizedHost = hostName.trim() || (await getProfileName())?.trim() || "Player";
@@ -79,7 +80,11 @@ export default function CreateRoomScreen() {
           <Text style={styles.label}>DISPLAY NAME</Text>
           <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="Visible to your friends" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
 
-          <View style={styles.capacityCard}><Text style={styles.capacityTitle}>ROOM CAPACITY · 16 MEMBERS</Text><Text style={styles.capacityText}>{MAX_ACTIVE_PLAYERS} ACTIVE PLAYERS · {MAX_SPECTATORS} SPECTATORS</Text><Text style={styles.capacityNote}>Active seats join the ready check. Spectators can watch, talk, and chat without occupying a controller seat.</Text></View>
+          <View style={styles.capacityCard}>
+            <Text style={styles.capacityTitle}>ROOM CAPACITY · {capacity.maxPlayers + capacity.maxSpectators} MEMBERS</Text>
+            <Text style={styles.capacityText}>{capacity.minPlayers}-{capacity.maxPlayers} ACTIVE PLAYERS · {capacity.maxSpectators} SPECTATORS</Text>
+            <Text style={styles.capacityNote}>{system === "nes" ? "Famicom is limited to two active controller seats. The remaining room members can spectate, talk, and chat without occupying a controller seat." : "The room keeps active play and spectators separate to reduce synchronization pressure. Spectators can watch, talk, and chat without occupying a controller seat."}</Text>
+          </View>
 
           <View style={styles.featureRow}>
             <View style={styles.feature}><MaterialCommunityIcons name="microphone-outline" size={16} color="#69E8FF" /><Text style={styles.featureText}>VOICE</Text></View>
