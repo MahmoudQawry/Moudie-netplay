@@ -15,10 +15,7 @@ data class UniversalNetplayConfig(
   val playerIndex: Int,
 )
 
-/**
- * Dedicated low-latency emulator transport for PSP, Sega and Arcade.
- * It is isolated from lobby/chat traffic so UI events cannot block frame input.
- */
+/** Dedicated low-latency emulator transport for PSP, Sega and Arcade. */
 class UniversalNetplayClient(
   private val config: UniversalNetplayConfig,
   private val onBootstrap: (playerMemberIds: List<Int>) -> Unit,
@@ -50,7 +47,7 @@ class UniversalNetplayClient(
       )
     }
     val connectedSocket = IO.socket(config.serverUrl, options)
-    qualityMonitor = NetplayQualityMonitor(connectedSocket, onQuality)
+    qualityMonitor = NetplayQualityMonitor(connectedSocket, onQuality, "universal:quality-probe", "universal:quality-pong")
     socket = connectedSocket.apply {
       on(Socket.EVENT_CONNECT) {
         emit("universal:ready", JSONObject()
@@ -94,7 +91,6 @@ class UniversalNetplayClient(
         val encoding = payload.optString("encoding", "")
         if (state.isNotBlank() && syncId >= 0L && (encoding == "gzip-base64" || encoding == "base64")) onRemoteState(state, syncId, encoding)
       }
-      on("universal:quality-pong") { /* NetplayQualityMonitor owns this event. */ }
       on(Socket.EVENT_CONNECT_ERROR) { onStatus("Dedicated emulator channel is retrying…") }
       on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause(); onStatus("Dedicated game channel paused; reconnecting automatically…") }
       connect()
@@ -119,9 +115,7 @@ class UniversalNetplayClient(
     socket?.emit("universal:state-ack", JSONObject().put("syncId", syncId))
   }
 
-  fun sendChat(text: String) {
-    // Chat remains on the lobby Socket.IO endpoint; this dedicated channel intentionally carries no chat traffic.
-  }
+  fun sendChat(text: String) { /* Chat intentionally stays on the lobby channel. */ }
 
   fun close() {
     qualityMonitor?.close()
