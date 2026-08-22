@@ -11,8 +11,6 @@ type MediaToken = { configured: boolean; url?: string; roomName?: string; token?
 type Props = {
   mediaToken?: MediaToken | null;
   memberRole?: VoiceMember["role"];
-  // Kept optional for the native emulator room screen so the shared component remains type-safe
-  // while that screen migrates to the same SFU token flow.
   socket?: unknown;
   isHost?: boolean;
   remoteOnline?: boolean;
@@ -28,14 +26,10 @@ function VoiceControls({ memberRole }: Props) {
   const [speaker, setSpeaker] = useState(true);
 
   useEffect(() => {
-    let active = true;
     AudioSession.startAudioSession().catch(() => undefined);
-    // Communication mode is the correct Android route for two-way voice.
     InCallManager.start({ media: "audio" });
     InCallManager.setForceSpeakerphoneOn(true);
     return () => {
-      active = false;
-      if (active) return;
       InCallManager.stop();
       AudioSession.stopAudioSession().catch(() => undefined);
     };
@@ -64,7 +58,7 @@ function VoiceControls({ memberRole }: Props) {
         <Text style={styles.title}>ROOM VOICE · SFU</Text>
         <View style={styles.counter}><Text style={styles.counterText}>{Math.max(0, participants.length - 1)} CONNECTED</Text></View>
       </View>
-      <Text style={styles.status}>{connected ? "Low-latency voice channel connected" : `Voice ${String(connectionState).toLowerCase()}…`}</Text>
+      <Text style={styles.status}>{connected ? "Low-latency HD voice channel connected" : `Voice ${String(connectionState).toLowerCase()}…`}</Text>
       <View style={styles.actions}>
         <Pressable disabled={memberRole === "spectator" || busy} onPress={toggleMic} style={({ pressed }) => [styles.action, isMicrophoneEnabled && styles.actionActive, pressed && styles.pressed]}>
           <Text style={styles.actionLabel}>{isMicrophoneEnabled ? "MIC ON" : "MIC OFF"}</Text>
@@ -73,7 +67,7 @@ function VoiceControls({ memberRole }: Props) {
           <Text style={styles.actionLabel}>{speaker ? "SPEAKER ON" : "SPEAKER OFF"}</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>Voice is routed through LiveKit SFU. The server never receives the game ROM or raw game audio. The client keeps the microphone optional and uses the native communication audio route for stable two-way voice.</Text>
+      <Text style={styles.hint}>Voice uses the LiveKit SFU with Opus voice encoding, redundant audio packets, continuous transmission, and Android communication routing. Echo cancellation, noise suppression and automatic gain control remain enabled at the WebRTC capture layer.</Text>
     </View>
   );
 }
@@ -97,7 +91,15 @@ export function RoomVoiceChat({ mediaToken, memberRole, ...compat }: Props) {
       connect
       audio={false}
       video={false}
-      options={{ adaptiveStream: true }}
+      options={{
+        adaptiveStream: true,
+        publishDefaults: {
+          audioPreset: { maxBitrate: 96000 },
+          dtx: false,
+          red: true,
+          forceStereo: false,
+        },
+      }}
     >
       <VoiceControls memberRole={memberRole} />
     </LiveKitRoom>
