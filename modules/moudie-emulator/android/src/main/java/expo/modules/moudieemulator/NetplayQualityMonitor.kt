@@ -18,22 +18,21 @@ data class NetplayQuality(
 ) {
   fun compactLabel(): String = rttMs?.let { "PING ${it}ms · $grade" } ?: "PING — · $grade"
 
-  /** Apply only before lockstep begins; changing a live frame schedule would desynchronize peers. */
+  /** Freeze this value once lockstep begins; changing the schedule mid-session can desynchronize peers. */
   fun recommendedInputDelayFrames(): Long = when (grade) {
-    "STABLE" -> 3L
-    "FAIR" -> 5L
+    "STABLE" -> 2L
+    "FAIR" -> 4L
+    "UNSTABLE" -> 6L
     else -> 7L
   }
 }
 
-/**
- * Measures a real application round trip to the authenticated room server.
- * It deliberately never estimates another player's network path and reports
- * an unknown value until a server response has actually arrived.
- */
+/** Measures an authenticated application-level RTT to the same server used by the emulator relay. */
 class NetplayQualityMonitor(
   private val socket: Socket,
   private val onQuality: (NetplayQuality) -> Unit,
+  private val probeEvent: String = "netplay:quality-probe",
+  private val pongEvent: String = "netplay:quality-pong",
 ) {
   private val handler = Handler(Looper.getMainLooper())
   private val pending = LinkedHashMap<Long, Long>()
@@ -60,14 +59,14 @@ class NetplayQualityMonitor(
       expireOldProbes(now)
       val sequence = nextSequence++
       pending[sequence] = now
-      socket.emit("netplay:quality-probe", JSONObject().put("sequence", sequence))
+      socket.emit(probeEvent, JSONObject().put("sequence", sequence))
       handler.postDelayed(this, PROBE_INTERVAL_MS)
     }
   }
 
   fun resume() {
     if (!listenerInstalled) {
-      socket.on("netplay:quality-pong", pongListener)
+      socket.on(pongEvent, pongListener)
       listenerInstalled = true
     }
     if (running) return
@@ -84,7 +83,7 @@ class NetplayQualityMonitor(
 
   fun close() {
     pause()
-    if (listenerInstalled) socket.off("netplay:quality-pong", pongListener)
+    if (listenerInstalled) socket.off(pongEvent, pongListener)
     listenerInstalled = false
     pending.clear()
   }
