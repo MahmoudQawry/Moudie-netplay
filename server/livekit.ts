@@ -2,11 +2,7 @@ import { AccessToken } from "livekit-server-sdk";
 
 export type LiveKitMemberRole = "host" | "player" | "spectator";
 
-type LiveKitRuntime = {
-  url: string;
-  apiKey: string;
-  apiSecret: string;
-};
+type LiveKitRuntime = { url: string; apiKey: string; apiSecret: string };
 
 function configuredRuntime(): LiveKitRuntime | null {
   const url = process.env.LIVEKIT_URL?.trim();
@@ -30,7 +26,7 @@ export async function createRoomMediaToken(input: {
   const token = new AccessToken(runtime.apiKey, runtime.apiSecret, {
     identity,
     name: input.displayName,
-    ttl: "20m",
+    ttl: "2h",
     metadata: JSON.stringify({ roomId: input.roomId, memberId: input.memberId, role: input.role }),
     attributes: { role: input.role, roomId: String(input.roomId) },
   });
