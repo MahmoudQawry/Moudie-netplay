@@ -1,15 +1,46 @@
+export type RoomSystem = "nes" | "ps1" | "psp" | "sega" | "arcade";
+
 export const MIN_ACTIVE_PLAYERS = 2;
-export const MAX_ACTIVE_PLAYERS = 8;
-export const MAX_SPECTATORS = 4;
-export const MAX_ROOM_MEMBERS = MAX_ACTIVE_PLAYERS + MAX_SPECTATORS;
+export const STANDARD_MAX_ACTIVE_PLAYERS = 6;
+export const STANDARD_MAX_SPECTATORS = 4;
+export const FAMICOM_MAX_ACTIVE_PLAYERS = 2;
+export const FAMICOM_MAX_SPECTATORS = 6;
 
-export const ROOM_CAPACITY_LABEL = `${MIN_ACTIVE_PLAYERS}-${MAX_ACTIVE_PLAYERS} PLAYERS · ${MAX_SPECTATORS} SPECTATORS`;
+export type RoomCapacity = {
+  minPlayers: number;
+  maxPlayers: number;
+  maxSpectators: number;
+};
 
-export function activeSeatNumber(memberIds: number[], memberId: number): number | null {
-  const index = memberIds.indexOf(memberId);
-  return index >= 0 && index < MAX_ACTIVE_PLAYERS ? index + 1 : null;
+export const ROOM_CAPACITIES: Record<RoomSystem, RoomCapacity> = {
+  nes: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: FAMICOM_MAX_ACTIVE_PLAYERS, maxSpectators: FAMICOM_MAX_SPECTATORS },
+  ps1: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: STANDARD_MAX_ACTIVE_PLAYERS, maxSpectators: STANDARD_MAX_SPECTATORS },
+  psp: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: STANDARD_MAX_ACTIVE_PLAYERS, maxSpectators: STANDARD_MAX_SPECTATORS },
+  sega: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: STANDARD_MAX_ACTIVE_PLAYERS, maxSpectators: STANDARD_MAX_SPECTATORS },
+  arcade: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: STANDARD_MAX_ACTIVE_PLAYERS, maxSpectators: STANDARD_MAX_SPECTATORS },
+};
+
+export function roomCapacityFor(system: RoomSystem): RoomCapacity {
+  return ROOM_CAPACITIES[system];
 }
 
-export function canStartOnlineSession(activePlayers: number): boolean {
-  return activePlayers >= MIN_ACTIVE_PLAYERS && activePlayers <= MAX_ACTIVE_PLAYERS;
+export function roomMemberLimit(system: RoomSystem): number {
+  const capacity = roomCapacityFor(system);
+  return capacity.maxPlayers + capacity.maxSpectators;
+}
+
+export function canStartOnlineSession(system: RoomSystem, activePlayers: number): boolean {
+  const capacity = roomCapacityFor(system);
+  return activePlayers >= capacity.minPlayers && activePlayers <= capacity.maxPlayers;
+}
+
+export function activeSeatNumber(memberIds: number[], memberId: number, system: RoomSystem = "ps1"): number | null {
+  const index = memberIds.indexOf(memberId);
+  const maxPlayers = roomCapacityFor(system).maxPlayers;
+  return index >= 0 && index < maxPlayers ? index + 1 : null;
+}
+
+export function roomCapacityLabel(system: RoomSystem): string {
+  const capacity = roomCapacityFor(system);
+  return `${capacity.minPlayers}-${capacity.maxPlayers} PLAYERS · ${capacity.maxSpectators} SPECTATORS`;
 }
