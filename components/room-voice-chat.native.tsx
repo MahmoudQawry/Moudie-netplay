@@ -1,5 +1,6 @@
 import { AudioSession, LiveKitRoom, registerGlobals, useConnectionState, useLocalParticipant, useParticipants } from "@livekit/react-native";
 import { ConnectionState } from "livekit-client";
+import InCallManager from "react-native-incall-manager";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -7,7 +8,17 @@ registerGlobals();
 
 type VoiceMember = { id: number; displayName: string; role: "host" | "player" | "spectator" };
 type MediaToken = { configured: boolean; url?: string; roomName?: string; token?: string; canPublish?: boolean; message?: string };
-type Props = { mediaToken?: MediaToken | null; memberRole?: VoiceMember["role"]; };
+type Props = {
+  mediaToken?: MediaToken | null;
+  memberRole?: VoiceMember["role"];
+  // Kept optional for the native emulator room screen so the shared component remains type-safe
+  // while that screen migrates to the same SFU token flow.
+  socket?: unknown;
+  isHost?: boolean;
+  remoteOnline?: boolean;
+  memberId?: number;
+  members?: VoiceMember[];
+};
 
 function VoiceControls({ memberRole }: Props) {
   const { isMicrophoneEnabled, localParticipant } = useLocalParticipant();
@@ -17,20 +28,33 @@ function VoiceControls({ memberRole }: Props) {
   const [speaker, setSpeaker] = useState(true);
 
   useEffect(() => {
+    let active = true;
     AudioSession.startAudioSession().catch(() => undefined);
-    return () => { AudioSession.stopAudioSession().catch(() => undefined); };
+    // Communication mode is the correct Android route for two-way voice.
+    InCallManager.start({ media: "audio" });
+    InCallManager.setForceSpeakerphoneOn(true);
+    return () => {
+      active = false;
+      if (active) return;
+      InCallManager.stop();
+      AudioSession.stopAudioSession().catch(() => undefined);
+    };
   }, []);
 
   const toggleMic = async () => {
     if (memberRole === "spectator" || busy) return;
     setBusy(true);
-    try { await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled); } finally { setBusy(false); }
+    try {
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const toggleSpeaker = async () => {
-    setSpeaker((current) => !current);
-    // LiveKit's native AudioSession owns the Android/iOS audio route. The UI
-    // keeps this as a user preference without falling back to peer-to-peer mesh.
+  const toggleSpeaker = () => {
+    const next = !speaker;
+    setSpeaker(next);
+    InCallManager.setForceSpeakerphoneOn(next);
   };
 
   const connected = connectionState === ConnectionState.Connected;
@@ -40,7 +64,7 @@ function VoiceControls({ memberRole }: Props) {
         <Text style={styles.title}>ROOM VOICE · SFU</Text>
         <View style={styles.counter}><Text style={styles.counterText}>{Math.max(0, participants.length - 1)} CONNECTED</Text></View>
       </View>
-      <Text style={styles.status}>{connected ? "High-quality room audio connected" : `Voice ${String(connectionState).toLowerCase()}…`}</Text>
+      <Text style={styles.status}>{connected ? "Low-latency voice channel connected" : `Voice ${String(connectionState).toLowerCase()}…`}</Text>
       <View style={styles.actions}>
         <Pressable disabled={memberRole === "spectator" || busy} onPress={toggleMic} style={({ pressed }) => [styles.action, isMicrophoneEnabled && styles.actionActive, pressed && styles.pressed]}>
           <Text style={styles.actionLabel}>{isMicrophoneEnabled ? "MIC ON" : "MIC OFF"}</Text>
@@ -49,18 +73,19 @@ function VoiceControls({ memberRole }: Props) {
           <Text style={styles.actionLabel}>{speaker ? "SPEAKER ON" : "SPEAKER OFF"}</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>Voice uses a server-side SFU instead of one WebRTC connection per participant. This keeps 16-person rooms practical and lets the media server handle adaptive routing and network recovery.</Text>
+      <Text style={styles.hint}>Voice is routed through LiveKit SFU. The server never receives the game ROM or raw game audio. The client keeps the microphone optional and uses the native communication audio route for stable two-way voice.</Text>
     </View>
   );
 }
 
-export function RoomVoiceChat({ mediaToken, memberRole }: Props) {
+export function RoomVoiceChat({ mediaToken, memberRole, ...compat }: Props) {
+  void compat;
   if (!mediaToken?.configured || !mediaToken.url || !mediaToken.token) {
     return (
       <View style={styles.card}>
         <Text style={styles.title}>ROOM VOICE</Text>
-        <Text style={styles.status}>{mediaToken?.message ?? "خدمة الصوت الجماعي غير مهيأة على الخادم بعد."}</Text>
-        <Text style={styles.hint}>للتشغيل الإنتاجي، ضع LIVEKIT_URL وLIVEKIT_API_KEY وLIVEKIT_API_SECRET في بيئة الخادم. لا تضع المفتاح السري داخل التطبيق.</Text>
+        <Text style={styles.status}>{mediaToken?.message ?? "خدمة الصوت الجماعي لم تُجهّز بعد على الخادم."}</Text>
+        <Text style={styles.hint}>الإنتاج يحتاج LIVEKIT_URL وLIVEKIT_API_KEY وLIVEKIT_API_SECRET على الخادم فقط. المفتاح السري لا يدخل التطبيق.</Text>
       </View>
     );
   }
@@ -72,7 +97,7 @@ export function RoomVoiceChat({ mediaToken, memberRole }: Props) {
       connect
       audio={false}
       video={false}
-      options={{ adaptiveStream: false }}
+      options={{ adaptiveStream: true }}
     >
       <VoiceControls memberRole={memberRole} />
     </LiveKitRoom>
