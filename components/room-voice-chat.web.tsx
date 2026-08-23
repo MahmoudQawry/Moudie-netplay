@@ -10,9 +10,13 @@ type MediaToken = {
   message?: string;
 };
 
+// Keep the public imperative API backward-compatible with every emulator room.
+// Some room screens only need microphone control, while newer screens also expose
+// speaker routing. Making the newer control optional prevents platform-specific
+// ref types from breaking the shared TypeScript build.
 export type RoomVoiceChatHandle = {
   setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
-  setSpeakerEnabled: (enabled: boolean) => Promise<void>;
+  setSpeakerEnabled?: (enabled: boolean) => Promise<void>;
 };
 
 type Props = {
