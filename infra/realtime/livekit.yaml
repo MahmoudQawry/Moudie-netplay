@@ -17,5 +17,7 @@ redis:
 logging:
   level: info
 
+# Room sessions are created on demand when the first authorized Moudie member joins,
+# so every game room can bring up its voice channel without a separate provisioning step.
 room:
-  auto_create: false
+  auto_create: true
