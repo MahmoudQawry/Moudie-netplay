@@ -1,4 +1,4 @@
-export type EmulatorSystemId = "nes" | "ps1" | "psp" | "sega";
+export type EmulatorSystemId = "nes" | "ps1" | "psp" | "sega" | "arcade";
 
 export type SaveStateCapability = {
   available: boolean;
@@ -6,13 +6,13 @@ export type SaveStateCapability = {
 };
 
 /**
- * Single source of truth for local state save/load. A game state can only be
- * produced by an installed emulator core, so Sega/PSP stay explicit until
- * their real players are integrated.
+ * Single source of truth for local state save/load. The UI can only advertise
+ * capabilities that are backed by the installed emulator core.
  */
 export const SAVE_STATE_CAPABILITIES: Record<EmulatorSystemId, SaveStateCapability> = {
   nes: { available: true, label: "Local save and load are available in both modes" },
   ps1: { available: true, label: "Local save and load are available inside the player" },
-  psp: { available: false, label: "Save and load activate with the native PSP player" },
-  sega: { available: false, label: "Save and load activate with the native Sega player" },
+  psp: { available: true, label: "Local save and load are available with the native PSP player" },
+  sega: { available: true, label: "Local save and load are available with the native Sega player" },
+  arcade: { available: true, label: "Local save and load are available with the native Arcade player" },
 };
