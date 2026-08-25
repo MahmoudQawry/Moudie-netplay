@@ -37,6 +37,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: 🎮 تضمين أنوية المحاكيات الخمسة في الـ APK
+        run: |
+          chmod +x scripts/sync-libretro-cores.sh
+          INCLUDE_MAME=1 ./scripts/sync-libretro-cores.sh arm64-v8a
+          test -s modules/moudie-emulator/android/src/main/jniLibs/arm64-v8a/fceumm_libretro_android.so
+          test -s modules/moudie-emulator/android/src/main/jniLibs/arm64-v8a/pcsx_rearmed_libretro_android.so
+          test -s modules/moudie-emulator/android/src/main/jniLibs/arm64-v8a/ppsspp_libretro_android.so
+          test -s modules/moudie-emulator/android/src/main/jniLibs/arm64-v8a/genesis_plus_gx_libretro_android.so
+          test -s modules/moudie-emulator/android/src/main/jniLibs/arm64-v8a/mamearcade_libretro_android.so
+
       - name: 🔧 Prebuild Android
         run: npx expo prebuild --platform android
 
