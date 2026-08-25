@@ -77,10 +77,6 @@ const config: ExpoConfig = {
     "expo-document-picker",
     "@livekit/react-native-expo-plugin",
     [
-      "@config-plugins/react-native-webrtc",
-      { microphonePermission: "اسمح لـ Classic Era by Moudie باستخدام الميكروفون للتحدث داخل الغرف الخاصة." },
-    ],
-    [
       "expo-build-properties",
       { android: { buildArchs: ["armeabi-v7a", "arm64-v8a"], minSdkVersion: 24 } },
     ],
