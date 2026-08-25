@@ -53,6 +53,34 @@ object NativeCoreCatalog {
     return extractPackagedCore(context, definition, targetDirectory)
   }
 
+  /** Installs required non-executable core system data. PPSSPP needs its bundled
+   * font/UI assets and compatibility files in system/PPSSPP; without them the core
+   * can start in a degraded state or fail when games access the memory-stick UI. */
+  fun prepareSystemDirectory(context: Context, definition: Definition, systemDirectory: File): File {
+    if (definition.system != "psp") return systemDirectory
+    val targetRoot = File(systemDirectory, "PPSSPP")
+    val marker = File(targetRoot, "ppge_atlas.zim")
+    if (marker.isFile && marker.length() > 0L) return systemDirectory
+    targetRoot.mkdirs()
+    copyAssetTree(context, "ppsspp", targetRoot)
+    return systemDirectory
+  }
+
+  private fun copyAssetTree(context: Context, assetPath: String, destination: File) {
+    val children = context.assets.list(assetPath).orEmpty()
+    if (children.isEmpty()) {
+      destination.parentFile?.mkdirs()
+      context.assets.open(assetPath).use { input -> FileOutputStream(destination).use { output -> input.copyTo(output); output.fd.sync() } }
+      return
+    }
+    destination.mkdirs()
+    for (child in children) {
+      val childAsset = "$assetPath/$child"
+      val childDestination = File(destination, child)
+      copyAssetTree(context, childAsset, childDestination)
+    }
+  }
+
   /** Runtime core downloads are deliberately forbidden; use a signed app build instead. */
   fun downloadCore(context: Context, definition: Definition): File? = findCore(context, definition)
 
