@@ -43,17 +43,19 @@ jobs:
       - name: 🔨 إصلاح صلاحيات Gradle
         run: chmod +x android/gradlew
 
-      - name: 🏗️ بناء APK (Debug)
+      # نبني Release لأن Debug يتوقع Metro لتوفير JavaScript bundle.
+      # APK الـ Release يحتوي الـ bundle داخله ويعمل مباشرة بعد التثبيت.
+      - name: 🏗️ بناء APK مستقل (Release)
         run: |
           cd android
-          ./gradlew assembleDebug \
+          ./gradlew assembleRelease \
             --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m" \
             -Dorg.gradle.daemon=false
 
-      - name: 📤 رفع APK
+      - name: 📤 رفع APK المستقل
         uses: actions/upload-artifact@v4
         with:
           name: classic-era-moudie-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
