@@ -36,7 +36,7 @@ class Ps1NetplayClient(
       transports = arrayOf("websocket", "polling")
       reconnection = true
       timeout = 5_000
-      reconnectionAttempts = 20
+      reconnectionAttempts = 12
       reconnectionDelay = 500
       reconnectionDelayMax = 4_000
       randomizationFactor = 0.25
@@ -108,7 +108,7 @@ class Ps1NetplayClient(
       transports = arrayOf("websocket", "polling")
       reconnection = true
       timeout = 5_000
-      reconnectionAttempts = 20
+      reconnectionAttempts = 12
       reconnectionDelay = 500
       reconnectionDelayMax = 4_000
       randomizationFactor = 0.25
