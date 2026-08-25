@@ -10,7 +10,12 @@ registerGlobals();
 
 type VoiceMember = { id: number; displayName: string; role: "host" | "player" | "spectator" };
 type MediaToken = { configured: boolean; url?: string; roomName?: string; token?: string; canPublish?: boolean; message?: string };
-type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void>; setSpeakerEnabled: (enabled: boolean) => Promise<void> };
+// Keep this public imperative API compatible with every room screen. Speaker routing
+// is optional because older room screens only retain microphone control.
+export type RoomVoiceChatHandle = {
+  setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
+  setSpeakerEnabled?: (enabled: boolean) => Promise<void>;
+};
 type Props = { mediaToken?: MediaToken | null; memberRole?: VoiceMember["role"]; socket?: unknown; isHost?: boolean; remoteOnline?: boolean; memberId?: number; members?: VoiceMember[] };
 type RoomSocketAuth = { roomId?: unknown; memberId?: unknown; memberToken?: unknown };
 
@@ -75,9 +80,6 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
   const [mediaToken, setMediaToken] = useState<MediaToken | null | undefined>(suppliedToken);
   const [memberRole, setMemberRole] = useState<VoiceMember["role"] | undefined>(suppliedRole);
 
-  // The current emulator screens keep a ref for lifecycle compatibility. The voice controls
-  // remain user-driven inside the LiveKit room; these methods are safe no-ops until a shared
-  // control bridge is required, which avoids invalid ref props during Android compilation.
   useImperativeHandle(ref, () => ({
     setMicrophoneEnabled: async () => undefined,
     setSpeakerEnabled: async (enabled: boolean) => { InCallManager.setForceSpeakerphoneOn(enabled); },
