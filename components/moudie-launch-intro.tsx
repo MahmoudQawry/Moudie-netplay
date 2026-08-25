@@ -34,9 +34,15 @@ export function MoudieLaunchIntro({ children }: Props) {
         Animated.timing(signature, { toValue: 1, duration: 280, delay: 180, useNativeDriver: true }),
       ]),
     ]);
-    const reveal = setTimeout(() => { setVisible(true); sequence.start(); }, 650);
-    const dismiss = setTimeout(() => { setVisible(false); if (!language) setShowLanguage(true); }, 3800);
-    return () => { sequence.stop(); clearTimeout(reveal); clearTimeout(dismiss); };
+    // Do not cover the lobby while React and native recovery UI are mounting.
+    // The envelope starts only after that first frame is visible, then dismisses itself.
+    const reveal = setTimeout(() => {
+      setVisible(true);
+      sequence.start();
+      setTimeout(() => setVisible(false), 3800);
+    }, 650);
+    const languagePrompt = setTimeout(() => { if (!language) setShowLanguage(true); }, 4450);
+    return () => { sequence.stop(); clearTimeout(reveal); clearTimeout(languagePrompt); };
   }, [cardValues, envelope, language, ready, routeReady, seal, signature]);
 
   const chooseLanguage = async (next: AppLanguage) => {
