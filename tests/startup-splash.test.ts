@@ -39,15 +39,18 @@ describe("Android startup splash safeguards", () => {
     expect(application).toContain('Log.e("MoudieStartup"');
   });
 
-  it("delays the animated Moudie envelope until after the lobby and native recovery layers are visible", () => {
+  it("plays the animated Moudie envelope intro after the lobby has mounted", () => {
     const rootLayout = readProjectFile("app/_layout.tsx");
     const lobby = readProjectFile("app/(tabs)/index.tsx");
     const intro = readProjectFile("components/moudie-launch-intro.tsx");
     const recovery = readProjectFile("components/startup-recovery-boundary.tsx");
     ["PS1", "PSP", "NES", "SEGA", "ARCADE", "SKIP INTRO", "Moudie"].forEach((label) => expect(intro).toContain(label));
-    expect(intro).toContain("const reveal = setTimeout(() => {");
+    expect(intro).toContain('import { MaterialCommunityIcons } from "@expo/vector-icons"');
+    expect(intro).toContain("Animated.sequence([");
+    expect(intro).toContain("Animated.stagger(110");
     expect(intro).toContain("setVisible(true);");
-    expect(intro).toContain("setTimeout(() => setVisible(false), 3800)");
+    expect(intro).toContain("sequence.start");
+    expect(intro).toContain("setVisible(false)");
     expect(recovery).toContain("TRY AGAIN");
     expect(recovery).toContain("MOUDIE IS READY");
     expect(rootLayout).not.toContain("MoudieLaunchIntro");
