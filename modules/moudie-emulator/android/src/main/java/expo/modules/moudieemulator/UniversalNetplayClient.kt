@@ -28,9 +28,6 @@ class UniversalNetplayClient(
   private val onQuality: (NetplayQuality) -> Unit,
 ) {
   companion object {
-    // Online rooms for the universal emulator systems are capped at six active
-    // players. Keep the client defensive even if a malformed server payload is
-    // received so an invalid seventh/eighth seat can never enter the lockstep map.
     private const val MIN_ACTIVE_PLAYERS = 2
     private const val MAX_ACTIVE_PLAYERS = 6
   }
@@ -44,7 +41,7 @@ class UniversalNetplayClient(
       transports = arrayOf("websocket", "polling")
       reconnection = true
       timeout = 5_000
-      reconnectionAttempts = 20
+      reconnectionAttempts = 12
       reconnectionDelay = 500
       reconnectionDelayMax = 4_000
       randomizationFactor = 0.25
@@ -122,7 +119,7 @@ class UniversalNetplayClient(
   }
 
   fun acknowledgeState(syncId: Long) {
-    socket?.emit("universal:state-ack", JSONObject().put("syncId", syncId))
+    if (syncId >= 0L) socket?.emit("universal:state-ack", JSONObject().put("syncId", syncId))
   }
 
   fun sendChat(text: String) { /* Chat intentionally stays on the lobby channel. */ }
