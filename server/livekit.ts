@@ -12,6 +12,9 @@ function configuredRuntime(): LiveKitRuntime | null {
   return { url, apiKey, apiSecret };
 }
 
+/** Creates one isolated PUBG-style room voice channel. All room members, including
+ * spectators, may speak and listen; room membership is still enforced by the
+ * signed room credential before a token is issued. */
 export async function createRoomMediaToken(input: {
   roomId: number;
   memberId: number;
@@ -35,7 +38,7 @@ export async function createRoomMediaToken(input: {
     room: roomName,
     roomJoin: true,
     canSubscribe: true,
-    canPublish: input.role !== "spectator",
+    canPublish: true,
     canPublishData: true,
     canUpdateOwnMetadata: false,
   });
@@ -45,6 +48,6 @@ export async function createRoomMediaToken(input: {
     url: runtime.url,
     roomName,
     token: await token.toJwt(),
-    canPublish: input.role !== "spectator",
+    canPublish: true,
   };
 }
