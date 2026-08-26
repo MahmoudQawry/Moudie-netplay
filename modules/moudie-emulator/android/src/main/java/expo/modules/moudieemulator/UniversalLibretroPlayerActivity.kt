@@ -79,35 +79,19 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       else -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
     }
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-    @Suppress("DEPRECATION")
-    window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
-      View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-      View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-      View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+    @Suppress("DEPRECATION") window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
 
-    definition = runCatching { NativeCoreCatalog.forSystem(intent.getStringExtra(EXTRA_SYSTEM).orEmpty()) }.getOrElse {
-      showError("The requested emulator system is not supported.")
-      return
-    }
+    definition = runCatching { NativeCoreCatalog.forSystem(intent.getStringExtra(EXTRA_SYSTEM).orEmpty()) }.getOrElse { showError("The requested emulator system is not supported."); return }
     val gameFile = File(intent.getStringExtra(EXTRA_GAME_PATH).orEmpty())
     val coreFile = File(intent.getStringExtra(EXTRA_CORE_PATH).orEmpty())
     if (!gameFile.isFile || !gameFile.canRead()) { showError("Could not read the game file. Choose it again from the library."); return }
     if (!coreFile.isFile || coreFile.length() == 0L) { showError("Could not load ${definition.coreName}. Reinstall the complete APK."); return }
 
     preferences = getSharedPreferences("moudie-controller-layouts", Context.MODE_PRIVATE)
-    aspectMode = intent.getStringExtra(EXTRA_PLAYER_ASPECT_RATIO)?.takeIf { it in setOf("fit", "4:3", "16:9") }
-      ?: preferences.getString("${definition.system}.aspect", "fit") ?: "fit"
+    aspectMode = intent.getStringExtra(EXTRA_PLAYER_ASPECT_RATIO)?.takeIf { it in setOf("fit", "4:3", "16:9") } ?: preferences.getString("${definition.system}.aspect", "fit") ?: "fit"
     val savesDirectory = File(filesDir, "moudie-${definition.system}/saves").apply { mkdirs() }
     val systemDirectory = NativeCoreCatalog.prepareSystemDirectory(this, definition, File(filesDir, definition.systemDirectory).apply { mkdirs() })
-    val gameData = GLRetroViewData(this).apply {
-      coreFilePath = coreFile.absolutePath
-      gameFilePath = gameFile.absolutePath
-      this.systemDirectory = systemDirectory.absolutePath
-      this.savesDirectory = savesDirectory.absolutePath
-      shader = ShaderConfig.Sharp
-      preferLowLatencyAudio = true
-      rumbleEventsEnabled = true
-    }
+    val gameData = GLRetroViewData(this).apply { coreFilePath = coreFile.absolutePath; gameFilePath = gameFile.absolutePath; this.systemDirectory = systemDirectory.absolutePath; this.savesDirectory = savesDirectory.absolutePath; shader = ShaderConfig.Sharp; preferLowLatencyAudio = true; rumbleEventsEnabled = true }
     retroView = GLRetroView(this, gameData).apply { renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY }
     lifecycle.addObserver(retroView)
     lifecycleScope.launch { retroView.getGLRetroErrors().collect { showToast(errorMessage(it, gameFile.name)) } }
@@ -126,15 +110,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   override fun onPause() { Choreographer.getInstance().removeFrameCallback(frameMeter); releaseAllTouchKeys(); super.onPause() }
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean { if (::retroView.isInitialized) sendLocalKey(KeyEvent.ACTION_DOWN, keyCode); return super.onKeyDown(keyCode, event) }
   override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean { if (::retroView.isInitialized) sendLocalKey(KeyEvent.ACTION_UP, keyCode); return super.onKeyUp(keyCode, event) }
-
-  override fun onGenericMotionEvent(event: MotionEvent?): Boolean {
-    if (event != null && ::retroView.isInitialized) {
-      retroView.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, event.getAxisValue(MotionEvent.AXIS_HAT_X), event.getAxisValue(MotionEvent.AXIS_HAT_Y), 0)
-      retroView.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT, event.getAxisValue(MotionEvent.AXIS_X), event.getAxisValue(MotionEvent.AXIS_Y), 0)
-      retroView.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT, event.getAxisValue(MotionEvent.AXIS_Z), event.getAxisValue(MotionEvent.AXIS_RZ), 0)
-    }
-    return super.onGenericMotionEvent(event)
-  }
+  override fun onGenericMotionEvent(event: MotionEvent?): Boolean { if (event != null && ::retroView.isInitialized) { retroView.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, event.getAxisValue(MotionEvent.AXIS_HAT_X), event.getAxisValue(MotionEvent.AXIS_HAT_Y), 0); retroView.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT, event.getAxisValue(MotionEvent.AXIS_X), event.getAxisValue(MotionEvent.AXIS_Y), 0); retroView.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT, event.getAxisValue(MotionEvent.AXIS_Z), event.getAxisValue(MotionEvent.AXIS_RZ), 0) }; return super.onGenericMotionEvent(event) }
 
   private fun sendLocalKey(action: Int, keyCode: Int) { retroView.sendKeyEvent(action, keyCode, 0) }
   private fun pressTouchKey(keyCode: Int) { if (pressedTouchKeys.add(keyCode)) sendLocalKey(KeyEvent.ACTION_DOWN, keyCode) }
@@ -143,9 +119,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   private fun addController() {
     val profile = definition.profile
-    listOf(profile.directions.up, profile.directions.down, profile.directions.left, profile.directions.right).forEachIndexed { index, control ->
-      addControl(control, Gravity.LEFT or Gravity.BOTTOM, 16 + (index % 2) * 60, 40 + (index / 2) * 64)
-    }
+    listOf(profile.directions.up, profile.directions.down, profile.directions.left, profile.directions.right).forEachIndexed { index, control -> addControl(control, Gravity.LEFT or Gravity.BOTTOM, 16 + (index % 2) * 60, 40 + (index / 2) * 64) }
     profile.actionButtons.forEachIndexed { index, control -> addControl(control, Gravity.RIGHT or Gravity.BOTTOM, 16 + (index % 3) * 62, 38 + (index / 3) * 62) }
     profile.shoulderButtons.forEachIndexed { index, control -> addControl(control, if (index % 2 == 0) Gravity.LEFT or Gravity.TOP else Gravity.RIGHT or Gravity.TOP, 16 + (index / 2) * 62, 18) }
     profile.systemButtons.forEachIndexed { index, control -> addControl(control, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM, (index - 1) * 62, 16) }
@@ -158,54 +132,24 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     val width = when { systemButton -> dp(70); shoulder -> dp(66); else -> dp(58) }
     val height = when { systemButton -> dp(34); shoulder -> dp(34); else -> dp(58) }
     val button = TextView(this).apply {
-      text = control.label
-      textSize = if (systemButton || shoulder) 9f else 20f
-      gravity = Gravity.CENTER
+      text = control.label; textSize = if (systemButton || shoulder) 9f else 20f; gravity = Gravity.CENTER
       setTextColor(Color.argb(225, 245, 248, 255))
-      background = roundedBackground(
-        Color.argb(86, 8, 19, 33),
-        Color.argb(210, 198, 230, 255),
-        when { direction -> 10; systemButton || shoulder -> 9; else -> 40 },
-      )
+      background = roundedBackground(Color.argb(86, 8, 19, 33), Color.argb(210, 198, 230, 255), when { direction -> 10; systemButton || shoulder -> 9; else -> 40 })
       isClickable = true
-      setOnTouchListener { _, event ->
-        when (event.actionMasked) {
-          MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> pressTouchKey(control.keyCode)
-          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_UP -> releaseTouchKey(control.keyCode)
-        }
-        true
-      }
+      setOnTouchListener { _, event -> when (event.actionMasked) { MotionEvent.ACTION_DOWN -> pressTouchKey(control.keyCode); MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> releaseTouchKey(control.keyCode) }; true }
     }
     val params = FrameLayout.LayoutParams(width, height, controlGravity).apply {
-      when {
-        controlGravity and Gravity.RIGHT == Gravity.RIGHT -> rightMargin = dp(horizontalOffset)
-        controlGravity and Gravity.LEFT == Gravity.LEFT -> leftMargin = dp(horizontalOffset)
-        else -> translationX = dp(horizontalOffset).toFloat()
-      }
+      when { controlGravity and Gravity.RIGHT == Gravity.RIGHT -> rightMargin = dp(horizontalOffset); controlGravity and Gravity.LEFT == Gravity.LEFT -> leftMargin = dp(horizontalOffset) }
       if (controlGravity and Gravity.TOP == Gravity.TOP) topMargin = dp(verticalOffset) else bottomMargin = dp(verticalOffset)
     }
     root.addView(button, params)
+    if (controlGravity and Gravity.CENTER_HORIZONTAL == Gravity.CENTER_HORIZONTAL) button.translationX = dp(horizontalOffset).toFloat()
   }
 
-  private fun createMetricPill(): TextView = TextView(this).apply {
-    text = "FPS —   •   LOCAL"; textSize = 10f; gravity = Gravity.CENTER
-    setTextColor(Color.rgb(194, 243, 255)); setPadding(dp(12), 0, dp(12), 0)
-    background = roundedBackground(Color.argb(130, 2, 12, 24), Color.argb(125, 21, 178, 238), 16)
-  }
+  private fun createMetricPill(): TextView = TextView(this).apply { text = "FPS —   •   LOCAL"; textSize = 10f; gravity = Gravity.CENTER; setTextColor(Color.rgb(194, 243, 255)); setPadding(dp(12), 0, dp(12), 0); background = roundedBackground(Color.argb(130, 2, 12, 24), Color.argb(125, 21, 178, 238), 16) }
   private fun updateMetricPill(fps: Long?) { if (::metricPill.isInitialized) metricPill.text = "FPS ${fps ?: "—"}   •   LOCAL" }
-  private fun applyAspectRatio() {
-    if (aspectMode == "fit" || root.width <= 0 || root.height <= 0) return
-    val ratio = if (aspectMode == "4:3") 4f / 3f else 16f / 9f
-    var width = root.width; var height = (width / ratio).toInt()
-    if (height > root.height) { height = root.height; width = (height * ratio).toInt() }
-    gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
-  }
-  private fun errorMessage(error: Int, fileName: String): String = when (error) {
-    GLRetroView.ERROR_LOAD_LIBRARY -> "Could not load ${definition.coreName}. Reinstall the complete APK."
-    GLRetroView.ERROR_LOAD_GAME -> "Could not open $fileName. Check that it is compatible with ${definition.title}."
-    GLRetroView.ERROR_GL_NOT_COMPATIBLE -> "This device does not support the graphics configuration required by this emulator."
-    else -> "${definition.coreName} stopped while starting the game (code $error)."
-  }
+  private fun applyAspectRatio() { if (aspectMode == "fit" || root.width <= 0 || root.height <= 0) return; val ratio = if (aspectMode == "4:3") 4f / 3f else 16f / 9f; var width = root.width; var height = (width / ratio).toInt(); if (height > root.height) { height = root.height; width = (height * ratio).toInt() }; gameFrame.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER) }
+  private fun errorMessage(error: Int, fileName: String): String = when (error) { GLRetroView.ERROR_LOAD_LIBRARY -> "Could not load ${definition.coreName}. Reinstall the complete APK."; GLRetroView.ERROR_LOAD_GAME -> "Could not open $fileName. Check that it is compatible with ${definition.title}."; GLRetroView.ERROR_GL_NOT_COMPATIBLE -> "This device does not support the graphics configuration required by this emulator."; else -> "${definition.coreName} stopped while starting the game (code $error)." }
   private fun showError(message: String) { setContentView(TextView(this).apply { text = message; gravity = Gravity.CENTER; setTextColor(Color.WHITE); setBackgroundColor(Color.rgb(3, 8, 18)); textSize = 16f; setPadding(dp(28), dp(28), dp(28), dp(28)); setOnClickListener { finish() } }) }
   private fun showToast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
   private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
