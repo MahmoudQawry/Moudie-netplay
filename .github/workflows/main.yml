@@ -31,8 +31,10 @@ jobs:
       - name: 🧪 تشغيل الاختبارات
         run: pnpm test
 
-      - name: 🖐️ إصلاح التوافق الحقيقي للمس المتعدد
-        run: python3 scripts/apply-native-multitouch-fix.py
+      - name: 🖐️ تثبيت نظام التحكم الحقيقي متعدد الأصابع
+        run: |
+          python3 scripts/apply-native-multitouch-fix.py
+          python3 scripts/fix-router-types.py
 
       - name: 🤖 تثبيت Java 17
         uses: actions/setup-java@v4
@@ -56,8 +58,6 @@ jobs:
       - name: 🔨 إصلاح صلاحيات Gradle
         run: chmod +x android/gradlew
 
-      # نبني Release لأن Debug يتوقع Metro لتوفير JavaScript bundle.
-      # APK الـ Release يحتوي الـ bundle داخله ويعمل مباشرة بعد التثبيت.
       - name: 🏗️ بناء APK مستقل (Release)
         run: |
           cd android
