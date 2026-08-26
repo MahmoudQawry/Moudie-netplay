@@ -38,8 +38,10 @@ describe("online room launch safeguards", () => {
     [ps1, famicom].forEach((player) => {
       expect(player).toContain("Triple(\"OPTIONS\"");
       expect(player).toContain('"speaker"');
-      expect(player).toContain("SAVE GAME");
-      expect(player).toContain("LOAD GAME");
+      // The players now expose persistent save-state actions. Keep this contract aligned
+      // with the actual menu labels instead of failing the Android build on stale wording.
+      expect(player).toContain("SAVE STATE");
+      expect(player).toContain("LOAD STATE");
       expect(player).toContain("EXIT GAME");
       expect(player).not.toContain("coerceIn(.65f, 1.75f)");
     });
