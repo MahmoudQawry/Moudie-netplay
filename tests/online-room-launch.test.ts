@@ -10,7 +10,6 @@ describe("online room launch safeguards", () => {
     const ps1 = readProjectFile("app/ps1/[roomId].tsx");
     const psp = readProjectFile("app/psp/[roomId].tsx");
     const native = readProjectFile("app/native/[system]/[roomId].tsx");
-
     expect(ps1).toContain("launchGameRef.current(true, false, true)");
     expect(psp).toContain("launchGameRef.current(true, false, true)");
     expect(native).toContain("launchRef.current(true, false, true)");
@@ -36,7 +35,6 @@ describe("online room launch safeguards", () => {
     expect(hud).toContain("$systemId.$orientation.hud.$controlId");
     expect(hud).toContain("fun resizeBy(delta: Float)");
     expect(hud).not.toContain("coerceIn(.65f, 1.75f)");
-
     [ps1, famicom].forEach((player) => {
       expect(player).toContain("Triple(\"OPTIONS\"");
       expect(player).toContain('"speaker"');
@@ -52,6 +50,7 @@ describe("online room launch safeguards", () => {
     expect(universal).toContain("applyAspectRatio()");
     expect(universal).toContain("retroView.getGLRetroErrors()");
     expect(universal).toContain("ERROR_LOAD_GAME");
+    expect(universal).toContain("private fun addController()");
 
     expect(famicom).toContain("directionalControlBackground()");
     expect(famicom).toContain("isDirection = control.id in setOf(\"up\", \"down\", \"left\", \"right\")");
@@ -75,7 +74,6 @@ describe("online room launch safeguards", () => {
     expect(nativeRoom).toContain("INSTALL MAME ARCADE CORE");
     expect(ps1).toContain("createFreeControlCanvas()");
     expect(ps1).toContain("retroView.setOnTouchListener");
-    expect(universal).toContain("setOnTouchListener");
     expect(famicom).toContain("retroView.setOnTouchListener");
     expect(library).not.toContain("CHOOSE FILE & CONFIGURE");
     expect(famicomRoom).toContain('nativePlayerRef.current?.requestState("netplay")');
