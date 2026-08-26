@@ -145,14 +145,14 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private fun addController() {
     val profile = definition.profile
     val controls = listOf(
-      profile.directions.up to Gravity.LEFT or Gravity.BOTTOM,
-      profile.directions.down to Gravity.LEFT or Gravity.BOTTOM,
-      profile.directions.left to Gravity.LEFT or Gravity.BOTTOM,
-      profile.directions.right to Gravity.LEFT or Gravity.BOTTOM,
+      profile.directions.up to (Gravity.LEFT or Gravity.BOTTOM),
+      profile.directions.down to (Gravity.LEFT or Gravity.BOTTOM),
+      profile.directions.left to (Gravity.LEFT or Gravity.BOTTOM),
+      profile.directions.right to (Gravity.LEFT or Gravity.BOTTOM),
     )
     controls.forEachIndexed { index, (control, gravity) -> addControl(control, gravity, 16 + (index % 2) * 60, 40 + (index / 2) * 64) }
     profile.actionButtons.forEachIndexed { index, control -> addControl(control, Gravity.RIGHT or Gravity.BOTTOM, 16 + (index % 3) * 62, 38 + (index / 3) * 62) }
-    profile.shoulderButtons.forEachIndexed { index, control -> addControl(control, if (index % 2 == 0) Gravity.LEFT or Gravity.TOP else Gravity.RIGHT or Gravity.TOP, 16 + (index / 2) * 62, 58) }
+    profile.shoulderButtons.forEachIndexed { index, control -> addControl(control, if (index % 2 == 0) (Gravity.LEFT or Gravity.TOP) else (Gravity.RIGHT or Gravity.TOP), 16 + (index / 2) * 62, 58) }
     profile.systemButtons.forEachIndexed { index, control -> addControl(control, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM, (index - 1) * 62, 16) }
   }
 
@@ -172,7 +172,11 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       }
     }
     val params = FrameLayout.LayoutParams(dp(54), dp(54), gravity).apply {
-      when { gravity and Gravity.RIGHT == Gravity.RIGHT -> rightMargin = dp(horizontalOffset); gravity and Gravity.LEFT == Gravity.LEFT -> leftMargin = dp(horizontalOffset); else -> leftMargin = dp(horizontalOffset) }
+      when {
+        gravity and Gravity.RIGHT == Gravity.RIGHT -> rightMargin = dp(horizontalOffset)
+        gravity and Gravity.LEFT == Gravity.LEFT -> leftMargin = dp(horizontalOffset)
+        else -> leftMargin = dp(horizontalOffset)
+      }
       if (gravity and Gravity.TOP == Gravity.TOP) topMargin = dp(verticalOffset) else bottomMargin = dp(verticalOffset)
     }
     root.addView(button, params)
