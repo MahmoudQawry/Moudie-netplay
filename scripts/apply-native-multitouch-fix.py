@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Build-time guard for Android touch routing.
+"""Build-time guard for Android touch routing and native-player compatibility.
 
 Android ViewGroups only deliver independent touch streams to sibling controls when
 motion-event splitting is enabled along the complete ancestor chain. Without it,
 the first finger can own the gesture stream and a second button never receives its
-own DOWN/UP pair. This script makes that invariant explicit for the native players.
-It is intentionally idempotent so local and CI builds behave identically.
+own DOWN/UP pair. This script also normalizes a Kotlin editor-bar block that can
+be rejected by the Android/Kotlin toolchain because of ambiguous synthetic property
+assignment inside a nested layout lambda. It is intentionally idempotent so local
+and CI builds behave identically.
 """
 from pathlib import Path
 
@@ -17,7 +19,7 @@ def replace_once(path: Path, old: str, new: str) -> None:
     if new in text:
         return
     if old not in text:
-        raise SystemExit(f"Expected touch-routing block not found: {path}")
+        raise SystemExit(f"Expected compatibility block not found: {path}")
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
@@ -65,4 +67,24 @@ replace_once(
     'private fun createDpad(): FrameLayout = FrameLayout(this).apply {\n    isMotionEventSplittingEnabled = true\n    layoutDirection',
 )
 
-print("Native multitouch routing guard applied successfully.")
+universal = ROOT / "modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/UniversalLibretroPlayerActivity.kt"
+replace_once(
+    universal,
+    '    fun b(label: String, gravity: Int, click: () -> Unit) { bar.addView(TextView(this@UniversalLibretroPlayerActivity).apply { text = label; gravity = Gravity.CENTER; setTextColor(Color.WHITE); textSize = 15f; background = bg(Color.argb(190, 4, 12, 22), Color.argb(170, 90, 220, 255), 10); setOnClickListener { click() } }, FrameLayout.LayoutParams(dp(48), dp(38), gravity).apply { topMargin = dp(8); leftMargin = dp(8); rightMargin = dp(8) }) }',
+    '''    fun b(label: String, buttonGravity: Int, click: () -> Unit) {
+      val button = TextView(this@UniversalLibretroPlayerActivity).apply {
+        text = label
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        textSize = 15f
+        background = bg(Color.argb(190, 4, 12, 22), Color.argb(170, 90, 220, 255), 10)
+        setOnClickListener { click() }
+      }
+      val params = FrameLayout.LayoutParams(dp(48), dp(38), buttonGravity)
+      params.topMargin = dp(8)
+      params.setMargins(dp(8), dp(8), dp(8), 0)
+      bar.addView(button, params)
+    }''',
+)
+
+print("Native multitouch and editor compatibility guard applied successfully.")
