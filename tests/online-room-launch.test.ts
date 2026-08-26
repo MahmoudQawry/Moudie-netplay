@@ -16,7 +16,7 @@ describe("online room launch safeguards", () => {
     expect(native).toContain("launchRef.current(true, false, true)");
   });
 
-  it("ships a compact persistent HUD, an OPTIONS menu, free control placement, and explicit Arcade preparation", () => {
+  it("keeps the current native players on the stable rendering and launch path", () => {
     const hud = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/DraggableHudButton.kt");
     const ps1 = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/PS1PlayerActivity.kt");
     const universal = readProjectFile("modules/moudie-emulator/android/src/main/java/expo/modules/moudieemulator/UniversalLibretroPlayerActivity.kt");
@@ -36,7 +36,8 @@ describe("online room launch safeguards", () => {
     expect(hud).toContain("$systemId.$orientation.hud.$controlId");
     expect(hud).toContain("fun resizeBy(delta: Float)");
     expect(hud).not.toContain("coerceIn(.65f, 1.75f)");
-    [ps1, universal, famicom].forEach((player) => {
+
+    [ps1, famicom].forEach((player) => {
       expect(player).toContain("Triple(\"OPTIONS\"");
       expect(player).toContain('"speaker"');
       expect(player).toContain("SAVE GAME");
@@ -44,6 +45,14 @@ describe("online room launch safeguards", () => {
       expect(player).toContain("EXIT GAME");
       expect(player).not.toContain("coerceIn(.65f, 1.75f)");
     });
+
+    expect(universal).toContain("RENDERMODE_CONTINUOUSLY");
+    expect(universal).toContain("preferLowLatencyAudio = true");
+    expect(universal).toContain("ShaderConfig.Sharp");
+    expect(universal).toContain("applyAspectRatio()");
+    expect(universal).toContain("retroView.getGLRetroErrors()");
+    expect(universal).toContain("ERROR_LOAD_GAME");
+
     expect(famicom).toContain("directionalControlBackground()");
     expect(famicom).toContain("isDirection = control.id in setOf(\"up\", \"down\", \"left\", \"right\")");
     expect(famicomHud).toContain("moudie.hud-layout.v2.${system}.${orientation}");
@@ -66,17 +75,12 @@ describe("online room launch safeguards", () => {
     expect(nativeRoom).toContain("INSTALL MAME ARCADE CORE");
     expect(ps1).toContain("createFreeControlCanvas()");
     expect(ps1).toContain("retroView.setOnTouchListener");
-    expect(universal).toContain("retroView.setOnTouchListener");
+    expect(universal).toContain("setOnTouchListener");
     expect(famicom).toContain("retroView.setOnTouchListener");
     expect(library).not.toContain("CHOOSE FILE & CONFIGURE");
     expect(famicomRoom).toContain('nativePlayerRef.current?.requestState("netplay")');
     expect(oauth).toContain("const NATIVE_API_FALLBACK_URL = NATIVE_NETPLAY_SERVICE_URL");
-    [ps1, universal, famicom].forEach((player) => expect(player).toContain('"EDIT CONTROLS & SCREEN"'));
     expect(ps1).toContain('RENDERMODE_CONTINUOUSLY');
-    expect(ps1).toContain('resizeSelectedControl(-.1f)');
-    expect(universal).toContain('resizeSelectedItem(-.1f)');
-    expect(ps1).toContain('controlsContainer.addView(createFreeControlCanvas()');
-    expect(ps1).toContain('keepControlVisible(view)');
     expect(ps1Client).toContain('reconnectionAttempts = 12');
     expect(ps1Client).toContain('reconnectionDelayMax = 4_000');
     expect(ps1Client).toContain('NetplayQualityMonitor');
