@@ -15,34 +15,62 @@ const systems: { label: string; color: string; icon: IconName; rotate: number }[
 
 export function MoudieLaunchIntro({ children }: Props) {
   const { language, ready, setLanguage } = useLanguage();
-  const [mounted, setMounted] = useState(false); const [visible, setVisible] = useState(false); const [showLanguage, setShowLanguage] = useState(false);
-  const signature = useRef(new Animated.Value(0)).current; const envelope = useRef(new Animated.Value(0)).current; const flap = useRef(new Animated.Value(0)).current;
-  const cards = useRef(systems.map(() => new Animated.Value(0))).current; const seal = useRef(new Animated.Value(0)).current; const brand = useRef(new Animated.Value(0)).current; const loading = useRef(new Animated.Value(0)).current;
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [showLanguage, setShowLanguage] = useState(false);
+  const signature = useRef(new Animated.Value(0)).current;
+  const envelope = useRef(new Animated.Value(0)).current;
+  const flap = useRef(new Animated.Value(0)).current;
+  const cards = useRef(systems.map(() => new Animated.Value(0))).current;
+  const seal = useRef(new Animated.Value(0)).current;
+  const brand = useRef(new Animated.Value(0)).current;
+  const loading = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    if (!ready) return; setMounted(true);
+    if (!ready) return;
+    setMounted(true);
     const sequence = Animated.sequence([
-      Animated.timing(signature, { toValue: 1, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true }), Animated.delay(340),
-      Animated.parallel([Animated.timing(envelope, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }), Animated.timing(signature, { toValue: 0, duration: 260, useNativeDriver: true })]),
+      Animated.timing(signature, { toValue: 1, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.delay(340),
+      Animated.parallel([
+        Animated.timing(envelope, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(signature, { toValue: 0, duration: 260, useNativeDriver: true }),
+      ]),
       Animated.timing(flap, { toValue: 1, duration: 480, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.stagger(85, cards.map((card) => Animated.spring(card, { toValue: 1, tension: 62, friction: 7, useNativeDriver: true }))),
-      Animated.parallel([Animated.spring(seal, { toValue: 1, tension: 56, friction: 7, useNativeDriver: true }), Animated.timing(brand, { toValue: 1, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true })]),
-      Animated.timing(loading, { toValue: 1, duration: 1150, easing: Easing.linear, useNativeDriver: false }), Animated.delay(120),
+      Animated.stagger(110, cards.map((card) => Animated.spring(card, { toValue: 1, tension: 62, friction: 7, useNativeDriver: true }))),
+      Animated.parallel([
+        Animated.spring(seal, { toValue: 1, tension: 56, friction: 7, useNativeDriver: true }),
+        Animated.timing(brand, { toValue: 1, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]),
+      Animated.timing(loading, { toValue: 1, duration: 1150, easing: Easing.linear, useNativeDriver: false }),
+      Animated.delay(120),
     ]);
-    sequence.start(({ finished }) => { if (finished) setVisible(true); }); return () => sequence.stop();
+    sequence.start(() => setVisible(true));
+    return () => sequence.stop();
   }, [ready]);
+
   if (!mounted || !ready || visible) return <>{children}</>;
   return <View style={styles.screen} accessibilityLabel="Moudie boot animation">
     <View style={styles.stars} />
-    <Animated.View style={[styles.signatureWrap, { opacity: signature, transform: [{ translateY: signature.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }]}><Text style={styles.signature}>Moudie</Text><View style={styles.signatureLine} /></Animated.View>
+    <Animated.View style={[styles.signatureWrap, { opacity: signature, transform: [{ translateY: signature.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }]}>
+      <Text style={styles.signature}>Moudie</Text><View style={styles.signatureLine} />
+    </Animated.View>
     <Animated.View style={[styles.scene, { opacity: envelope, transform: [{ scale: envelope.interpolate({ inputRange: [0, 1], outputRange: [0.78, 1] }) }, { translateY: envelope.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }] }]}>
       <View style={styles.aura} />
-      <Animated.View style={[styles.cardRack, { opacity: flap, transform: [{ translateY: flap.interpolate({ inputRange: [0, 1], outputRange: [70, 0] }) }] }]}>{systems.map((system, index) => <Animated.View key={system.label} style={[styles.systemCard, { borderColor: system.color, opacity: cards[index], transform: [{ rotate: `${system.rotate}deg` }, { translateY: cards[index].interpolate({ inputRange: [0, 1], outputRange: [82, 0] }) }, { scale: cards[index].interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }] }]}><Text style={[styles.cardLabel, { color: system.color }]}>{system.label}</Text><MaterialCommunityIcons name={system.icon} size={29} color="#F4F8FF" /></Animated.View>)}</Animated.View>
-      <View style={styles.envelopeBack} /><Animated.View style={[styles.envelopeFlap, { transform: [{ perspective: 800 }, { rotateX: flap.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-64deg"] }) }] }]} /><View style={styles.envelopeFront} />
+      <Animated.View style={[styles.cardRack, { opacity: flap, transform: [{ translateY: flap.interpolate({ inputRange: [0, 1], outputRange: [70, 0] }) }] }]}>
+        {systems.map((system, index) => <Animated.View key={system.label} style={[styles.systemCard, { borderColor: system.color, opacity: cards[index], transform: [{ rotate: `${system.rotate}deg` }, { translateY: cards[index].interpolate({ inputRange: [0, 1], outputRange: [82, 0] }) }, { scale: cards[index].interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }] }]}>
+          <Text style={[styles.cardLabel, { color: system.color }]}>{system.label}</Text><MaterialCommunityIcons name={system.icon} size={29} color="#F4F8FF" />
+        </Animated.View>)}
+      </Animated.View>
+      <View style={styles.envelopeBack} />
+      <Animated.View style={[styles.envelopeFlap, { transform: [{ perspective: 800 }, { rotateX: flap.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-64deg"] }) }] }]} />
+      <View style={styles.envelopeFront} />
       <Animated.View style={[styles.seal, { opacity: seal, transform: [{ scale: seal.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }) }, { rotate: seal.interpolate({ inputRange: [0, 1], outputRange: ["-45deg", "0deg"] }) }] }]}><Text style={styles.sealText}>M</Text></Animated.View>
     </Animated.View>
     <Animated.View style={[styles.brand, { opacity: brand, transform: [{ translateY: brand.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }]}><Text style={styles.classic}>CLASSIC ERA</Text><Text style={styles.by}>BY MOUDIE</Text></Animated.View>
     <Animated.View style={[styles.loadingWrap, { opacity: brand }]}><View style={styles.loadingTrack}><Animated.View style={[styles.loadingFill, { width: loading.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) }]} /></View><Text style={styles.loadingText}>LOADING…</Text></Animated.View>
-    <Pressable style={styles.skip} onPress={() => setVisible(true)}><Text style={styles.skipText}>SKIP</Text></Pressable><Pressable style={styles.languageButton} onPress={() => setShowLanguage((value) => !value)}><Text style={styles.languageText}>{language === "ar" ? "العربية" : "EN"}</Text></Pressable>
+    <Pressable style={styles.skip} onPress={() => setVisible(true)}><Text style={styles.skipText}>SKIP INTRO</Text></Pressable>
+    <Pressable style={styles.languageButton} onPress={() => setShowLanguage((value) => !value)}><Text style={styles.languageText}>{language === "ar" ? "العربية" : "EN"}</Text></Pressable>
     {showLanguage && <View style={styles.languageMenu}>{(["ar", "en"] as AppLanguage[]).map((item) => <Pressable key={item} style={styles.languageOption} onPress={() => { setLanguage(item); setShowLanguage(false); }}><Text style={styles.languageOptionText}>{item === "ar" ? "العربية" : "English"}</Text></Pressable>)}</View>}
   </View>;
 }
