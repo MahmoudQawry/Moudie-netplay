@@ -34,6 +34,7 @@ jobs:
       - name: 🖐️ تثبيت نظام التحكم الحقيقي متعدد الأصابع
         run: |
           python3 scripts/apply-native-multitouch-fix.py
+          python3 scripts/restore-connected-dpad-routing.py
           python3 scripts/fix-router-types.py
 
       - name: 🤖 تثبيت Java 17
