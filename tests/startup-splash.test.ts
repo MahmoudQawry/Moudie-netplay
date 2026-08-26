@@ -48,9 +48,9 @@ describe("Android startup splash safeguards", () => {
     expect(intro).toContain('import { MaterialCommunityIcons } from "@expo/vector-icons"');
     expect(intro).toContain("Animated.sequence([");
     expect(intro).toContain("Animated.stagger(110");
-    expect(intro).toContain("setVisible(true);");
-    expect(intro).toContain("sequence.start");
-    expect(intro).toContain("setVisible(false)");
+    expect(intro).toContain("sequence.start(() => setVisible(true))");
+    expect(intro).toContain("onPress={() => setVisible(true)}");
+    expect(intro).toContain("const [visible, setVisible] = useState(false)");
     expect(recovery).toContain("TRY AGAIN");
     expect(recovery).toContain("MOUDIE IS READY");
     expect(rootLayout).not.toContain("MoudieLaunchIntro");
