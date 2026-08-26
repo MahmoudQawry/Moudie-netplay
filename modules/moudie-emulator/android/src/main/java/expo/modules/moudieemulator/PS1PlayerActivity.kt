@@ -80,12 +80,13 @@ class PS1PlayerActivity : ComponentActivity() {
   private lateinit var controlPreferences: android.content.SharedPreferences
   private var controlEditMode = false
   private var settingsMode = false
-  private var selectedEditableControl: Pair<TextView, String>? = null
+  private var selectedEditableControl: Pair<View, String>? = null
   private var selectedHud: DraggableHudButton? = null
   private var aspectMode = "fit"
   private lateinit var topControls: FrameLayout
   private val gameplayHud = mutableListOf<View>()
   private lateinit var stateFile: File
+  private lateinit var savesDirectory: File
   private val controlProfile = EmulatorControlProfiles.PS1
   private var netplayClient: Ps1NetplayClient? = null
   private var localPlayerIndex = 0
@@ -166,7 +167,7 @@ class PS1PlayerActivity : ComponentActivity() {
     }
 
     val systemDirectory = File(filesDir, "moudie-ps1/system").apply { mkdirs() }
-    val savesDirectory = File(filesDir, "moudie-ps1/saves").apply { mkdirs() }
+    savesDirectory = File(filesDir, "moudie-ps1/saves").apply { mkdirs() }
     val stateDirectory = File(filesDir, "moudie-ps1/states").apply { mkdirs() }
     stateFile = File(stateDirectory, "${stateKeyForGame(gameFile)}.state")
     val gameData = GLRetroViewData(this).apply {
@@ -704,10 +705,20 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private fun showGameplayOptions() {
     android.app.AlertDialog.Builder(this)
-      .setItems(arrayOf("EDIT CONTROLS & SCREEN", "SAVE GAME", "LOAD GAME", "EXIT GAME")) { _, index ->
-        when (index) { 0 -> beginGameplayEditor(); 1 -> saveState(silent = false); 2 -> loadState(); else -> finish() }
+      .setItems(arrayOf("EDIT CONTROLS & SCREEN", "SAVE STATE", "LOAD STATE", "MEMORY CARD", "EXIT GAME")) { _, index ->
+        when (index) { 0 -> beginGameplayEditor(); 1 -> saveState(silent = false); 2 -> loadState(); 3 -> showMemoryCardInfo(); else -> finish() }
       }
       .show()
+  }
+
+  private fun showMemoryCardInfo() {
+    val files = savesDirectory.listFiles()?.filter { it.isFile() }?.sortedBy { it.name }.orEmpty()
+    val summary = if (files.isEmpty()) {
+      "No memory-card file has been written yet. PS1 games create and update their own memory-card data automatically when they save in-game."
+    } else {
+      "Persistent memory-card data is stored locally for this app. Files currently present: ${files.joinToString { it.name }}"
+    }
+    AlertDialog.Builder(this).setTitle("PS1 MEMORY CARD").setMessage(summary).setPositiveButton("OK", null).show()
   }
 
   private fun showChatDialog() {
@@ -771,8 +782,8 @@ class PS1PlayerActivity : ComponentActivity() {
 
   private fun createFreeControlCanvas(): FrameLayout = FrameLayout(this).apply {
     val size = dp(58)
-    fun add(control: EmulatorTouchButton, gravity: Int, left: Int = 0, top: Int = 0, right: Int = 0, bottom: Int = 0, shape: TouchButtonShape = TouchButtonShape.CIRCLE) {
-      addView(button(control, size, size, shape), FrameLayout.LayoutParams(size, size, gravity).apply {
+    fun add(control: EmulatorTouchButton, gravity: Int, left: Int = 0, top: Int = 0, right: Int = 0, bottom: Int = 0) {
+      addView(button(control, size, size), FrameLayout.LayoutParams(size, size, gravity).apply {
         leftMargin = dp(left); topMargin = dp(top); rightMargin = dp(right); bottomMargin = dp(bottom)
       })
     }
@@ -780,10 +791,15 @@ class PS1PlayerActivity : ComponentActivity() {
     add(controlProfile.shoulderButtons[1], Gravity.LEFT or Gravity.TOP, left = 82, top = 72)
     add(controlProfile.shoulderButtons[3], Gravity.RIGHT or Gravity.TOP, right = 82, top = 72)
     add(controlProfile.shoulderButtons[2], Gravity.RIGHT or Gravity.TOP, right = 16, top = 72)
-    add(controlProfile.directions.up, Gravity.LEFT or Gravity.BOTTOM, left = 74, bottom = 168, shape = TouchButtonShape.DIRECTION)
-    add(controlProfile.directions.left, Gravity.LEFT or Gravity.BOTTOM, left = 16, bottom = 110, shape = TouchButtonShape.DIRECTION)
-    add(controlProfile.directions.right, Gravity.LEFT or Gravity.BOTTOM, left = 132, bottom = 110, shape = TouchButtonShape.DIRECTION)
-    add(controlProfile.directions.down, Gravity.LEFT or Gravity.BOTTOM, left = 74, bottom = 52, shape = TouchButtonShape.DIRECTION)
+
+    // The four directions are deliberately one connected touch surface. This is the
+    // same physical-control principle as the classic PlayStation D-pad, not four
+    // separate square buttons that compete for Android's gesture stream.
+    val dpad = createConnectedDpad()
+    addView(dpad, FrameLayout.LayoutParams(size * 3, size * 3, Gravity.LEFT or Gravity.BOTTOM).apply {
+      leftMargin = dp(16); bottomMargin = dp(52)
+    })
+
     add(controlProfile.actionButtons[0], Gravity.RIGHT or Gravity.BOTTOM, right = 74, bottom = 168)
     add(controlProfile.actionButtons[2], Gravity.RIGHT or Gravity.BOTTOM, right = 132, bottom = 110)
     add(controlProfile.actionButtons[1], Gravity.RIGHT or Gravity.BOTTOM, right = 16, bottom = 110)
@@ -792,13 +808,26 @@ class PS1PlayerActivity : ComponentActivity() {
     add(controlProfile.systemButtons[1], Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM, left = 64, bottom = 40)
   }
 
-  /** A conventional four-way D-pad, matching the reference layout and editable per direction. */
-  private fun createDirectionalPad(size: Int): FrameLayout = FrameLayout(this).apply {
-    layoutDirection = View.LAYOUT_DIRECTION_LTR
-    addView(button(controlProfile.directions.up, size, size, TouchButtonShape.DIRECTION), FrameLayout.LayoutParams(size, size, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
-    addView(button(controlProfile.directions.down, size, size, TouchButtonShape.DIRECTION), FrameLayout.LayoutParams(size, size, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
-    addView(button(controlProfile.directions.left, size, size, TouchButtonShape.DIRECTION), FrameLayout.LayoutParams(size, size, Gravity.CENTER_VERTICAL or Gravity.LEFT))
-    addView(button(controlProfile.directions.right, size, size, TouchButtonShape.DIRECTION), FrameLayout.LayoutParams(size, size, Gravity.CENTER_VERTICAL or Gravity.RIGHT))
+  private fun createConnectedDpad(): PlayStationStyleDpad = PlayStationStyleDpad(
+    context = this,
+    upKey = controlProfile.directions.up.keyCode,
+    downKey = controlProfile.directions.down.keyCode,
+    leftKey = controlProfile.directions.left.keyCode,
+    rightKey = controlProfile.directions.right.keyCode,
+    onKey = { action, keyCode -> sendLocalKey(if (action == MotionEvent.ACTION_DOWN) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP, keyCode) },
+    preferences = controlPreferences,
+    layoutKey = controlLayoutKey("dpad"),
+    editing = { controlEditMode },
+    onSelected = { view ->
+      selectedEditableControl = view to "DPAD"
+      selectedHud = null
+      showToast("D-pad selected. Drag or pinch to resize the complete connected pad.")
+    },
+  )
+
+  /** One connected physical-style D-pad; the size argument remains for the existing layout caller. */
+  private fun createDirectionalPad(size: Int): View = createConnectedDpad().apply {
+    layoutParams = FrameLayout.LayoutParams(size * 3, size * 3)
   }
 
   private fun createMiddleControls(): LinearLayout {

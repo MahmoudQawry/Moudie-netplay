@@ -90,8 +90,8 @@ internal class PlayStationStyleDpad(
   private fun editTouch(event: MotionEvent): Boolean {
     scaler.onTouchEvent(event)
     when (event.actionMasked) {
-      MotionEvent.ACTION_DOWN -> { onSelected?.invoke(this); dragId = event.getPointerId(0); downRawX = event.rawX; downRawY = event.rawY; originX = translationX; originY = translationY }
-      MotionEvent.ACTION_MOVE -> if (!scaler.isInProgress && dragId >= 0) { val i = event.findPointerIndex(dragId); if (i >= 0) { translationX = originX + event.getRawX(i) - downRawX; translationY = originY + event.getRawY(i) - downRawY } }
+      MotionEvent.ACTION_DOWN -> { onSelected?.invoke(this); dragId = event.getPointerId(0); downRawX = event.x; downRawY = event.y; originX = translationX; originY = translationY }
+      MotionEvent.ACTION_MOVE -> if (!scaler.isInProgress && dragId >= 0) { val i = event.findPointerIndex(dragId); if (i >= 0) { translationX = originX + event.getX(i) - downRawX; translationY = originY + event.getY(i) - downRawY } }
       MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { dragId = -1; persistLayout() }
     }
     return true
