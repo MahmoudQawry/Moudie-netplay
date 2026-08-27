@@ -1,5 +1,5 @@
 <resources>
-  <string name="app_name">Moudie NetPlay</string>
+  <string name="app_name">Classic Era by Moudie</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
   <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
 </resources>

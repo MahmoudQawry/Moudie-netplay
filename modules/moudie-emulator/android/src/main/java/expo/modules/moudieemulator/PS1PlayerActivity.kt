@@ -76,7 +76,7 @@ class PS1PlayerActivity : ComponentActivity() {
   private lateinit var retroView: GLRetroView
   private lateinit var root: FrameLayout
   private lateinit var gameFrame: FrameLayout
-  private lateinit var controlsContainer: FrameLayout
+  private lateinit var controlsContainer: MultiTouchControlFrame
   private lateinit var controlPreferences: android.content.SharedPreferences
   private var controlEditMode = false
   private var settingsMode = false
@@ -203,7 +203,7 @@ class PS1PlayerActivity : ComponentActivity() {
       FrameLayout.LayoutParams.WRAP_CONTENT,
       Gravity.TOP,
     ))
-    controlsContainer = FrameLayout(this).apply { addView(createFreeControlCanvas()) }
+    controlsContainer = FrameLayout(this).apply { isMotionEventSplittingEnabled = true; addView(createFreeControlCanvas()) }
     root.addView(controlsContainer, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
       FrameLayout.LayoutParams.MATCH_PARENT,

@@ -48,7 +48,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   }
 
   private lateinit var retroView: GLRetroView
-  private lateinit var root: FrameLayout
+  private lateinit var root: MultiTouchControlFrame
   private lateinit var gameFrame: FrameLayout
   private lateinit var definition: NativeCoreCatalog.Definition
   private lateinit var preferences: android.content.SharedPreferences
@@ -126,10 +126,16 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
 
   private fun addController() {
     val p = definition.profile
-    addControl(p.directions.up, Gravity.LEFT or Gravity.BOTTOM, 74, 168)
-    addControl(p.directions.left, Gravity.LEFT or Gravity.BOTTOM, 16, 110)
-    addControl(p.directions.right, Gravity.LEFT or Gravity.BOTTOM, 132, 110)
-    addControl(p.directions.down, Gravity.LEFT or Gravity.BOTTOM, 74, 52)
+    val dpad = PlayStationStyleDpad(
+      context = this,
+      upKey = p.directions.up.keyCode, downKey = p.directions.down.keyCode,
+      leftKey = p.directions.left.keyCode, rightKey = p.directions.right.keyCode,
+      onKey = { action, key -> if (action == MotionEvent.ACTION_DOWN) press(key) else release(key) },
+      preferences = preferences, layoutKey = key("dpad"), editing = { editMode },
+      onSelected = { view -> selected = view to "dpad" },
+    )
+    root.addView(dpad, FrameLayout.LayoutParams(dp(174), dp(174), Gravity.LEFT or Gravity.BOTTOM).apply { leftMargin = dp(16); bottomMargin = dp(52) })
+    controls += dpad to "dpad"
     val face = arrayOf(74 to 168, 132 to 110, 16 to 110, 74 to 52)
     p.actionButtons.forEachIndexed { i, c -> addControl(c, Gravity.RIGHT or Gravity.BOTTOM, face.getOrElse(i) { 74 to 52 }.first, face.getOrElse(i) { 74 to 52 }.second) }
     p.shoulderButtons.forEachIndexed { i, c -> addControl(c, if (i % 2 == 0) Gravity.LEFT or Gravity.TOP else Gravity.RIGHT or Gravity.TOP, 16 + (i / 2) * 72, 18) }
@@ -180,7 +186,15 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private fun showEditorBar() {
     if (!editMode || root.findViewWithTag<View>("editor") != null) return
     val bar = FrameLayout(this).apply { tag = "editor" }
-    fun b(label: String, gravity: Int, click: () -> Unit) { bar.addView(TextView(this@UniversalLibretroPlayerActivity).apply { text = label; gravity = Gravity.CENTER; setTextColor(Color.WHITE); textSize = 15f; background = bg(Color.argb(190, 4, 12, 22), Color.argb(170, 90, 220, 255), 10); setOnClickListener { click() } }, FrameLayout.LayoutParams(dp(48), dp(38), gravity).apply { topMargin = dp(8); leftMargin = dp(8); rightMargin = dp(8) }) }
+    fun b(label: String, buttonGravity: Int, click: () -> Unit) {
+      val button = TextView(this@UniversalLibretroPlayerActivity).apply {
+        text = label; gravity = Gravity.CENTER; setTextColor(Color.WHITE); textSize = 15f
+        background = bg(Color.argb(190, 4, 12, 22), Color.argb(170, 90, 220, 255), 10)
+        setOnClickListener { click() }
+      }
+      val params = FrameLayout.LayoutParams(dp(48), dp(38), buttonGravity).apply { topMargin = dp(8); setMargins(dp(8), dp(8), dp(8), 0) }
+      bar.addView(button, params)
+    }
     b("✓", Gravity.LEFT or Gravity.TOP) { toggleEdit() }; b("−", Gravity.CENTER_HORIZONTAL or Gravity.TOP) { resize(-.1f) }; b("+", Gravity.RIGHT or Gravity.TOP) { resize(.1f) }
     root.addView(bar, FrameLayout.LayoutParams(-1, dp(56), Gravity.TOP))
   }

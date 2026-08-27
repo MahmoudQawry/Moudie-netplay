@@ -73,12 +73,14 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-font",
+    "expo-web-browser",
     ["expo-secure-store", { configureAndroidBackup: true }],
     "expo-document-picker",
     "@livekit/react-native-expo-plugin",
     [
       "expo-build-properties",
-      { android: { buildArchs: ["armeabi-v7a", "arm64-v8a"], minSdkVersion: 24 } },
+      { android: { buildArchs: ["arm64-v8a"], minSdkVersion: 24 } },
     ],
   ],
   experiments: { typedRoutes: true, reactCompiler: true },

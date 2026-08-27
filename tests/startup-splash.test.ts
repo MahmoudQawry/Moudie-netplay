@@ -17,11 +17,16 @@ describe("Android startup splash safeguards", () => {
     const activity = readProjectFile("android/app/src/main/java/com/app/moudienetplay/MainActivity.kt");
     const manifest = readProjectFile("android/app/src/main/AndroidManifest.xml");
     const config = readProjectFile("app.config.ts");
+    const workflow = readProjectFile(".github/workflows/main.yml");
+    const restoreScript = readProjectFile("scripts/restore-plain-android-startup.py");
     expect(activity).not.toContain("SplashScreenManager.registerOnActivity(this)");
     expect(activity).not.toContain("SplashScreenManager.hide()");
     expect(manifest).toContain('android:theme="@style/AppTheme"');
     expect(manifest).not.toContain('android:theme="@style/Theme.App.SplashScreen"');
     expect(config).not.toContain('"expo-splash-screen"');
+    expect(workflow).toContain("python3 scripts/restore-plain-android-startup.py");
+    expect(restoreScript).toContain("SplashScreenManager.registerOnActivity");
+    expect(restoreScript).toContain("super.onCreate(null)");
   });
 
   it("uses a plain Expo activity with no native overlay or pre-draw startup gate", () => {
@@ -56,5 +61,17 @@ describe("Android startup splash safeguards", () => {
     expect(rootLayout).not.toContain("MoudieLaunchIntro");
     expect(lobby).toContain('import { MoudieLaunchIntro } from "@/components/moudie-launch-intro"');
     expect(lobby).toContain("<MoudieLaunchIntro>");
+  });
+
+  it("keeps the reviewed entry, settings, and launch screens English-only", () => {
+    const englishOnlyPaths = [
+      "app/(tabs)/index.tsx",
+      "app/(tabs)/settings.tsx",
+      "app/play/[system].tsx",
+      "app/room/[roomId].tsx",
+      "components/moudie-launch-intro.tsx",
+      "lib/language.tsx",
+    ];
+    englishOnlyPaths.forEach((path) => expect(readProjectFile(path)).not.toMatch(/[\u0600-\u06FF]/));
   });
 });

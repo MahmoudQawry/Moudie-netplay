@@ -28,7 +28,7 @@ type Props = {
   isHost?: boolean;
   remoteOnline?: boolean;
   memberId?: number;
-  members?: Array<{ id: number; displayName: string; role: "host" | "player" | "spectator" }>;
+  members?: { id: number; displayName: string; role: "host" | "player" | "spectator" }[];
 };
 
 export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function RoomVoiceChat(_props, ref) {

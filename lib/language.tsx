@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-export type AppLanguage = "ar" | "en";
+export type AppLanguage = "en";
 const STORAGE_KEY = "moudie.language.v1";
 
 type LanguageContextValue = {
@@ -13,25 +13,17 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<AppLanguage | null>(null);
+  const [language] = useState<AppLanguage>("en");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((value) => {
-        if (!cancelled) setLanguageState(value === "ar" || value === "en" ? value : null);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setReady(true);
-      });
-    return () => { cancelled = true; };
+    // Remove a legacy per-device language preference so previous Arabic
+    // selections cannot reappear after upgrading to the English-only UI.
+    AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined).finally(() => setReady(true));
   }, []);
 
-  const setLanguage = useCallback(async (next: AppLanguage) => {
-    setLanguageState(next);
-    await AsyncStorage.setItem(STORAGE_KEY, next);
+  const setLanguage = useCallback(async () => {
+    await AsyncStorage.removeItem(STORAGE_KEY);
   }, []);
 
   const value = useMemo(() => ({ language, ready, setLanguage }), [language, ready, setLanguage]);

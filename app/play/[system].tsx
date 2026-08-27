@@ -63,7 +63,7 @@ export default function LocalPlayScreen() {
 
         <View pointerEvents="none" style={styles.centerBrand}>
           <Text style={[styles.centerInitials, { color: `${meta.accent}22` }]}>{meta.initials}</Text>
-          {editing ? <Text style={styles.editHint}>الشاشة والأزرار مستقلة: اسحب أي عنصر وحده، ثم غيّر حجمه. الإعدادات محفوظة لكل محاكي ولكل اتجاه.</Text> : <Text style={styles.engineHint}>{meta.status} · {localMode ? "LOCAL PLAY" : "ONLINE ROOM"} · {orientation.toUpperCase()}</Text>}
+          {editing ? <Text style={styles.editHint}>The game screen and every control are independent. Drag or resize each item, then save a separate layout for this system and orientation.</Text> : <Text style={styles.engineHint}>{meta.status} · {localMode ? "LOCAL PLAY" : "ONLINE ROOM"} · {orientation.toUpperCase()}</Text>}
           {lastButton && !editing && <Text style={styles.buttonHint}>Pressed: {lastButton}</Text>}
         </View>
 

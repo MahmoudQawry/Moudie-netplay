@@ -6,29 +6,14 @@ import { MoudieLaunchIntro } from "@/components/moudie-launch-intro";
 import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
-import { useLanguage } from "@/lib/language";
 import { getProfileName } from "@/lib/room-storage";
 
 export default function LobbyScreen() {
   const [profileName, setProfileName] = useState<string | null>(null);
-  const { language } = useLanguage();
-  const ar = language === "ar";
 
   useEffect(() => { getProfileName().then(setProfileName); }, []);
 
-  const copy = ar ? {
-    retro: "ألعاب كلاسيكية، بطريقتك",
-    title: "اختر طريقة اللعب",
-    intro: "اختر الوضع أولاً، ثم اختر واحداً من خمسة أنظمة كلاسيكية داخل الوضع.",
-    local: "لعب محلي",
-    localText: "اختر النظام والعب ملف اللعبة الموجود على جهازك بدون إنترنت.",
-    create: "إنشاء غرفة",
-    createText: "اختر النظام وأنشئ غرفة للعب الجماعي أونلاين.",
-    join: "انضمام لغرفة",
-    joinText: "أدخل رمز الدعوة ثم اختر لاعباً أو مشاهدًا.",
-    tip: "في كل وضع يمكنك استخدام EDIT لتحريك الأزرار و SIZE − / + لتغيير حجمها. يتم حفظ وضع الشاشة العمودي والأفقي بشكل مستقل.",
-    player: "لاعب جديد",
-  } : {
+  const copy = {
     retro: "CLASSIC GAMES, YOUR WAY",
     title: "Choose how to play",
     intro: "Pick a mode first, then choose one of five classic systems inside that mode.",
@@ -46,7 +31,7 @@ export default function LobbyScreen() {
     <MoudieLaunchIntro>
       <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
         <NeonCircuitBackground />
-        <ScrollView contentContainerStyle={[styles.content, ar && styles.rtl]} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View style={styles.brandRow}>
               <Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} resizeMode="cover" />
@@ -74,27 +59,27 @@ export default function LobbyScreen() {
               <View style={[styles.modeGlow, { backgroundColor: "#16D9FF" }]} />
               <View style={styles.modeIcon}><MaterialCommunityIcons name="cellphone-play" size={27} color="#50E4FF" /></View>
               <View style={styles.modeCopy}><Text style={styles.modeTitle}>{copy.local}</Text><Text style={styles.modeText}>{copy.localText}</Text></View>
-              <MaterialCommunityIcons name={ar ? "chevron-left" : "chevron-right"} size={25} color="#D4E4FF" />
+              <MaterialCommunityIcons name="chevron-right" size={25} color="#D4E4FF" />
             </Pressable>
 
             <Pressable onPress={() => { haptic.light(); router.push("/create-room"); }} style={({ pressed }) => [styles.modeCard, styles.roomCard, pressed && styles.cardPressed]}>
               <View style={[styles.modeGlow, { backgroundColor: "#B653FF" }]} />
               <View style={styles.modeIcon}><MaterialCommunityIcons name="account-group-outline" size={27} color="#D6A1FF" /></View>
               <View style={styles.modeCopy}><Text style={styles.modeTitle}>{copy.create}</Text><Text style={styles.modeText}>{copy.createText}</Text></View>
-              <MaterialCommunityIcons name={ar ? "chevron-left" : "chevron-right"} size={25} color="#EBD9FF" />
+              <MaterialCommunityIcons name="chevron-right" size={25} color="#EBD9FF" />
             </Pressable>
 
             <Pressable onPress={() => { haptic.light(); router.push("/join-room"); }} style={({ pressed }) => [styles.modeCard, styles.joinCard, pressed && styles.cardPressed]}>
               <View style={[styles.modeGlow, { backgroundColor: "#F5BC44" }]} />
               <View style={styles.modeIcon}><MaterialCommunityIcons name="key-variant" size={26} color="#FFE09A" /></View>
               <View style={styles.modeCopy}><Text style={styles.modeTitle}>{copy.join}</Text><Text style={styles.modeText}>{copy.joinText}</Text></View>
-              <MaterialCommunityIcons name={ar ? "chevron-left" : "chevron-right"} size={25} color="#FFF0C7" />
+              <MaterialCommunityIcons name="chevron-right" size={25} color="#FFF0C7" />
             </Pressable>
           </View>
 
           <View style={styles.tip}>
             <MaterialCommunityIcons name="gesture-tap-hold" size={22} color="#65E7FF" />
-            <Text style={[styles.tipText, ar && styles.rtlText]}>{copy.tip}</Text>
+            <Text style={styles.tipText}>{copy.tip}</Text>
           </View>
         </ScrollView>
       </ScreenContainer>
@@ -104,8 +89,6 @@ export default function LobbyScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingTop: 8, paddingBottom: 34 },
-  rtl: { direction: "rtl" },
-  rtlText: { textAlign: "right" },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 18 },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 9 },
   brandIcon: { width: 42, height: 42, borderRadius: 13, borderWidth: 1, borderColor: "#7A54D6" },

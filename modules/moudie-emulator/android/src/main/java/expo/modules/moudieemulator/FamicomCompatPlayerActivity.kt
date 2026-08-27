@@ -41,7 +41,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
   private lateinit var retroView: GLRetroView
   private lateinit var root: FrameLayout
   private lateinit var gameFrame: FrameLayout
-  private lateinit var controlsContainer: FrameLayout
+  private lateinit var controlsContainer: MultiTouchControlFrame
   private lateinit var headerView: LinearLayout
   private lateinit var controlPreferences: android.content.SharedPreferences
   private lateinit var stateDirectory: File
@@ -50,7 +50,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
   private var controlScale = 1.3f
   private var focusMode = false
   private var controlEditMode = false
-  private var selectedEditableControl: Pair<TextView, String>? = null
+  private var selectedEditableControl: Pair<View, String>? = null
   private var editToggleButton: TextView? = null
   private var aspectMode = "fit"
   private var micMuted = true
@@ -104,7 +104,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     headerView = createHeader(gameFile)
     attachGameplayHud()
-    controlsContainer = FrameLayout(this)
+    controlsContainer = FrameLayout(this).apply { isMotionEventSplittingEnabled = true }
     root.addView(controlsContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
     renderControls()
     setContentView(root)
@@ -192,14 +192,14 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     controlsContainer.addView(wrapper, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
   }
 
-  private fun createDpad(): FrameLayout = FrameLayout(this).apply {
-    layoutDirection = View.LAYOUT_DIRECTION_LTR
-    val size = controlSize()
-    addView(button(controlProfile.directions.up, size, size), FrameLayout.LayoutParams(size, size, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
-    addView(button(controlProfile.directions.left, size, size), FrameLayout.LayoutParams(size, size, Gravity.CENTER_VERTICAL or Gravity.LEFT))
-    addView(button(controlProfile.directions.right, size, size), FrameLayout.LayoutParams(size, size, Gravity.CENTER_VERTICAL or Gravity.RIGHT))
-    addView(button(controlProfile.directions.down, size, size), FrameLayout.LayoutParams(size, size, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
-  }
+  private fun createDpad(): PlayStationStyleDpad = PlayStationStyleDpad(
+    context = this,
+    upKey = controlProfile.directions.up.keyCode, downKey = controlProfile.directions.down.keyCode,
+    leftKey = controlProfile.directions.left.keyCode, rightKey = controlProfile.directions.right.keyCode,
+    onKey = { action, key -> retroView.sendKeyEvent(if (action == MotionEvent.ACTION_DOWN) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP, key) },
+    preferences = controlPreferences, layoutKey = controlLayoutKey("dpad"), editing = { controlEditMode },
+    onSelected = { view -> selectedEditableControl = view to "DPAD" },
+  )
 
   private fun createMiddleControls(): LinearLayout = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
