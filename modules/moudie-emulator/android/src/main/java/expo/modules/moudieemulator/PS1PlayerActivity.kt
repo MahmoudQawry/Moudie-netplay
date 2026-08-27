@@ -87,6 +87,7 @@ class PS1PlayerActivity : ComponentActivity() {
   private val gameplayHud = mutableListOf<View>()
   private lateinit var stateFile: File
   private lateinit var savesDirectory: File
+  private lateinit var savesDirectory: File
   private val controlProfile = EmulatorControlProfiles.PS1
   private var netplayClient: Ps1NetplayClient? = null
   private var localPlayerIndex = 0
