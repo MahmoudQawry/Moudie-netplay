@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small follow-up type guard for the pointer-id touch router."""
+"""Keep native control-container declarations aligned with connected D-pads."""
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -14,7 +14,7 @@ def patch(name: str, old: str, new: str) -> None:
         raise SystemExit(f"Expected declaration not found: {path}")
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
-patch("PS1PlayerActivity.kt", "private lateinit var controlsContainer: FrameLayout", "private lateinit var controlsContainer: MultiTouchControlFrame")
-patch("FamicomCompatPlayerActivity.kt", "private lateinit var controlsContainer: FrameLayout", "private lateinit var controlsContainer: MultiTouchControlFrame")
-patch("UniversalLibretroPlayerActivity.kt", "private lateinit var root: FrameLayout", "private lateinit var root: MultiTouchControlFrame")
-print("Pointer router container declarations aligned.")
+patch("PS1PlayerActivity.kt", "private lateinit var controlsContainer: MultiTouchControlFrame", "private lateinit var controlsContainer: FrameLayout")
+patch("FamicomCompatPlayerActivity.kt", "private lateinit var controlsContainer: MultiTouchControlFrame", "private lateinit var controlsContainer: FrameLayout")
+patch("UniversalLibretroPlayerActivity.kt", "private lateinit var root: MultiTouchControlFrame", "private lateinit var root: FrameLayout")
+print("Connected D-pad container declarations aligned.")
