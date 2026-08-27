@@ -175,7 +175,7 @@ class PS1PlayerActivity : ComponentActivity() {
       coreFilePath = coreFile.absolutePath
       gameFilePath = gameFile.absolutePath
       this.systemDirectory = systemDirectory.absolutePath
-      this.savesDirectory = savesDirectory.absolutePath
+      this.savesDirectory = this@PS1PlayerActivity.savesDirectory.absolutePath
       shader = ShaderConfig.Sharp
       rumbleEventsEnabled = true
       preferLowLatencyAudio = true

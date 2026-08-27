@@ -22,7 +22,8 @@ dpad.write_text(text)
 
 text = ps1.read_text()
 text = text.replace("private var selectedEditableControl: Pair<TextView, String>? = null", "private var selectedEditableControl: Pair<View, String>? = null")
-text = text.replace("private lateinit var stateFile: File", "private lateinit var stateFile: File\n  private lateinit var savesDirectory: File")
+if "private lateinit var savesDirectory: File" not in text:
+    text = text.replace("private lateinit var stateFile: File", "private lateinit var stateFile: File\n  private lateinit var savesDirectory: File", 1)
 text = text.replace("val savesDirectory = File(filesDir, \"moudie-ps1/saves\").apply { mkdirs() }", "savesDirectory = File(filesDir, \"moudie-ps1/saves\").apply { mkdirs() }")
 
 old_free = '''  private fun createFreeControlCanvas(): FrameLayout = FrameLayout(this).apply {
