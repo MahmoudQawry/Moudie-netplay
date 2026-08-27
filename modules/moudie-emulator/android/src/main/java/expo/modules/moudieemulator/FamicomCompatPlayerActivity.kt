@@ -104,7 +104,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
     root.addView(gameFrame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     headerView = createHeader(gameFile)
     attachGameplayHud()
-    controlsContainer = FrameLayout(this).apply { isMotionEventSplittingEnabled = true }.apply { isMotionEventSplittingEnabled = true }.apply { isMotionEventSplittingEnabled = true }
+    controlsContainer = FrameLayout(this).apply { isMotionEventSplittingEnabled = true }
     root.addView(controlsContainer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
     renderControls()
     setContentView(root)
