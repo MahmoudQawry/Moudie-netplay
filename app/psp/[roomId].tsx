@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, 
 
 import { ScreenContainer } from "@/components/screen-container";
 import { RoomChat } from "@/components/room-chat";
-import { RoomVoiceChat } from "@/components/room-voice-chat";
+import { RoomVoiceChat, type RoomVoiceChatHandle } from "@/components/room-voice-chat";
 import { getNetplayServiceUrl } from "@/constants/oauth";
 import { haptic } from "@/lib/haptics";
 import { createNetplaySocket } from "@/lib/netplay-socket";
@@ -28,6 +28,7 @@ export default function PSPRoomScreen() {
   const [aspectRatio, setAspectRatio] = useState<"fit" | "4:3" | "16:9">("4:3");
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
+  const voiceChatRef = useRef<RoomVoiceChatHandle | null>(null);
   const launchGameRef = useRef<(withNetplay?: boolean, settingsMode?: boolean, synchronizedStart?: boolean) => Promise<void>>(async () => undefined);
   const [roomConnected, setRoomConnected] = useState(false);
   const [remoteOnline, setRemoteOnline] = useState(false);
@@ -42,6 +43,14 @@ export default function PSPRoomScreen() {
   const playerOptions = { orientation, aspectRatio };
 
   useEffect(() => { if (Number.isFinite(numericRoomId)) getRoomCredential(numericRoomId).then(setCredential); }, [numericRoomId]);
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const subscription = MoudieEmulatorModule.addListener("nativeOverlayAction", (payload) => {
+      if (payload.action === "toggle-microphone") void voiceChatRef.current?.setMicrophoneEnabled(!payload.muted);
+      if (payload.action === "toggle-speaker") void voiceChatRef.current?.setSpeakerEnabled?.(!payload.muted);
+    });
+    return () => subscription.remove();
+  }, []);
   useEffect(() => {
     if (!credential || Platform.OS === "web") return;
     const socket = createNetplaySocket({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken });
@@ -127,7 +136,7 @@ export default function PSPRoomScreen() {
         {canStart && <Pressable onPress={requestSynchronizedStart} style={({ pressed }) => [styles.launch, pressed && styles.disabled]}><Text style={styles.launchText}>3. START SYNCHRONIZED PSP SESSION</Text></Pressable>}
         {startRequested && <Text style={styles.wait}>WAITING FOR THE OTHER PLAYER TO VERIFY THE SAME FILE…</Text>}
         <View style={styles.note}><Text style={styles.noteTitle}>ROOM CONTROLS</Text><Text style={styles.noteText}>CHAT and MIC stay at the top of the player in landscape. Spectators remain in the room for voice and text chat.</Text></View>
-        {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title="PSP ROOM CHAT" /><RoomVoiceChat socket={roomConnected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} /></>}
+        {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title="PSP ROOM CHAT" /><RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} /></>}
       </ScrollView>
     </ScreenContainer>
   );

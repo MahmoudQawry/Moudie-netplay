@@ -53,6 +53,12 @@ describe("online room launch safeguards", () => {
     expect(universal).toContain("retroView.getGLRetroErrors()");
     expect(universal).toContain("ERROR_LOAD_GAME");
     expect(universal).toContain("private fun addController()");
+    expect(universal).toContain("connectNetplayIfConfigured()");
+    expect(universal).toContain("UniversalNetplayClient(");
+    expect(universal).toContain("NetplayQuality");
+    expect(universal).toContain("Array(5)");
+    expect(universal).toContain('"SAVE STATE"');
+    expect(universal).toContain('"LOAD STATE"');
 
     expect(famicom).toContain("directionalControlBackground()");
     expect(famicom).toContain("isDirection = control.id in setOf(\"up\", \"down\", \"left\", \"right\")");
@@ -87,6 +93,12 @@ describe("online room launch safeguards", () => {
     expect(universalClient).toContain('reconnectionAttempts = 12');
     expect(universalClient).toContain('reconnectionDelayMax = 4_000');
     expect(universalClient).toContain('NetplayQualityMonitor');
+    expect(universalClient).toContain('path = "/api/netplay"');
+    expect(universalClient).toContain('"clientKind" to "universal-player"');
+    expect(universalClient).toContain('"netplay:universal-ready"');
+    expect(universalClient).toContain('"netplay:universal-session-bootstrap"');
+    expect(universalClient).toContain('"netplay:universal-session-go"');
+    expect(universalClient).toContain('"netplay:quality-probe"');
     expect(ps1Room).toContain("prepareFastLaunch(\"ps1\"");
     expect(nativeRoom).toContain("prepareFastLaunch(system as EmulatorSystem");
   });

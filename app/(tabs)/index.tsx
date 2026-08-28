@@ -15,15 +15,15 @@ export default function LobbyScreen() {
 
   const copy = {
     retro: "CLASSIC GAMES, YOUR WAY",
-    title: "Choose how to play",
-    intro: "Pick a mode first, then choose one of five classic systems inside that mode.",
+    title: "Your classic game lobby",
+    intro: "Choose a play route first. Select your emulator, local game file, and settings only when you are ready to play.",
     local: "LOCAL PLAY",
     localText: "Choose a system and play your legal game file on this device, with no online connection.",
-    create: "CREATE ROOM",
-    createText: "Choose a system, create a room, and play online with your friends.",
-    join: "JOIN ROOM",
-    joinText: "Enter an invite code, then choose player or spectator mode.",
-    tip: "In every game mode, use EDIT to move controls and SIZE − / + to resize them. Portrait and landscape layouts are saved separately.",
+    create: "PUBLIC LOBBY",
+    createText: "Find an open classic-game lobby or host one for up to 8 players and 2 spectators.",
+    join: "JOIN PRIVATE ROOM",
+    joinText: "Enter a simple invite code from your friends, then choose player or spectator mode.",
+    tip: "Before a game starts, use Controller Settings and Screen Settings to save independent portrait and landscape layouts.",
     player: "NEW PLAYER",
   };
 
@@ -34,7 +34,7 @@ export default function LobbyScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View style={styles.brandRow}>
-              <Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} resizeMode="cover" />
+              <Image source={require("@/assets/images/classic-era-brand-icon.png")} style={styles.brandIcon} resizeMode="cover" />
               <View><Text style={styles.brand}>MOUDIE</Text><Text style={styles.brandSub}>CLASSIC ERA · NETPLAY</Text><Text style={styles.slogan}>Old Equal Gold</Text></View>
             </View>
             <Pressable onPress={() => router.push("/(tabs)/settings")} style={({ pressed }) => [styles.profile, pressed && styles.pressed]} accessibilityLabel="Open settings">
@@ -45,7 +45,7 @@ export default function LobbyScreen() {
 
           <View style={styles.hero}>
             <View style={[styles.orb, styles.orbCyan]} /><View style={[styles.orb, styles.orbPurple]} />
-            <Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.heroIcon} resizeMode="cover" />
+            <Image source={require("@/assets/images/classic-era-brand-card.png")} style={styles.heroIcon} resizeMode="cover" />
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>{copy.retro}</Text>
               <Text style={styles.heroTitle}>{copy.title}</Text>
@@ -62,7 +62,7 @@ export default function LobbyScreen() {
               <MaterialCommunityIcons name="chevron-right" size={25} color="#D4E4FF" />
             </Pressable>
 
-            <Pressable onPress={() => { haptic.light(); router.push("/create-room"); }} style={({ pressed }) => [styles.modeCard, styles.roomCard, pressed && styles.cardPressed]}>
+            <Pressable onPress={() => { haptic.light(); router.push("/public-lobby"); }} style={({ pressed }) => [styles.modeCard, styles.roomCard, pressed && styles.cardPressed]}>
               <View style={[styles.modeGlow, { backgroundColor: "#B653FF" }]} />
               <View style={styles.modeIcon}><MaterialCommunityIcons name="account-group-outline" size={27} color="#D6A1FF" /></View>
               <View style={styles.modeCopy}><Text style={styles.modeTitle}>{copy.create}</Text><Text style={styles.modeText}>{copy.createText}</Text></View>

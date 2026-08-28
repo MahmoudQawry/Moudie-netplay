@@ -18,7 +18,7 @@ const schemeFromBundleId = `manus${timestamp}`;
 const env = {
   appName: "Classic Era by Moudie",
   appSlug: "moudie-netplay",
-  logoUrl: "./assets/images/moudie-brand-icon.png",
+  logoUrl: "./assets/images/classic-era-brand-icon.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -29,7 +29,7 @@ const config: ExpoConfig = {
   slug: env.appSlug,
   version: "1.5.0",
   orientation: "default",
-  icon: "./assets/images/moudie-brand-icon.png",
+  icon: "./assets/images/classic-era-brand-icon.png",
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
   newArchEnabled: false,
@@ -42,9 +42,9 @@ const config: ExpoConfig = {
     versionCode: 45,
     adaptiveIcon: {
       backgroundColor: "#101827",
-      foregroundImage: "./assets/images/moudie-brand-icon.png",
-      backgroundImage: "./assets/images/moudie-brand-icon.png",
-      monochromeImage: "./assets/images/moudie-brand-icon.png",
+      foregroundImage: "./assets/images/classic-era-brand-icon.png",
+      backgroundImage: "./assets/images/classic-era-brand-icon.png",
+      monochromeImage: "./assets/images/classic-era-brand-icon.png",
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
@@ -69,7 +69,7 @@ const config: ExpoConfig = {
   web: {
     bundler: "metro",
     output: "single",
-    favicon: "./assets/images/moudie-brand-icon.png",
+    favicon: "./assets/images/classic-era-brand-icon.png",
   },
   plugins: [
     "expo-router",

@@ -3,6 +3,7 @@ export type EmulatorSystemId = "nes" | "ps1" | "psp" | "sega" | "arcade";
 export type SaveStateCapability = {
   available: boolean;
   label: string;
+  slots: number;
 };
 
 /**
@@ -10,9 +11,9 @@ export type SaveStateCapability = {
  * capabilities that are backed by the installed emulator core.
  */
 export const SAVE_STATE_CAPABILITIES: Record<EmulatorSystemId, SaveStateCapability> = {
-  nes: { available: true, label: "Local save and load are available in both modes" },
-  ps1: { available: true, label: "Local save and load are available inside the player" },
-  psp: { available: true, label: "Local save and load are available with the native PSP player" },
-  sega: { available: true, label: "Local save and load are available with the native Sega player" },
-  arcade: { available: true, label: "Local save and load are available with the native Arcade player" },
+  nes: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
+  ps1: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
+  psp: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
+  sega: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
+  arcade: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
 };

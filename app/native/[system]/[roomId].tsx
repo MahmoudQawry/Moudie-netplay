@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, 
 
 import { ScreenContainer } from "@/components/screen-container";
 import { RoomChat } from "@/components/room-chat";
-import { RoomVoiceChat } from "@/components/room-voice-chat";
+import { RoomVoiceChat, type RoomVoiceChatHandle } from "@/components/room-voice-chat";
 import { getNetplayServiceUrl } from "@/constants/oauth";
 import { createNetplaySocket } from "@/lib/netplay-socket";
 import { setRealtimeRoomReady } from "@/lib/realtime-room-service";
@@ -38,12 +38,21 @@ export default function NativeRoomScreen() {
   const [preparingCore, setPreparingCore] = useState(false);
   const [status, setStatus] = useState("Choose the same local file on both devices.");
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
+  const voiceChatRef = useRef<RoomVoiceChatHandle | null>(null);
   const launchRef = useRef<(netplay?: boolean, settingsMode?: boolean, synchronizedStart?: boolean) => Promise<void>>(async () => undefined);
   const catalog = useMemo(() => MoudieEmulatorModule.getCoreCatalog().find((entry) => entry.system === system), [system]);
   const snapshotQuery = useRealtimeRoomSnapshot(numericRoomId, credential, 4_000);
   const coreVersion = `moudie-${system}-libretro-lockstep-v1`;
 
   useEffect(() => { if (Number.isFinite(numericRoomId)) getRoomCredential(numericRoomId).then(setCredential); }, [numericRoomId]);
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const subscription = MoudieEmulatorModule.addListener("nativeOverlayAction", (payload) => {
+      if (payload.action === "toggle-microphone") void voiceChatRef.current?.setMicrophoneEnabled(!payload.muted);
+      if (payload.action === "toggle-speaker") void voiceChatRef.current?.setSpeakerEnabled?.(!payload.muted);
+    });
+    return () => subscription.remove();
+  }, []);
   useEffect(() => {
     if (!credential || Platform.OS === "web") return;
     const socket = createNetplaySocket({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken });
@@ -123,7 +132,7 @@ export default function NativeRoomScreen() {
     <View style={styles.status}><Text style={styles.statusTitle}>NETPLAY STATUS</Text><Text style={styles.statusText}>{status}</Text></View>
     {game && connected && assignedPlayer && <Pressable onPress={markReady} disabled={ready} style={({ pressed }) => [styles.ready, (pressed || ready) && styles.disabled]}><Text style={styles.readyText}>{ready ? "READY CONFIRMED" : "2. READY"}</Text></Pressable>}
     {canStart && <Pressable onPress={requestStart} style={({ pressed }) => [styles.start, pressed && styles.disabled]}><Text style={styles.startText}>3. START SYNCHRONIZED SESSION</Text></Pressable>}
-    {Platform.OS !== "web" && <><RoomChat socket={connected ? socketRef.current : null} title={`${meta.title.toUpperCase()} ROOM CHAT`} /><RoomVoiceChat socket={connected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} /></>}
+    {Platform.OS !== "web" && <><RoomChat socket={connected ? socketRef.current : null} title={`${meta.title.toUpperCase()} ROOM CHAT`} /><RoomVoiceChat ref={voiceChatRef} socket={connected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} /></>}
   </ScrollView></ScreenContainer>;
 }
 

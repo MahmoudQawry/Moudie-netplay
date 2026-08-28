@@ -32,11 +32,11 @@ object NativeCoreCatalog {
   }
 
   private val definitions = listOf(
-    Definition("nes", "Famicom / NES", "FCEUmm", listOf("fceumm_libretro_android.so"), setOf("nes", "fds", "zip"), "retroarch", 2, 2, 6, EmulatorControlProfiles.FAMICOM, "moudie-nes/system"),
-    Definition("ps1", "PlayStation 1", "PCSX-ReARMed", listOf("pcsx_rearmed_libretro_android.so", "libpcsx_rearmed_libretro_android.so"), setOf("bin", "cue", "iso", "chd", "pbp"), "retroarch", 8, 6, 4, EmulatorControlProfiles.PS1, "moudie-ps1/system"),
-    Definition("psp", "PlayStation Portable", "PPSSPP", listOf("ppsspp_libretro_android.so"), setOf("iso", "cso", "chd", "pbp"), "psp-network", 4, 6, 4, EmulatorControlProfiles.PSP, "moudie-psp/system"),
-    Definition("sega", "Sega Genesis / Mega Drive", "Genesis Plus GX", listOf("genesis_plus_gx_libretro_android.so"), setOf("bin", "md", "gen", "smd", "sms", "gg", "zip"), "retroarch", 4, 6, 4, EmulatorControlProfiles.SEGA, "moudie-sega/system"),
-    Definition("arcade", "Arcade", "MAME Arcade", listOf("mamearcade_libretro_android.so"), setOf("zip", "7z", "chd"), "retroarch", 4, 6, 4, EmulatorControlProfiles.ARCADE, "moudie-arcade/system"),
+    Definition("nes", "Famicom / NES", "FCEUmm", listOf("fceumm_libretro_android.so"), setOf("nes", "fds", "zip"), "retroarch", 2, 8, 2, EmulatorControlProfiles.FAMICOM, "moudie-nes/system"),
+    Definition("ps1", "PlayStation 1", "PCSX-ReARMed", listOf("pcsx_rearmed_libretro_android.so", "libpcsx_rearmed_libretro_android.so"), setOf("bin", "cue", "iso", "chd", "pbp"), "retroarch", 8, 8, 2, EmulatorControlProfiles.PS1, "moudie-ps1/system"),
+    Definition("psp", "PlayStation Portable", "PPSSPP", listOf("ppsspp_libretro_android.so"), setOf("iso", "cso", "chd", "pbp"), "psp-network", 4, 8, 2, EmulatorControlProfiles.PSP, "moudie-psp/system"),
+    Definition("sega", "Sega Genesis / Mega Drive", "Genesis Plus GX", listOf("genesis_plus_gx_libretro_android.so"), setOf("bin", "md", "gen", "smd", "sms", "gg", "zip"), "retroarch", 4, 8, 2, EmulatorControlProfiles.SEGA, "moudie-sega/system"),
+    Definition("arcade", "Arcade", "MAME Arcade", listOf("mamearcade_libretro_android.so"), setOf("zip", "7z", "chd"), "retroarch", 4, 8, 2, EmulatorControlProfiles.ARCADE, "moudie-arcade/system"),
   )
 
   fun all(): List<Definition> = definitions

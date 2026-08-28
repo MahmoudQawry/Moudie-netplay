@@ -19,7 +19,7 @@ import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorMo
 const SUPPORTED_EXTENSIONS = [".bin", ".iso", ".chd", ".pbp"] as const;
 const PS1_NETPLAY_CORE_VERSION = "pcsx-rearmed-0.13.2-lockstep-v1";
 type BiosStatus = Record<string, { required: boolean; available: boolean; files?: string[]; message: string }>;
-type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void> };
+type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void>; setSpeakerEnabled?: (enabled: boolean) => Promise<void> };
 
 function isPs1GameFile(name: string) {
   const normalized = name.trim().toLowerCase();
@@ -68,6 +68,7 @@ export default function PS1Screen() {
     if (Platform.OS === "web") return;
     const subscription = MoudieEmulatorModule.addListener("nativeOverlayAction", (payload) => {
       if (payload.action === "toggle-microphone") voiceChatRef.current?.setMicrophoneEnabled(!payload.muted);
+      if (payload.action === "toggle-speaker") voiceChatRef.current?.setSpeakerEnabled?.(!payload.muted);
     });
     return () => subscription.remove();
   }, []);

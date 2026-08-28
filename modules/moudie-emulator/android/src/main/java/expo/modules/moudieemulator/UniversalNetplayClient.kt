@@ -29,7 +29,7 @@ class UniversalNetplayClient(
 ) {
   companion object {
     private const val MIN_ACTIVE_PLAYERS = 2
-    private const val MAX_ACTIVE_PLAYERS = 6
+    private const val MAX_ACTIVE_PLAYERS = 8
   }
 
   private var socket: Socket? = null
@@ -37,7 +37,7 @@ class UniversalNetplayClient(
 
   fun connect() {
     val options = IO.Options().apply {
-      path = "/api/universal-netplay"
+      path = "/api/netplay"
       transports = arrayOf("websocket", "polling")
       reconnection = true
       timeout = 5_000
@@ -49,49 +49,50 @@ class UniversalNetplayClient(
         "roomId" to config.roomId.toString(),
         "memberId" to config.memberId.toString(),
         "memberToken" to config.memberToken,
+        "clientKind" to "universal-player",
       )
     }
     val connectedSocket = IO.socket(config.serverUrl, options)
-    qualityMonitor = NetplayQualityMonitor(connectedSocket, onQuality, "universal:quality-probe", "universal:quality-pong")
+    qualityMonitor = NetplayQualityMonitor(connectedSocket, onQuality, "netplay:quality-probe", "netplay:quality-pong")
     socket = connectedSocket.apply {
       on(Socket.EVENT_CONNECT) {
-        emit("universal:ready", JSONObject()
+        emit("netplay:universal-ready", JSONObject()
           .put("system", config.system)
           .put("fingerprint", config.fingerprint)
           .put("coreVersion", config.coreVersion))
         qualityMonitor?.resume()
         onStatus("${config.system.uppercase()} dedicated game channel connected.")
       }
-      on("universal:bootstrap") { args ->
+      on("netplay:universal-session-bootstrap") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val ids = payload.playerMemberIds()
         if (ids.size in MIN_ACTIVE_PLAYERS..MAX_ACTIVE_PLAYERS) onBootstrap(ids)
         else onStatus("The room sent an invalid active-player list; waiting for a valid session.")
       }
-      on("universal:waiting") { args ->
+      on("netplay:universal-waiting") { args ->
         val payload = args.firstOrNull() as? JSONObject
         onStatus(payload?.optString("message")?.ifBlank { "Waiting for every active player to verify the same game." } ?: "Waiting for every active player to verify the same game.")
       }
-      on("universal:session-refused") { args ->
+      on("netplay:session-start-refused") { args ->
         val payload = args.firstOrNull() as? JSONObject
         onStatus(payload?.optString("message")?.ifBlank { "The emulator session was refused." } ?: "The emulator session was refused.")
       }
-      on("universal:session-go") { args ->
+      on("netplay:universal-session-go") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val startAt = payload.optLong("startAt", -1L)
         val ids = payload.playerMemberIds()
         if (startAt > 0L && ids.size in MIN_ACTIVE_PLAYERS..MAX_ACTIVE_PLAYERS) onSessionGo(startAt, ids)
         else if (startAt > 0L) onStatus("The room sent an invalid active-player count; session start was ignored.")
       }
-      on("universal:state-request") { onStateRequest() }
-      on("universal:input") { args ->
+      on("netplay:universal-state-request") { onStateRequest() }
+      on("netplay:universal-input") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val remoteMemberId = payload.optInt("memberId", 0)
         val frame = payload.optLong("frame", -1L)
         val mask = payload.optInt("mask", -1)
         if (remoteMemberId > 0 && frame >= 0L && mask in 0..0xffff) onRemoteInput(remoteMemberId, frame, mask)
       }
-      on("universal:state") { args ->
+      on("netplay:universal-state") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val state = payload.optString("snapshot", "")
         val syncId = payload.optLong("syncId", -1L)
@@ -106,23 +107,26 @@ class UniversalNetplayClient(
 
   fun sendInputFrame(frame: Long, mask: Int) {
     if (frame < 0L || mask !in 0..0xffff) return
-    socket?.emit("universal:input", JSONObject().put("frame", frame).put("mask", mask))
+    socket?.emit("netplay:universal-input", JSONObject().put("frame", frame).put("mask", mask))
   }
 
   fun sendState(encodedState: String, syncId: Long, encoding: String) {
     if (encodedState.isBlank() || syncId < 0L) return
-    socket?.emit("universal:state", JSONObject().put("snapshot", encodedState).put("syncId", syncId).put("encoding", encoding))
+    socket?.emit("netplay:universal-state", JSONObject().put("snapshot", encodedState).put("syncId", syncId).put("encoding", encoding))
   }
 
   fun requestState(minimumSyncId: Long = -1L) {
-    socket?.emit("universal:state-request", JSONObject().put("minimumSyncId", minimumSyncId))
+    socket?.emit("netplay:universal-state-request", JSONObject().put("minimumSyncId", minimumSyncId))
   }
 
   fun acknowledgeState(syncId: Long) {
-    if (syncId >= 0L) socket?.emit("universal:state-ack", JSONObject().put("syncId", syncId))
+    if (syncId >= 0L) socket?.emit("netplay:universal-sync-ack", JSONObject().put("syncId", syncId))
   }
 
-  fun sendChat(text: String) { /* Chat intentionally stays on the lobby channel. */ }
+  fun sendChat(text: String) {
+    val safeText = text.trim().take(400)
+    if (safeText.isNotEmpty()) socket?.emit("netplay:chat", JSONObject().put("text", safeText))
+  }
 
   fun close() {
     qualityMonitor?.close()

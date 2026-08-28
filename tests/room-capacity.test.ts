@@ -12,22 +12,22 @@ import {
 } from "../shared/room-capacity";
 
 describe("online room capacity", () => {
-  it("uses 2-6 active players and at most 4 spectators for standard emulators", () => {
+  it("uses 2-8 active players and at most 2 spectators for standard emulators", () => {
     expect(MIN_ACTIVE_PLAYERS).toBe(2);
-    expect(STANDARD_MAX_ACTIVE_PLAYERS).toBe(6);
-    expect(STANDARD_MAX_SPECTATORS).toBe(4);
-    expect(ROOM_CAPACITIES.ps1).toEqual({ minPlayers: 2, maxPlayers: 6, maxSpectators: 4 });
-    expect(ROOM_CAPACITIES.psp).toEqual({ minPlayers: 2, maxPlayers: 6, maxSpectators: 4 });
-    expect(ROOM_CAPACITIES.sega).toEqual({ minPlayers: 2, maxPlayers: 6, maxSpectators: 4 });
-    expect(ROOM_CAPACITIES.arcade).toEqual({ minPlayers: 2, maxPlayers: 6, maxSpectators: 4 });
+    expect(STANDARD_MAX_ACTIVE_PLAYERS).toBe(8);
+    expect(STANDARD_MAX_SPECTATORS).toBe(2);
+    expect(ROOM_CAPACITIES.ps1).toEqual({ minPlayers: 2, maxPlayers: 8, maxSpectators: 2 });
+    expect(ROOM_CAPACITIES.psp).toEqual({ minPlayers: 2, maxPlayers: 8, maxSpectators: 2 });
+    expect(ROOM_CAPACITIES.sega).toEqual({ minPlayers: 2, maxPlayers: 8, maxSpectators: 2 });
+    expect(ROOM_CAPACITIES.arcade).toEqual({ minPlayers: 2, maxPlayers: 8, maxSpectators: 2 });
     expect(roomMemberLimit("ps1")).toBe(10);
   });
 
-  it("gives Famicom exactly 2 active seats and up to 6 spectators", () => {
-    expect(FAMICOM_MAX_ACTIVE_PLAYERS).toBe(2);
-    expect(FAMICOM_MAX_SPECTATORS).toBe(6);
-    expect(ROOM_CAPACITIES.nes).toEqual({ minPlayers: 2, maxPlayers: 2, maxSpectators: 6 });
-    expect(roomMemberLimit("nes")).toBe(8);
+  it("exposes the same 8-player and 2-spectator lobby policy for Famicom", () => {
+    expect(FAMICOM_MAX_ACTIVE_PLAYERS).toBe(8);
+    expect(FAMICOM_MAX_SPECTATORS).toBe(2);
+    expect(ROOM_CAPACITIES.nes).toEqual({ minPlayers: 2, maxPlayers: 8, maxSpectators: 2 });
+    expect(roomMemberLimit("nes")).toBe(10);
   });
 
   it("requires at least two active players for every emulator", () => {
@@ -38,8 +38,8 @@ describe("online room capacity", () => {
   });
 
   it("never permits more than the configured active-player limit", () => {
-    expect(canStartOnlineSession("nes", 3)).toBe(false);
-    expect(canStartOnlineSession("ps1", 6)).toBe(true);
-    expect(canStartOnlineSession("ps1", 7)).toBe(false);
+    expect(canStartOnlineSession("nes", 8)).toBe(true);
+    expect(canStartOnlineSession("ps1", 8)).toBe(true);
+    expect(canStartOnlineSession("ps1", 9)).toBe(false);
   });
 });

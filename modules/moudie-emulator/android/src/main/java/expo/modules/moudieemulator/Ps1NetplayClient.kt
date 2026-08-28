@@ -27,7 +27,6 @@ class Ps1NetplayClient(
   private val onQuality: (NetplayQuality) -> Unit,
 ) {
   private var socket: Socket? = null
-  private var qualitySocket: Socket? = null
   private var qualityMonitor: NetplayQualityMonitor? = null
 
   fun connect() {
@@ -48,9 +47,11 @@ class Ps1NetplayClient(
       )
     }
     val connectedSocket = IO.socket(config.serverUrl, options)
+    qualityMonitor = NetplayQualityMonitor(connectedSocket, onQuality, "netplay:quality-probe", "netplay:quality-pong")
     socket = connectedSocket.apply {
       on(Socket.EVENT_CONNECT) {
         emit("netplay:ps1-ready", JSONObject().put("fingerprint", config.fingerprint).put("coreVersion", config.coreVersion))
+        qualityMonitor?.resume()
         onStatus("PS1 channel connected. The room will resynchronize if this is a recovered connection.")
       }
       on("netplay:ps1-session-bootstrap") { onBootstrap() }
@@ -99,31 +100,9 @@ class Ps1NetplayClient(
         if (text.isNotEmpty()) onChat(payload.optString("displayName", "Other player"), text)
       }
       on(Socket.EVENT_CONNECT_ERROR) { onStatus("PS1 channel is retrying. Check the room connection if it does not return.") }
-      on(Socket.EVENT_DISCONNECT) { onStatus("PS1 room channel paused; reconnecting and resynchronizing automatically…") }
+      on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause(); onStatus("PS1 room channel paused; reconnecting and resynchronizing automatically…") }
       connect()
     }
-
-    val qualityOptions = IO.Options().apply {
-      path = "/api/universal-netplay"
-      transports = arrayOf("websocket", "polling")
-      reconnection = true
-      timeout = 5_000
-      reconnectionAttempts = 12
-      reconnectionDelay = 500
-      reconnectionDelayMax = 4_000
-      randomizationFactor = 0.25
-      auth = hashMapOf(
-        "roomId" to config.roomId.toString(),
-        "memberId" to config.memberId.toString(),
-        "memberToken" to config.memberToken,
-      )
-    }
-    val qSocket = IO.socket(config.serverUrl, qualityOptions)
-    qualitySocket = qSocket
-    qualityMonitor = NetplayQualityMonitor(qSocket, onQuality, "universal:quality-probe", "universal:quality-pong")
-    qSocket.on(Socket.EVENT_CONNECT) { qualityMonitor?.resume() }
-    qSocket.on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause() }
-    qSocket.connect()
   }
 
   fun sendInputFrame(frame: Long, mask: Int) {
@@ -153,8 +132,5 @@ class Ps1NetplayClient(
     socket?.off()
     socket?.disconnect()
     socket = null
-    qualitySocket?.off()
-    qualitySocket?.disconnect()
-    qualitySocket = null
   }
 }

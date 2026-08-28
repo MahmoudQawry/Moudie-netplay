@@ -136,7 +136,7 @@ class FamicomCompatPlayerActivity : ComponentActivity() {
       setTextColor(Color.rgb(210, 241, 255)); textSize = 12f; gravity = Gravity.CENTER_VERTICAL
       setPadding(dp(10), 0, 0, 0)
     }, LinearLayout.LayoutParams(0, dp(36), 1f))
-    (1..3).forEach { slot -> addView(button("S$slot", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { selectedSlot = slot; showToast("Save slot $slot selected.") })) }
+    (1..5).forEach { slot -> addView(button("S$slot", KeyEvent.KEYCODE_UNKNOWN, dp(34), onClick = { selectedSlot = slot; showToast("Save slot $slot selected.") })) }
     addView(button("LOAD", KeyEvent.KEYCODE_UNKNOWN, dp(50), onClick = { loadState() }))
     addView(button("SAVE", KeyEvent.KEYCODE_UNKNOWN, dp(42), onClick = { saveState() }))
     editToggleButton = button("EDIT", KeyEvent.KEYCODE_UNKNOWN, dp(46), onClick = { toggleControlEditing() })

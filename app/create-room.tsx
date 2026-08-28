@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -21,8 +21,10 @@ const SYSTEMS: { id: SystemId; label: string; detail: string; icon: keyof typeof
 ];
 
 export default function CreateRoomScreen() {
+  const { visibility } = useLocalSearchParams<{ visibility?: "public" | "private" }>();
+  const isPublicLobby = visibility === "public";
   const [system, setSystem] = useState<SystemId>("ps1");
-  const [name, setName] = useState("Friends Session");
+  const [name, setName] = useState(isPublicLobby ? "Classic Lobby" : "Friends Session");
   const [hostName, setHostName] = useState("");
   const [creating, setCreating] = useState(false);
   const capacity = roomCapacityFor(system);
@@ -36,7 +38,7 @@ export default function CreateRoomScreen() {
     }
     try {
       setCreating(true);
-      const room = await createRealtimeRoom({ name: name.trim(), system, hostName: normalizedHost });
+      const room = await createRealtimeRoom({ name: name.trim(), system, hostName: normalizedHost, visibility: isPublicLobby ? "public" : "private" });
       await saveProfileName(normalizedHost);
       await saveRoomCredential({ roomId: room.roomId, memberId: room.memberId, memberToken: room.memberToken });
       haptic.success();
@@ -55,13 +57,13 @@ export default function CreateRoomScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><MaterialCommunityIcons name="arrow-right" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/moudie-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>CREATE ROOM</Text></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>{isPublicLobby ? "HOST PUBLIC LOBBY" : "CREATE PRIVATE ROOM"}</Text></View>
           <View style={styles.headerSpace} />
         </View>
 
         <View style={styles.panel}>
           <Text style={styles.panelLead}>CHOOSE AN EMULATOR</Text>
-          <Text style={styles.panelSub}>Choose the game system. Every system has a dedicated controller layout inside the player.</Text>
+          <Text style={styles.panelSub}>{isPublicLobby ? "Public lobbies are discoverable by system and open seats. Invite codes stay private." : "Choose the game system. Every system has a dedicated controller layout inside the player."}</Text>
           <View style={styles.systemGrid}>
             {SYSTEMS.map((item) => {
               const selected = system === item.id;
@@ -75,8 +77,8 @@ export default function CreateRoomScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>ROOM NAME</Text>
-          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Example: Friday Night Race" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
+          <Text style={styles.label}>{isPublicLobby ? "LOBBY NAME" : "ROOM NAME"}</Text>
+          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder={isPublicLobby ? "Example: Weekend Retro" : "Example: Friday Night Race"} placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
           <Text style={styles.label}>DISPLAY NAME</Text>
           <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="Visible to your friends" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
 
@@ -93,7 +95,7 @@ export default function CreateRoomScreen() {
           </View>
 
           <Pressable onPress={create} disabled={creating} style={({ pressed }) => [styles.primaryButton, (pressed || creating) && styles.buttonPressed]}>
-            {creating ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>CREATE ROOM & ENTER PLAYER</Text><MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" /></>}
+            {creating ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>{isPublicLobby ? "HOST PUBLIC LOBBY" : "CREATE ROOM & ENTER PLAYER"}</Text><MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" /></>}
           </Pressable>
         </View>
       </ScrollView>
@@ -110,15 +112,15 @@ const styles = StyleSheet.create({
   title: { color: "#FFFFFF", fontSize: 25, fontWeight: "900" },
   headerSpace: { width: 40 },
   panel: { backgroundColor: "rgba(19, 10, 36, 0.93)", borderWidth: 1, borderColor: "#55377F", borderRadius: 27, padding: 17, marginTop: 12, shadowColor: "#8E49E6", shadowOpacity: 0.23, shadowRadius: 18, elevation: 4 },
-  panelLead: { color: "#F8F4FF", fontSize: 19, fontWeight: "900", textAlign: "right" },
-  panelSub: { color: "#B8B0CA", fontSize: 12, textAlign: "right", lineHeight: 18, marginTop: 4 },
+  panelLead: { color: "#F8F4FF", fontSize: 19, fontWeight: "900", textAlign: "left" },
+  panelSub: { color: "#B8B0CA", fontSize: 12, textAlign: "left", lineHeight: 18, marginTop: 4 },
   systemGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 16 },
   systemCard: { width: "47.7%", minHeight: 82, padding: 12, borderRadius: 17, borderWidth: 1, borderColor: "#302044", backgroundColor: "#110A20", flexDirection: "row", alignItems: "center", gap: 9 },
-  systemCopy: { flex: 1, alignItems: "flex-end" },
-  systemTitle: { fontSize: 15, fontWeight: "900", textAlign: "right" },
-  systemDetail: { color: "#9F96B2", fontSize: 10, fontWeight: "700", textAlign: "right", marginTop: 3 },
+  systemCopy: { flex: 1, alignItems: "flex-start" },
+  systemTitle: { fontSize: 15, fontWeight: "900", textAlign: "left" },
+  systemDetail: { color: "#9F96B2", fontSize: 10, fontWeight: "700", textAlign: "left", marginTop: 3 },
   selectedDot: { width: 8, height: 8, borderRadius: 4, position: "absolute", top: 10, left: 10 },
-  label: { color: "#ECE7F9", fontSize: 13, fontWeight: "900", textAlign: "right", marginTop: 17, marginBottom: 7 },
+  label: { color: "#ECE7F9", fontSize: 13, fontWeight: "900", textAlign: "left", marginTop: 17, marginBottom: 7 },
   input: { minHeight: 51, backgroundColor: "#0E091A", borderRadius: 14, borderWidth: 1, borderColor: "#302144", paddingHorizontal: 14, color: "#F8F4FF", fontSize: 15 },
   capacityCard: { marginTop: 17, borderRadius: 14, borderWidth: 1, borderColor: "#3F6D88", backgroundColor: "#102236", padding: 13 },
   capacityTitle: { color: "#71E7FF", fontSize: 12, fontWeight: "900" },

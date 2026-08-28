@@ -85,8 +85,9 @@ class PS1PlayerActivity : ComponentActivity() {
   private var aspectMode = "fit"
   private lateinit var topControls: FrameLayout
   private val gameplayHud = mutableListOf<View>()
-  private lateinit var stateFile: File
+  private lateinit var stateDirectory: File
   private lateinit var savesDirectory: File
+  private var selectedStateSlot = 1
   private val controlProfile = EmulatorControlProfiles.PS1
   private var netplayClient: Ps1NetplayClient? = null
   private var localPlayerIndex = 0
@@ -168,8 +169,7 @@ class PS1PlayerActivity : ComponentActivity() {
 
     val systemDirectory = File(filesDir, "moudie-ps1/system").apply { mkdirs() }
     savesDirectory = File(filesDir, "moudie-ps1/saves").apply { mkdirs() }
-    val stateDirectory = File(filesDir, "moudie-ps1/states").apply { mkdirs() }
-    stateFile = File(stateDirectory, "${stateKeyForGame(gameFile)}.state")
+    stateDirectory = File(filesDir, "moudie-ps1/states").apply { mkdirs() }
     val gameData = GLRetroViewData(this).apply {
       coreFilePath = coreFile.absolutePath
       gameFilePath = gameFile.absolutePath
@@ -243,7 +243,7 @@ class PS1PlayerActivity : ComponentActivity() {
 
   override fun onPause() {
     Choreographer.getInstance().removeFrameCallback(frameMeter)
-    if (::retroView.isInitialized && !isChangingConfigurations) saveState(silent = true)
+    if (::retroView.isInitialized && !isChangingConfigurations) saveState(silent = true, slot = 1)
     super.onPause()
   }
 
@@ -454,32 +454,48 @@ class PS1PlayerActivity : ComponentActivity() {
   }
 
   /** Saves a complete emulation snapshot without uploading the game or state to a server. */
-  private fun saveState(silent: Boolean = false) {
+  private fun saveState(silent: Boolean = false, slot: Int = selectedStateSlot) {
     runStateAction("Saving game state…", silent) {
       val state = retroView.serializeState()
       require(state.isNotEmpty()) { "Could not create a save state for this game." }
-      val temporaryFile = File(stateFile.parentFile, "${stateFile.name}.tmp")
+      val target = stateFile(slot)
+      val temporaryFile = File(target.parentFile, "${target.name}.tmp")
       FileOutputStream(temporaryFile).use { output ->
         output.write(state)
         output.fd.sync()
       }
-      if (!temporaryFile.renameTo(stateFile)) {
-        temporaryFile.copyTo(stateFile, overwrite = true)
+      if (!temporaryFile.renameTo(target)) {
+        temporaryFile.copyTo(target, overwrite = true)
         temporaryFile.delete()
       }
-      "State saved locally (${formatByteCount(state.size)})."
+      "State saved locally in slot S${slot.coerceIn(1, 5)} (${formatByteCount(state.size)})."
     }
   }
 
   /** Restores the most recent locally saved emulation snapshot for this game. */
   private fun loadState() {
     runStateAction("Loading game state…", silent = false) {
-      require(stateFile.isFile() && stateFile.length() > 0L) { "No saved state exists for this game yet." }
-      val restored = retroView.unserializeState(stateFile.readBytes())
+      val source = stateFile(selectedStateSlot)
+      require(source.isFile() && source.length() > 0L) { "No saved state exists in slot S$selectedStateSlot." }
+      val restored = retroView.unserializeState(source.readBytes())
       require(restored) { "Could not load the state; it may not match the current core version." }
-      "Latest saved state loaded successfully."
+      "State slot S$selectedStateSlot loaded successfully."
     }
   }
+
+  private fun chooseStateSlot(save: Boolean) {
+    val labels = Array(5) { index ->
+      val slot = index + 1
+      val state = stateFile(slot)
+      "S$slot${if (state.isFile && state.length() > 0L) " · saved" else " · empty"}"
+    }
+    AlertDialog.Builder(this).setTitle(if (save) "SAVE STATE" else "LOAD STATE").setItems(labels) { _, index ->
+      selectedStateSlot = index + 1
+      if (save) saveState() else loadState()
+    }.show()
+  }
+
+  private fun stateFile(slot: Int): File = File(stateDirectory, "${stateKeyForGame(File(intent.getStringExtra(EXTRA_GAME_PATH).orEmpty()))}.slot${slot.coerceIn(1, 5)}.state")
 
   private fun runStateAction(startMessage: String, silent: Boolean, action: () -> String) {
     if (stateActionInProgress) {
@@ -706,7 +722,7 @@ class PS1PlayerActivity : ComponentActivity() {
   private fun showGameplayOptions() {
     android.app.AlertDialog.Builder(this)
       .setItems(arrayOf("EDIT CONTROLS & SCREEN", "SAVE STATE", "LOAD STATE", "MEMORY CARD", "EXIT GAME")) { _, index ->
-        when (index) { 0 -> beginGameplayEditor(); 1 -> saveState(silent = false); 2 -> loadState(); 3 -> showMemoryCardInfo(); else -> finish() }
+        when (index) { 0 -> beginGameplayEditor(); 1 -> chooseStateSlot(true); 2 -> chooseStateSlot(false); 3 -> showMemoryCardInfo(); else -> finish() }
       }
       .show()
   }

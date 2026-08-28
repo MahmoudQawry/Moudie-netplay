@@ -9,5 +9,6 @@ describe("save state capabilities", () => {
     expect(SAVE_STATE_CAPABILITIES.psp.available).toBe(true);
     expect(SAVE_STATE_CAPABILITIES.sega.available).toBe(true);
     expect(SAVE_STATE_CAPABILITIES.arcade.available).toBe(true);
+    expect(Object.values(SAVE_STATE_CAPABILITIES).every((capability) => capability.slots === 5)).toBe(true);
   });
 });

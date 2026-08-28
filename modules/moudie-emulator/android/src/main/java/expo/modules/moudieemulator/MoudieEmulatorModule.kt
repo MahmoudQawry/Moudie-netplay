@@ -40,7 +40,7 @@ class MoudieEmulatorModule : Module() {
           "downloadable" to NativeCoreCatalog.isDownloadable(definition),
           "localPlay" to (available || NativeCoreCatalog.isDownloadable(definition)),
           "netplay" to definition.netplay,
-          "maxRoomMembers" to 10,
+          "maxRoomMembers" to definition.maxRoomMembers,
           "maxControllerSlots" to definition.maxControllerSlots,
           "acceptedExtensions" to definition.extensions.sorted(),
           "message" to when {
@@ -182,6 +182,9 @@ class MoudieEmulatorModule : Module() {
         )
       val gamePath = prepareGameFile(activity.cacheDir, uri, fileName, "moudie-${definition.system}-games")
       activity.runOnUiThread {
+        UniversalLibretroPlayerActivity.onOverlayAction = { action, muted ->
+          sendEvent("nativeOverlayAction", mapOf("action" to action, "muted" to muted))
+        }
         activity.startActivity(Intent(activity, UniversalLibretroPlayerActivity::class.java).apply {
           putExtra(UniversalLibretroPlayerActivity.EXTRA_SYSTEM, definition.system)
           putExtra(UniversalLibretroPlayerActivity.EXTRA_CORE_PATH, coreFile.absolutePath)
@@ -314,8 +317,9 @@ class MoudieEmulatorModule : Module() {
         "files" to installedPs1Bios,
         "message" to if (installedPs1Bios.isNotEmpty()) "Local BIOS found: ${installedPs1Bios.joinToString()}" else "No local BIOS was added. Some PS1 games run through HLE, but a compatible legal dump may improve compatibility."
       ),
-      "sega" to mapOf("required" to false, "available" to false, "message" to "No Sega player is bundled in this build, so BIOS status cannot be checked before core integration."),
-      "psp" to mapOf("required" to false, "available" to false, "message" to "No PSP player is bundled in this build, so system files cannot be checked before core integration."),
+      "sega" to mapOf("required" to false, "available" to true, "message" to "Genesis Plus GX is bundled. Sega games normally do not require a BIOS file."),
+      "psp" to mapOf("required" to false, "available" to true, "message" to "PPSSPP core and its local system assets are bundled. PSP game files remain on this device."),
+      "arcade" to mapOf("required" to false, "available" to true, "message" to "MAME Arcade is bundled. Arcade game files remain on this device and may require their original companion files."),
     )
   }
 

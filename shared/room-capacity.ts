@@ -1,13 +1,13 @@
 export type RoomSystem = "nes" | "ps1" | "psp" | "sega" | "arcade";
 
 export const MIN_ACTIVE_PLAYERS = 2;
-export const STANDARD_MAX_ACTIVE_PLAYERS = 6;
+export const STANDARD_MAX_ACTIVE_PLAYERS = 8;
 // Compatibility export for server code that applies the standard room limit.
 // NES/Famicom callers must use roomCapacityFor("nes") and remain capped at two players.
 export const MAX_ACTIVE_PLAYERS = STANDARD_MAX_ACTIVE_PLAYERS;
-export const STANDARD_MAX_SPECTATORS = 4;
-export const FAMICOM_MAX_ACTIVE_PLAYERS = 2;
-export const FAMICOM_MAX_SPECTATORS = 6;
+export const STANDARD_MAX_SPECTATORS = 2;
+export const FAMICOM_MAX_ACTIVE_PLAYERS = 8;
+export const FAMICOM_MAX_SPECTATORS = 2;
 
 export type RoomCapacity = {
   minPlayers: number;
