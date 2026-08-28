@@ -43,8 +43,10 @@ describe("online room launch safeguards", () => {
     });
     expect(ps1).toContain("SAVE STATE");
     expect(ps1).toContain("LOAD STATE");
+    expect(ps1).toContain("Array(5)");
     expect(famicom).toContain("SAVE GAME");
     expect(famicom).toContain("LOAD GAME");
+    expect(famicom).toContain("(1..5)");
 
     expect(universal).toContain("RENDERMODE_CONTINUOUSLY");
     expect(universal).toContain("preferLowLatencyAudio = true");
