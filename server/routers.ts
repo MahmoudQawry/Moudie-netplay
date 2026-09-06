@@ -11,6 +11,61 @@ import { z } from "zod";
 
 const roomSystemSchema = z.enum(["psp", "nes", "sega", "ps1", "arcade"]);
 
+/** Simple in-memory sliding-window limiter: blocks room-creation and join spam
+ * from a single IP. Sufficient for the single-instance room service deployment. */
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_ACTIONS = 15;
+const actionsByIp = new Map<string, number[]>();
+
+function assertRateLimit(ip: string) {
+  const now = Date.now();
+  const recent = (actionsByIp.get(ip) ?? []).filter((at) => now - at < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX_ACTIONS) {
+    throw new Error("عدد كبير من المحاولات. انتظر قليلاً ثم أعد المحاولة.");
+  }
+  recent.push(now);
+  actionsByIp.set(ip, recent);
+  if (actionsByIp.size > 10_000) {
+    for (const [key, timestamps] of actionsByIp) {
+      if (timestamps.every((at) => now - at >= RATE_LIMIT_WINDOW_MS)) actionsByIp.delete(key);
+    }
+  }
+}
+
+async function seatMemberInRoom(
+  room: Awaited<ReturnType<typeof db.findRoomByCode>>,
+  displayName: string,
+  joinAs: "player" | "spectator",
+) {
+  if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
+  const system = room.system as RoomSystem;
+  const capacity = roomCapacityFor(system);
+  const totalMembers = await db.getRoomMemberCount(room.id);
+  if (totalMembers >= roomMemberLimit(system)) {
+    throw new Error(`الغرفة مكتملة: ${capacity.maxPlayers} لاعبين و${capacity.maxSpectators} مشاهدين كحد أقصى.`);
+  }
+  if (joinAs === "player") {
+    const playerCount = await db.getRoomMemberCount(room.id, "player");
+    const activePlayersIncludingHost = playerCount + 1;
+    if (activePlayersIncludingHost >= capacity.maxPlayers) {
+      throw new Error(`مقاعد اللعب (${capacity.maxPlayers}) مكتملة. يمكنك الدخول كمشاهد.`);
+    }
+  } else {
+    const spectatorCount = await db.getRoomMemberCount(room.id, "spectator");
+    if (spectatorCount >= capacity.maxSpectators) {
+      throw new Error(`مقاعد المشاهدة (${capacity.maxSpectators}) مكتملة.`);
+    }
+  }
+  const memberToken = createAccessToken();
+  const memberId = await db.addRoomMember({
+    roomId: room.id,
+    displayName,
+    role: joinAs,
+    accessTokenHash: hashAccessToken(memberToken),
+  });
+  return { roomId: room.id, memberId, memberToken, role: joinAs, maxPlayers: capacity.maxPlayers, maxSpectators: capacity.maxSpectators };
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -30,9 +85,11 @@ export const appRouter = router({
           name: z.string().trim().min(2).max(64),
           system: roomSystemSchema,
           hostName: z.string().trim().min(2).max(32),
+          visibility: z.enum(["public", "private"]).default("private"),
         }),
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        assertRateLimit(ctx.req.ip ?? "unknown");
         const system = input.system as RoomSystem;
         const capacity = roomCapacityFor(system);
         if (capacity.minPlayers !== MIN_ACTIVE_PLAYERS) throw new Error("إعداد سعة هذه الغرفة غير صالح.");
@@ -53,41 +110,45 @@ export const appRouter = router({
           maxSpectators: capacity.maxSpectators,
         };
       }),
+    publicList: publicProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(50).default(30) }))
+      .query(async () => {
+        const rooms = await db.listPublicRooms(30);
+        return rooms.map((room) => ({
+          id: room.id,
+          name: room.name,
+          system: room.system,
+          maxPlayers: room.maxPlayers,
+          maxSpectators: roomCapacityFor(room.system as RoomSystem).maxSpectators,
+          status: room.status,
+          activePlayers: room.activePlayers,
+          spectators: room.spectators,
+          readyPlayers: room.readyPlayers,
+          updatedAt: room.updatedAt.toISOString(),
+        }));
+      }),
     join: publicProcedure
       .input(z.object({
         joinCode: z.string().trim().length(6),
         displayName: z.string().trim().min(2).max(32),
         joinAs: z.enum(["player", "spectator"]).default("player"),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        assertRateLimit(ctx.req.ip ?? "unknown");
         const room = await db.findRoomByCode(input.joinCode.toUpperCase());
-        if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
-        const system = room.system as RoomSystem;
-        const capacity = roomCapacityFor(system);
-        const totalMembers = await db.getRoomMemberCount(room.id);
-        if (totalMembers >= roomMemberLimit(system)) {
-          throw new Error(`الغرفة مكتملة: ${capacity.maxPlayers} لاعبين و${capacity.maxSpectators} مشاهدين كحد أقصى.`);
-        }
-        if (input.joinAs === "player") {
-          const playerCount = await db.getRoomMemberCount(room.id, "player");
-          const activePlayersIncludingHost = playerCount + 1;
-          if (activePlayersIncludingHost >= capacity.maxPlayers) {
-            throw new Error(`مقاعد اللعب (${capacity.maxPlayers}) مكتملة. يمكنك الدخول كمشاهد.`);
-          }
-        } else {
-          const spectatorCount = await db.getRoomMemberCount(room.id, "spectator");
-          if (spectatorCount >= capacity.maxSpectators) {
-            throw new Error(`مقاعد المشاهدة (${capacity.maxSpectators}) مكتملة.`);
-          }
-        }
-        const memberToken = createAccessToken();
-        const memberId = await db.addRoomMember({
-          roomId: room.id,
-          displayName: input.displayName,
-          role: input.joinAs,
-          accessTokenHash: hashAccessToken(memberToken),
-        });
-        return { roomId: room.id, memberId, memberToken, role: input.joinAs, maxPlayers: capacity.maxPlayers, maxSpectators: capacity.maxSpectators };
+        return seatMemberInRoom(room, input.displayName, input.joinAs);
+      }),
+    joinPublic: publicProcedure
+      .input(z.object({
+        roomId: z.number().int().positive(),
+        displayName: z.string().trim().min(2).max(32),
+        joinAs: z.enum(["player", "spectator"]).default("player"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        assertRateLimit(ctx.req.ip ?? "unknown");
+        const room = await db.findRoomById(input.roomId);
+        if (!room || room.visibility !== "public") throw new Error("هذه الغرفة غير متاحة في الردهة العامة.");
+        return seatMemberInRoom(room, input.displayName, input.joinAs);
       }),
     snapshot: publicProcedure
       .input(z.object({ roomId: z.number().int().positive(), memberId: z.number().int().positive(), memberToken: z.string().min(20) }))

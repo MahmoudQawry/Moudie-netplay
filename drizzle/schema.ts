@@ -34,13 +34,15 @@ export const gameRooms = mysqlTable(
     system: mysqlEnum("system", ["psp", "nes", "sega", "ps1", "arcade"]).notNull(),
     hostTokenHash: varchar("hostTokenHash", { length: 64 }).notNull(),
     maxPlayers: int("maxPlayers").notNull(),
+    visibility: mysqlEnum("visibility", ["public", "private"]).default("private").notNull(),
     status: mysqlEnum("status", ["waiting", "active", "closed"]).default("waiting").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    updatedAt: timestamp("updatedAt").onUpdateNow().defaultNow().notNull(),
   },
   (table) => [
     uniqueIndex("game_rooms_join_code_unique").on(table.joinCode),
     index("game_rooms_status_idx").on(table.status),
+    index("game_rooms_visibility_status_idx").on(table.visibility, table.status),
   ],
 );
 

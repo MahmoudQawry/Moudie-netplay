@@ -31,6 +31,15 @@ export function registerUniversalNetplayServer(server: HttpServer) {
   const activeSockets = new Map<string, string>();
   const roomKey = (roomId: number, system: System) => `${roomId}:${system}`;
 
+  // Per-room caches must not outlive abandoned rooms; sweep idle entries.
+  const IDLE_MS = 600_000;
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, snapshot] of snapshotByRoom) if (now - snapshot.updatedAt > IDLE_MS) snapshotByRoom.delete(key);
+    for (const key of inputHistoryByRoom.keys()) if (!snapshotByRoom.has(key)) inputHistoryByRoom.delete(key);
+    for (const roomId of readyByRoom.keys()) if (![...activeSockets.keys()].some((socketKey) => socketKey.startsWith(`${roomId}:`))) readyByRoom.delete(roomId);
+  }, IDLE_MS);
+
   const getPlayers = async (roomId: number) => {
     const snapshot = await db.getRoomSnapshot(roomId).catch(() => undefined);
     return (snapshot?.members ?? []).filter((m) => m.role === "host" || m.role === "player")

@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { gameRooms, InsertUser, roomMembers, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -97,6 +97,7 @@ export async function createRoom(input: {
   maxPlayers: number;
   hostTokenHash: string;
   memberTokenHash: string;
+  visibility?: "public" | "private";
 }) {
   const db = await getDb();
   if (!db) throw new Error("خدمة الغرف غير متاحة حالياً.");
@@ -107,6 +108,7 @@ export async function createRoom(input: {
     system: input.system,
     hostTokenHash: input.hostTokenHash,
     maxPlayers: input.maxPlayers,
+    visibility: input.visibility ?? "private",
   });
 
   const roomId = Number(roomResult[0].insertId);
@@ -126,6 +128,54 @@ export async function findRoomByCode(joinCode: string) {
 
   const result = await db.select().from(gameRooms).where(eq(gameRooms.joinCode, joinCode)).limit(1);
   return result[0];
+}
+
+export async function findRoomById(roomId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("خدمة الغرف غير متاحة حالياً.");
+
+  const result = await db.select().from(gameRooms).where(eq(gameRooms.id, roomId)).limit(1);
+  return result[0];
+}
+
+/** Lists public rooms that are still joinable, newest activity first,
+ * with aggregated member counts computed in one members query. */
+export async function listPublicRooms(limit: number) {
+  const db = await getDb();
+  if (!db) throw new Error("خدمة الغرف غير متاحة حالياً.");
+
+  const rooms = await db
+    .select()
+    .from(gameRooms)
+    .where(and(eq(gameRooms.visibility, "public"), inArray(gameRooms.status, ["waiting", "active"])))
+    .orderBy(desc(gameRooms.updatedAt))
+    .limit(limit);
+  if (rooms.length === 0) return [];
+
+  const members = await db
+    .select({
+      roomId: roomMembers.roomId,
+      role: roomMembers.role,
+      isReady: roomMembers.isReady,
+    })
+    .from(roomMembers)
+    .where(inArray(roomMembers.roomId, rooms.map((room) => room.id)));
+
+  return rooms.map((room) => {
+    const roomMemberRows = members.filter((member) => member.roomId === room.id);
+    const activeRoles = roomMemberRows.filter((member) => member.role === "host" || member.role === "player");
+    return {
+      id: room.id,
+      name: room.name,
+      system: room.system,
+      maxPlayers: room.maxPlayers,
+      status: room.status,
+      activePlayers: activeRoles.length,
+      spectators: roomMemberRows.filter((member) => member.role === "spectator").length,
+      readyPlayers: activeRoles.filter((member) => member.isReady).length,
+      updatedAt: room.updatedAt,
+    };
+  });
 }
 
 export async function addRoomMember(input: {

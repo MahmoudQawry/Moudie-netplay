@@ -57,6 +57,17 @@ export function registerNetplayServer(server: HttpServer) {
   const universalSnapshots = new Map<string, UniversalSnapshot>();
   const pendingSessions = new Map<number, PendingSession>();
 
+  // Snapshot caches and session barriers are per-room and must not outlive an
+  // abandoned room; sweep entries idle for 10 minutes on a periodic timer.
+  const SNAPSHOT_IDLE_MS = 600_000;
+  setInterval(() => {
+    const now = Date.now();
+    for (const [roomId, snapshot] of ps1Snapshots) if (now - snapshot.updatedAt > SNAPSHOT_IDLE_MS) ps1Snapshots.delete(roomId);
+    for (const [roomId, snapshot] of famicomSnapshots) if (now - snapshot.updatedAt > SNAPSHOT_IDLE_MS) famicomSnapshots.delete(roomId);
+    for (const [key, snapshot] of universalSnapshots) if (now - snapshot.updatedAt > SNAPSHOT_IDLE_MS) universalSnapshots.delete(key);
+    for (const roomId of ps1InitialStateAcks.keys()) if (!ps1Snapshots.has(roomId)) ps1InitialStateAcks.delete(roomId);
+  }, SNAPSHOT_IDLE_MS);
+
   io.use(async (socket, next) => {
     const auth = socket.handshake.auth as Record<string, unknown> | undefined;
     const roomId = Number(auth?.roomId);
