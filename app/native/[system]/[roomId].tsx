@@ -37,7 +37,8 @@ export default function NativeRoomScreen() {
   const [ready, setReady] = useState(false);
   const [starting, setStarting] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [status, setStatus] = useState("Choose the same local file on both devices.");
+  const [status, setStatus] = useState<string | null>(null);
+  const statusText = status === null ? t("segInitialStatus") : status;
   const socketRef = useRef<ReturnType<typeof createNetplaySocket> | null>(null);
   const voiceChatRef = useRef<RoomVoiceChatHandle | null>(null);
   const launchRef = useRef<(netplay?: boolean, settingsMode?: boolean, synchronizedStart?: boolean) => Promise<void>>(async () => undefined);
@@ -59,30 +60,30 @@ export default function NativeRoomScreen() {
     const socket = createNetplaySocket({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken });
     socketRef.current = socket;
     const joined = (payload: { onlineMemberIds?: number[]; assignedPlayer?: number }) => { setConnected(true); setRemoteOnline(Boolean(payload.onlineMemberIds?.some((id) => id !== credential.memberId))); setAssignedPlayer(isPlayerSeat(payload.assignedPlayer) ? payload.assignedPlayer : null); };
-    const disconnected = () => { setConnected(false); setRemoteOnline(false); setStatus("Room channel disconnected. Reconnecting automatically…"); };
+    const disconnected = () => { setConnected(false); setRemoteOnline(false); setStatus(t("pspChannelDisconnected")); };
     const presence = (payload: { memberId?: number; online?: boolean }) => { if (payload.memberId !== credential.memberId) setRemoteOnline(Boolean(payload.online)); };
     const start = (payload: { system?: string }) => { if (payload.system === system) void launchRef.current(true, false, true); };
-    socket.on("connect", () => setConnected(true)); socket.on("disconnect", disconnected); socket.on("netplay:joined", joined); socket.on("netplay:presence", presence); socket.on("netplay:session-start", start); socket.on("netplay:session-start-refused", (payload: { message?: string }) => setStatus(payload.message || "Waiting for the other player.")); socket.connect();
+    socket.on("connect", () => setConnected(true)); socket.on("disconnect", disconnected); socket.on("netplay:joined", joined); socket.on("netplay:presence", presence); socket.on("netplay:session-start", start); socket.on("netplay:session-start-refused", (payload: { message?: string }) => setStatus(payload.message || t("segWaitingOther"))); socket.connect();
     return () => { socket.disconnect(); if (socketRef.current === socket) socketRef.current = null; };
   }, [credential, game, numericRoomId, system]);
 
   const chooseGame = async () => {
     try {
       setPicking(true);
-      if (!catalog || (!catalog.available && !catalog.downloadable)) throw new Error(catalog?.message || "This Android core is not ready.");
+      if (!catalog || (!catalog.available && !catalog.downloadable)) throw new Error(catalog?.message || t("segCoreNotReady"));
       const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true, multiple: false });
       if (result.canceled) return;
       const asset = result.assets?.[0];
       if (!asset?.uri || !asset.name) throw new Error(t("unsupportedGameFile"));
       const extension = asset.name.split(".").pop()?.toLowerCase() || "";
-      if (!catalog.acceptedExtensions.includes(extension)) throw new Error(t("supportedGameFile") + ": " + meta.title + " (" + catalog.acceptedExtensions.map((value) => "." + value).join(", ") + ")");
+      if (!catalog.acceptedExtensions.includes(extension)) throw new Error(t("lsExtPrefix") + ": " + meta.title + " (" + catalog.acceptedExtensions.map((value) => "." + value).join(", ") + ")");
       if (Platform.OS === "web") throw new Error(t("androidRoomOnly"));
-      setStatus("Checking the local game fingerprint…");
+      setStatus(t("segCheckingFingerprint"));
       const fingerprint = await MoudieEmulatorModule.fingerprintNativeGame(system as EmulatorSystem, asset.uri, asset.name);
-      setStatus("Preparing the emulator core and local file now for a fast synchronized start…");
+      setStatus(t("segPreparingCore"));
       await MoudieEmulatorModule.prepareFastLaunch(system as EmulatorSystem, asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint }); setReady(false);
-      setStatus("File, core, and local launch cache are ready. Tap READY after every active player chooses the same file.");
+      setStatus(t("pspCacheReady"));
     } catch (error) { const message = error instanceof Error ? error.message : t("tryAgain"); Alert.alert(t("chooseGameError"), message); setStatus(message); }
     finally { setPicking(false); }
   };
@@ -92,11 +93,11 @@ export default function NativeRoomScreen() {
     if (!credential || !game || !assignedPlayer || !connected) return;
     try {
       await setRealtimeRoomReady({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, isReady: true, fingerprint: game.fingerprint, coreVersion });
-      socketRef.current?.emit("netplay:session-ready", { system, fingerprint: game.fingerprint, coreVersion }); setReady(true); setStatus("READY confirmed. The host starts once all active players verify the same file.");
+      socketRef.current?.emit("netplay:session-ready", { system, fingerprint: game.fingerprint, coreVersion }); setReady(true); setStatus(t("pspReadyConfirmed"));
     } catch (error) { Alert.alert(t("readyError"), error instanceof Error ? error.message : t("tryAgain")); }
   };
 
-  const requestStart = () => { socketRef.current?.emit("netplay:session-start-request", { system }); setStarting(true); setStatus("Checking every active player's file and matching core before synchronized start…"); };
+  const requestStart = () => { socketRef.current?.emit("netplay:session-start-request", { system }); setStarting(true); setStatus(t("p1CheckingBoth")); };
   const launch = async (netplay = false, settingsMode = false, synchronizedStart = false) => {
     if (!game || Platform.OS === "web") return;
     try {
@@ -110,15 +111,15 @@ export default function NativeRoomScreen() {
   const host = snapshotQuery.data?.members.find((member) => member.id === credential?.memberId)?.role === "host";
   const canStart = Boolean(ready && assignedPlayer === 1 && remoteOnline && connected && !starting);
   return <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]}><ScrollView contentContainerStyle={styles.content}>
-    <View style={styles.top}><Pressable onPress={() => router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })}><Text style={styles.back}>‹ BACK TO ROOM</Text></Pressable><Text style={[styles.chip, { color: meta.color }]}>{system.toUpperCase()} ROOM</Text></View>
-    <Text style={[styles.eyebrow, { color: meta.color }]}>{catalog?.coreName || "CHECKING CORE"}</Text><Text style={styles.title}>{meta.title}</Text><Text style={styles.copy}>Select the identical local game file on two devices. Moudie checks a fingerprint, synchronizes the start state, then relays only control inputs and state updates.</Text>
-    <View style={styles.card}><Text style={styles.file}>{game?.name || "NO GAME SELECTED"}</Text><Text style={styles.fileInfo}>{assignedPlayer ? `PLAYER ${assignedPlayer}` : "SPECTATOR / NO ACTIVE PLAYER SLOT"}</Text></View>
-    <Pressable onPress={chooseGame} disabled={picking} style={({ pressed }) => [styles.primary, { backgroundColor: meta.color }, (pressed || picking) && styles.disabled]}>{picking ? <ActivityIndicator color="#071018" /> : <Text style={styles.primaryText}>{game ? "CHANGE GAME FILE" : "1. CHOOSE GAME FILE"}</Text>}</Pressable>
-    <View style={styles.settings}><Text style={styles.settingsTitle}>EMULATOR SETTINGS</Text><Text style={styles.label}>PLAY ORIENTATION</Text><View style={styles.row}>{(["portrait", "landscape"] as const).map((value) => <Pressable key={value} onPress={() => setOrientation(value)} style={[styles.option, orientation === value && { borderColor: meta.color }]}><Text style={styles.optionText}>{value.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.label}>SCREEN RATIO</Text><View style={styles.row}>{(["fit", "4:3", "16:9"] as const).map((value) => <Pressable key={value} onPress={() => setAspectRatio(value)} style={[styles.option, aspectRatio === value && { borderColor: meta.color }]}><Text style={styles.optionText}>{value === "fit" ? "FIT" : value}</Text></Pressable>)}</View>{game && <Pressable onPress={() => launch(false, true)} style={styles.configure}><Text style={styles.configureText}>CONFIGURE {orientation.toUpperCase()} CONTROLS</Text></Pressable>}</View>
-    <View style={styles.status}><Text style={styles.statusTitle}>NETPLAY STATUS</Text><Text style={styles.statusText}>{status}</Text></View>
-    {game && connected && assignedPlayer && <Pressable onPress={markReady} disabled={ready} style={({ pressed }) => [styles.ready, (pressed || ready) && styles.disabled]}><Text style={styles.readyText}>{ready ? "READY CONFIRMED" : "2. READY"}</Text></Pressable>}
-    {canStart && <Pressable onPress={requestStart} style={({ pressed }) => [styles.start, pressed && styles.disabled]}><Text style={styles.startText}>3. START SYNCHRONIZED SESSION</Text></Pressable>}
-    {Platform.OS !== "web" && <><RoomChat socket={connected ? socketRef.current : null} title={`${meta.title.toUpperCase()} ROOM CHAT`} /><RoomVoiceChat ref={voiceChatRef} socket={connected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} /></>}
+    <View style={styles.top}><Pressable onPress={() => router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })}><Text style={styles.back}>‹ {t("fcBackToRoom")}</Text></Pressable><Text style={[styles.chip, { color: meta.color }]}>{system.toUpperCase()} {t("segRoom")}</Text></View>
+    <Text style={[styles.eyebrow, { color: meta.color }]}>{catalog?.coreName || t("lsCheckingCore")}</Text><Text style={styles.title}>{meta.title}</Text><Text style={styles.copy}>{t("segCopy")}</Text>
+    <View style={styles.card}><Text style={styles.file}>{game?.name || t("fcNoGame")}</Text><Text style={styles.fileInfo}>{assignedPlayer ? `${t("rmPlayerShort")} ${assignedPlayer}` : t("segSpectatorSlot")}</Text></View>
+    <Pressable onPress={chooseGame} disabled={picking} style={({ pressed }) => [styles.primary, { backgroundColor: meta.color }, (pressed || picking) && styles.disabled]}>{picking ? <ActivityIndicator color="#071018" /> : <Text style={styles.primaryText}>{game ? t("fcChangeFile") : t("segChooseFile")}</Text>}</Pressable>
+    <View style={styles.settings}><Text style={styles.settingsTitle}>{t("lsSettingsTitle")}</Text><Text style={styles.label}>{t("lsPlayOrientation")}</Text><View style={styles.row}>{(["portrait", "landscape"] as const).map((value) => <Pressable key={value} onPress={() => setOrientation(value)} style={[styles.option, orientation === value && { borderColor: meta.color }]}><Text style={styles.optionText}>{value.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.label}>{t("lsScreenRatio")}</Text><View style={styles.row}>{(["fit", "4:3", "16:9"] as const).map((value) => <Pressable key={value} onPress={() => setAspectRatio(value)} style={[styles.option, aspectRatio === value && { borderColor: meta.color }]}><Text style={styles.optionText}>{value === "fit" ? "FIT" : value}</Text></Pressable>)}</View>{game && <Pressable onPress={() => launch(false, true)} style={styles.configure}><Text style={styles.configureText}>{orientation === "portrait" ? t("pspConfigurePortrait") : t("pspConfigureLandscape")}</Text></Pressable>}</View>
+    <View style={styles.status}><Text style={styles.statusTitle}>{t("fcNetplayStatus")}</Text><Text style={styles.statusText}>{statusText}</Text></View>
+    {game && connected && assignedPlayer && <Pressable onPress={markReady} disabled={ready} style={({ pressed }) => [styles.ready, (pressed || ready) && styles.disabled]}><Text style={styles.readyText}>{ready ? t("fcReadyConfirmed") : t("pspReady2")}</Text></Pressable>}
+    {canStart && <Pressable onPress={requestStart} style={({ pressed }) => [styles.start, pressed && styles.disabled]}><Text style={styles.startText}>{t("segStartSession")}</Text></Pressable>}
+    {Platform.OS !== "web" && <><RoomChat socket={connected ? socketRef.current : null} title={`${meta.title} · ${t("roomChat")}`} /><RoomVoiceChat ref={voiceChatRef} socket={connected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} /></>}
   </ScrollView></ScreenContainer>;
 }
 

@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { useLanguage } from "@/lib/language";
 import { SAVE_STATE_CAPABILITIES, type EmulatorSystemId } from "@/lib/emulator-save-state-capabilities";
 
 type LibrarySystem = {
@@ -9,25 +10,26 @@ type LibrarySystem = {
   engine: string;
   state: "READY";
   color: string;
-  description: string;
+  descriptionKey: "libPspDescription" | "libNesDescription" | "libSegaDescription" | "libPs1Description";
 };
 
 const systems: LibrarySystem[] = [
-  { id: "psp", name: "PSP", engine: "PPSSPP", state: "READY", color: "#62C2EB", description: "Choose a legal PSP game file from Local Play or a PSP room. Save states are stored on this device." },
-  { id: "nes", name: "Famicom / NES", engine: "FCEUmm / JSNES", state: "READY", color: "#F4B942", description: "A room session starts after players verify the same game and compatible core." },
-  { id: "sega", name: "Sega Genesis", engine: "Genesis Plus GX", state: "READY", color: "#F26B5B", description: "Choose a legal Sega game in Local Play. Your saves and control layout remain on this device." },
-  { id: "ps1", name: "PlayStation 1", engine: "PCSX-ReARMed", state: "READY", color: "#9F8DF5", description: "Local saves, ISO support, and custom controls are available in the PS1 player." },
+  { id: "psp", name: "PSP", engine: "PPSSPP", state: "READY", color: "#62C2EB", descriptionKey: "libPspDescription" },
+  { id: "nes", name: "Famicom / NES", engine: "FCEUmm / JSNES", state: "READY", color: "#F4B942", descriptionKey: "libNesDescription" },
+  { id: "sega", name: "Sega Genesis", engine: "Genesis Plus GX", state: "READY", color: "#F26B5B", descriptionKey: "libSegaDescription" },
+  { id: "ps1", name: "PlayStation 1", engine: "PCSX-ReARMed", state: "READY", color: "#9F8DF5", descriptionKey: "libPs1Description" },
 ];
 
 export default function LibraryScreen() {
+  const { t } = useLanguage();
   return (
     <ScreenContainer className="px-5">
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.eyebrow}>LIBRARY</Text>
-        <Text style={styles.title}>Systems & Cores</Text>
-        <Text style={styles.subtitle}>Choose a play mode first, then select one of the four supported systems for your room or local session.</Text>
-        <View style={styles.list}>{systems.map((system) => { const saveCapability = SAVE_STATE_CAPABILITIES[system.id]; return <View key={system.name} style={styles.card}><View style={[styles.icon, { backgroundColor: system.color }]}><Text style={styles.iconText}>{system.name === "PSP" ? "△" : "◈"}</Text></View><View style={styles.cardBody}><Text style={styles.name}>{system.name}</Text><Text style={styles.engine}>{system.engine}</Text><Text style={styles.description}>{system.description}</Text><Text style={[styles.saveState, { color: saveCapability.available ? "#83E0B1" : "#9BAFC4" }]}>{saveCapability.label}</Text></View><Text style={[styles.state, { color: system.color }]}>{system.state}</Text></View>})}</View>
-        <View style={styles.notice}><Text style={styles.noticeTitle}>YOUR FILES STAY LOCAL</Text><Text style={styles.noticeText}>Moudie NetPlay coordinates rooms and compatibility checks only. It does not include games or transfer your game files to other players.</Text></View>
+        <Text style={styles.eyebrow}>{t("library")}</Text>
+        <Text style={styles.title}>{t("libTitle")}</Text>
+        <Text style={styles.subtitle}>{t("libSubtitle")}</Text>
+        <View style={styles.list}>{systems.map((system) => { const saveCapability = SAVE_STATE_CAPABILITIES[system.id]; return <View key={system.name} style={styles.card}><View style={[styles.icon, { backgroundColor: system.color }]}><Text style={styles.iconText}>{system.name === "PSP" ? "△" : "◈"}</Text></View><View style={styles.cardBody}><Text style={styles.name}>{system.name}</Text><Text style={styles.engine}>{system.engine}</Text><Text style={styles.description}>{t(system.descriptionKey)}</Text><Text style={[styles.saveState, { color: saveCapability.available ? "#83E0B1" : "#9BAFC4" }]}>{saveCapability.available ? t("libSaveReady") : t("libSaveLocalOnly")}</Text></View><Text style={[styles.state, { color: system.color }]}>{t("libReady")}</Text></View>})}</View>
+        <View style={styles.notice}><Text style={styles.noticeTitle}>{t("libNoticeTitle")}</Text><Text style={styles.noticeText}>{t("libNoticeText")}</Text></View>
       </ScrollView>
     </ScreenContainer>
   );

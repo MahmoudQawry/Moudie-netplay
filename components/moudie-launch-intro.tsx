@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useLanguage } from "@/lib/language";
 
 type Props = { children: ReactNode };
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -12,6 +13,7 @@ const systems: { label: string; color: string; icon: IconName; rotate: number }[
 ];
 
 export function MoudieLaunchIntro({ children }: Props) {
+  const { t } = useLanguage();
   const [introVisible, setIntroVisible] = useState(true);
   const signature = useRef(new Animated.Value(0)).current;
   const envelope = useRef(new Animated.Value(0)).current;
@@ -44,7 +46,7 @@ export function MoudieLaunchIntro({ children }: Props) {
 
   return <View style={styles.host}>
     {children}
-    {introVisible && <View style={styles.screen} accessibilityLabel="Moudie NetPlay boot animation">
+    {introVisible && <View style={styles.screen} accessibilityLabel={t("introBootLabel")}>
     <View style={styles.stars} />
     <Animated.View style={[styles.signatureWrap, { opacity: signature, transform: [{ translateY: signature.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }]}>
       <Text style={styles.signature}>Moudie</Text><View style={styles.signatureLine} />
@@ -62,8 +64,8 @@ export function MoudieLaunchIntro({ children }: Props) {
       <Animated.View style={[styles.seal, { opacity: seal, transform: [{ scale: seal.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }) }, { rotate: seal.interpolate({ inputRange: [0, 1], outputRange: ["-45deg", "0deg"] }) }] }]}><Text style={styles.sealText}>M</Text></Animated.View>
     </Animated.View>
     <Animated.View style={[styles.brand, { opacity: brand, transform: [{ translateY: brand.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }]}><Text style={styles.classic}>Classic Era by Moudie</Text><Text style={styles.by}>Old Equal Gold</Text></Animated.View>
-    <Animated.View style={[styles.loadingWrap, { opacity: brand }]}><View style={styles.loadingTrack}><Animated.View style={[styles.loadingFill, { width: loading.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) }]} /></View><Text style={styles.loadingText}>LOADING…</Text></Animated.View>
-    <Pressable style={styles.skip} onPress={() => setIntroVisible(false)}><Text style={styles.skipText}>SKIP INTRO</Text></Pressable>
+    <Animated.View style={[styles.loadingWrap, { opacity: brand }]}><View style={styles.loadingTrack}><Animated.View style={[styles.loadingFill, { width: loading.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) }]} /></View><Text style={styles.loadingText}>{t("introLoading")}</Text></Animated.View>
+    <Pressable style={styles.skip} onPress={() => setIntroVisible(false)}><Text style={styles.skipText}>{t("introSkip")}</Text></Pressable>
     </View>}
   </View>;
 }

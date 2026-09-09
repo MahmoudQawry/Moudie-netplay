@@ -48,7 +48,8 @@ export default function PS1Screen() {
   const [isInstallingBios, setIsInstallingBios] = useState(false);
   const [biosStatus, setBiosStatus] = useState<BiosStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<{ available: boolean; message: string } | null>(null);
-  const [status, setStatus] = useState("Choose a PS1 game file from your device. The file stays local and is never uploaded.");
+  const [status, setStatus] = useState<string | null>(null);
+  const statusText = status === null ? t("p1InitialStatus") : status;
   const snapshotQuery = useRealtimeRoomSnapshot(numericRoomId, credential);
   const membership = snapshotQuery.data?.members.find((member) => member.id === credential?.memberId);
   const activeMembers = (snapshotQuery.data?.members ?? []).filter((member) => member.role !== "spectator").sort((left, right) => left.role === "host" ? -1 : right.role === "host" ? 1 : left.id - right.id);
@@ -92,7 +93,7 @@ export default function PS1Screen() {
     };
     const start = (payload: { system?: string }) => {
       if (payload.system !== "ps1") return;
-      setStatus("All active players are ready. Opening the PS1 player at the shared start time…");
+      setStatus(t("p1AllReady"));
       void launchGameRef.current(true, false, true);
     };
     socket.on("connect", connected);
@@ -124,14 +125,14 @@ export default function PS1Screen() {
         return;
       }
       if (Platform.OS === "web") throw new Error(t("ps1AndroidOnly"));
-      setStatus("Checking the local PS1 game fingerprint to verify that the other player selected the same file…");
+      setStatus(t("p1CheckingFingerprint"));
       const fingerprint = await MoudieEmulatorModule.fingerprintPS1Game(asset.uri, asset.name);
-      setStatus("Preparing the PS1 core and local file now for a fast synchronized start…");
+      setStatus(t("p1PreparingCore"));
       await MoudieEmulatorModule.prepareFastLaunch("ps1", asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false);
       setStartRequested(false);
-      setStatus("The file, PS1 core, and fingerprint are ready. Tap READY for a fast synchronized start.");
+      setStatus(t("p1FingerprintReady"));
       haptic.success();
     } catch (error) {
       haptic.error();
@@ -154,7 +155,7 @@ export default function PS1Screen() {
       });
       socketRef.current?.emit("netplay:session-ready", { system: "ps1", fingerprint: game.fingerprint, coreVersion: PS1_NETPLAY_CORE_VERSION });
       setGameReady(true);
-      setStatus("Your game is marked ready. Wait for all active players, then the host can start the session.");
+      setStatus(t("p1MarkedReady"));
       haptic.success();
     } catch (error) {
       haptic.error();
@@ -166,7 +167,7 @@ export default function PS1Screen() {
     if (!gameReady || assignedPlayer !== 1 || !ps1NetplayReady) return;
     socketRef.current?.emit("netplay:session-start-request", { system: "ps1" });
     setStartRequested(true);
-    setStatus("Checking every active player's game file and core before sending the start signal…");
+    setStatus(t("p1CheckingBoth"));
   };
 
   const launchGame = async (withNetplay = false, settingsMode = false, synchronizedStart = false) => {
@@ -186,12 +187,12 @@ export default function PS1Screen() {
         player: assignedPlayer,
       } : undefined;
       if (withNetplay && !netplay) throw new Error(t("ps1NetplayNeedsPlayers"));
-      setStatus(netplay ? "Preparing PS1 NetPlay and assigning this device inside the room…" : "Preparing the game file and opening PCSX-ReARMed…");
+      setStatus(netplay ? t("p1NetplayPreparing") : t("p1LocalPreparing"));
       await MoudieEmulatorModule.launchPS1Game(game.uri, game.name, netplay, { ...playerOptions, settingsMode });
-      setStatus(netplay ? "The PS1 player is open and linked to the room. Wait for the in-game verification message." : "The local player is open. Returning from the game brings you back to this room.");
+      setStatus(netplay ? t("p1NetplayOpen") : t("p1LocalOpen"));
     } catch (error) {
       haptic.error();
-      const message = error instanceof Error ? error.message : "Could not start the PS1 player.";
+      const message = error instanceof Error ? error.message : t("p1StartErrorBody");
       setStatus(message);
       Alert.alert(t("startGameError"), message);
     } finally {
@@ -227,73 +228,73 @@ export default function PS1Screen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.topRow}>
           <Pressable onPress={() => router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId ?? "") } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
-            <Text style={styles.backText}>‹ BACK TO ROOM</Text>
+            <Text style={styles.backText}>‹ {t("fcBackToRoom")}</Text>
           </Pressable>
           <Text style={styles.chip}>PS1 · BETA</Text>
         </View>
 
         <Text style={styles.eyebrow}>PCSX REARMED</Text>
-        <Text style={styles.title}>PlayStation 1 Player</Text>
-        <Text style={styles.subtitle}>Local play inside Moudie NetPlay. The app does not include games or BIOS files; use only files you are legally entitled to use.</Text>
+        <Text style={styles.title}>{t("p1Title")}</Text>
+        <Text style={styles.subtitle}>{t("p1Subtitle")}</Text>
 
         <View style={styles.preview}>
           <Text style={styles.previewMark}>PS</Text>
-          <Text style={styles.previewTitle}>{game ? game.name : "NO GAME SELECTED"}</Text>
-          <Text style={styles.previewText}>{game ? "Ready for the native player" : "Supports BIN, ISO, CHD, and PBP"}</Text>
+          <Text style={styles.previewTitle}>{game ? game.name : t("fcNoGame")}</Text>
+          <Text style={styles.previewText}>{game ? t("p1ReadyPreview") : t("p1FormatsPreview")}</Text>
         </View>
 
         <Pressable onPress={pickGame} disabled={isPicking || isLaunching} style={({ pressed }) => [styles.primaryButton, (pressed || isPicking || isLaunching) && styles.pressed]}>
-          {isPicking ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{game ? "CHANGE PS1 GAME FILE" : "1. CHOOSE PS1 GAME FILE"}</Text>}
+          {isPicking ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{game ? t("p1ChangeFile") : t("p1ChooseFile")}</Text>}
         </Pressable>
 
         {game && <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>SCREEN & CONTROLLER SETTINGS</Text>
-          <Text style={styles.statusText}>Choose the layout first, then open controller calibration. Each direction, action button, chat, microphone, and screen profile is saved separately for portrait and landscape.</Text>
+          <Text style={styles.statusTitle}>{t("p1ScreenSettings")}</Text>
+          <Text style={styles.statusText}>{t("p1ScreenSettingsText")}</Text>
           <View style={styles.settingRow}>{(["portrait", "landscape"] as const).map((value) => <Pressable key={value} onPress={() => setPlayerOrientation(value)} style={[styles.settingOption, playerOrientation === value && styles.settingOptionActive]}><Text style={styles.settingText}>{value.toUpperCase()}</Text></Pressable>)}</View>
           <View style={styles.settingRow}>{(["fit", "4:3", "16:9"] as const).map((value) => <Pressable key={value} onPress={() => setPlayerAspect(value)} style={[styles.settingOption, playerAspect === value && styles.settingOptionActive]}><Text style={styles.settingText}>{value === "fit" ? "FIT" : value}</Text></Pressable>)}</View>
-          <Pressable onPress={() => launchGame(false, true)} disabled={isLaunching || isPicking} style={({ pressed }) => [styles.netplayButton, (pressed || isLaunching || isPicking) && styles.netplayDisabled]}><Text style={styles.launchText}>CONFIGURE CONTROLS & SCREEN</Text></Pressable>
+          <Pressable onPress={() => launchGame(false, true)} disabled={isLaunching || isPicking} style={({ pressed }) => [styles.netplayButton, (pressed || isLaunching || isPicking) && styles.netplayDisabled]}><Text style={styles.launchText}>{t("fcConfigureScreen")}</Text></Pressable>
         </View>}
 
         {game && (
           <Pressable onPress={() => launchGame(false)} disabled={isLaunching || isPicking || runtimeStatus?.available === false} style={({ pressed }) => [styles.launchButton, (pressed || isLaunching || isPicking || runtimeStatus?.available === false) && styles.pressed]}>
-            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>OPEN LOCAL PS1 PLAYER</Text>}
+            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>{t("p1OpenLocal")}</Text>}
           </Pressable>
         )}
 
         {game && <View style={styles.netplayCard}>
-          <Text style={styles.statusTitle}>PS1 NetPlay</Text>
-          <Text style={styles.statusText}>{ps1NetplayReady ? `Every active player selected the same game. You are Player ${assignedPlayer}.` : `Waiting for READY and a matching file (${matchingPlayers.length}/${activeMembers.length} ready).`}</Text>
+          <Text style={styles.statusTitle}>{t("p1NetplayTitle")}</Text>
+          <Text style={styles.statusText}>{ps1NetplayReady ? `${t("p1NetplayAllMatch")} ${assignedPlayer}` : `${t("p1NetplayWaiting")} (${matchingPlayers.length}/${activeMembers.length} ${t("lbReadyShort")})`}</Text>
           <Pressable onPress={markGameReady} disabled={gameReady || isLaunching || isPicking || !roomConnected} style={({ pressed }) => [styles.netplayButton, (gameReady || pressed || isLaunching || isPicking || !roomConnected) && styles.netplayDisabled]}>
-            <Text style={styles.launchText}>{gameReady ? "READY CONFIRMED" : "2. READY"}</Text>
+            <Text style={styles.launchText}>{gameReady ? t("fcReadyConfirmed") : t("pspReady2")}</Text>
           </Pressable>
           <Pressable onPress={requestSynchronizedStart} disabled={!gameReady || !ps1NetplayReady || assignedPlayer !== 1 || startRequested || isLaunching} style={({ pressed }) => [styles.netplayButton, (!gameReady || !ps1NetplayReady || assignedPlayer !== 1 || startRequested || pressed || isLaunching) && styles.netplayDisabled]}>
-            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>{assignedPlayer === 1 ? (startRequested ? "CONFIRMING START…" : "3. START PS1 FOR EVERYONE") : "WAITING FOR HOST TO START"}</Text>}
+            {isLaunching ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.launchText}>{assignedPlayer === 1 ? (startRequested ? t("p1ConfirmingStart") : t("p1StartAll")) : t("p1WaitingHost")}</Text>}
           </Pressable>
         </View>}
 
         {Platform.OS !== "web" && <>
-          <RoomChat socket={roomConnected ? socketRef.current : null} title="PS1 ROOM CHAT" />
+          <RoomChat socket={roomConnected ? socketRef.current : null} title={`PS1 · ${t("roomChat")}`} />
           <RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={assignedPlayer === 1} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} />
         </>}
 
         <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>PS1 PLAYER STATUS</Text>
-          <Text style={styles.statusText}>{status}</Text>
-          <Text style={styles.statusText}>{runtimeStatus?.message ?? "Checking the local core…"}</Text>
+          <Text style={styles.statusTitle}>{t("p1PlayerStatus")}</Text>
+          <Text style={styles.statusText}>{statusText}</Text>
+          <Text style={styles.statusText}>{runtimeStatus?.message ?? t("p1CheckingCore")}</Text>
         </View>
 
         <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>BIOS STATUS</Text>
-          <Text style={styles.statusText}>{biosStatus?.ps1.message ?? "Checking local BIOS…"}</Text>
-          {!biosStatus?.ps1.available && <Text style={styles.biosWarning}>Some games may start with HLE, but a compatible local BIOS improves PCSX-ReARMed compatibility and helps diagnose games that fail to start.</Text>}
+          <Text style={styles.statusTitle}>{t("p1BiosStatus")}</Text>
+          <Text style={styles.statusText}>{biosStatus?.ps1.message ?? t("p1CheckingBios")}</Text>
+          {!biosStatus?.ps1.available && <Text style={styles.biosWarning}>{t("p1BiosNote")}</Text>}
           <Pressable onPress={pickBios} disabled={isInstallingBios || isLaunching} style={({ pressed }) => [styles.primaryButton, (pressed || isInstallingBios || isLaunching) && styles.pressed]}>
-            {isInstallingBios ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>ADD LEGAL LOCAL BIOS</Text>}
+            {isInstallingBios ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{t("p1AddBios")}</Text>}
           </Pressable>
         </View>
 
         <View style={styles.noteCard}>
-          <Text style={styles.noteTitle}>CURRENT BETA LIMIT</Text>
-          <Text style={styles.noteText}>PS1 NetPlay starts only when every active player in the room uses a file with the same fingerprint. The game is never uploaded; the room transports controller input and a small initial state only.</Text>
+          <Text style={styles.noteTitle}>{t("p1BetaLimit")}</Text>
+          <Text style={styles.noteText}>{t("p1BetaText")}</Text>
         </View>
       </ScrollView>
     </ScreenContainer>

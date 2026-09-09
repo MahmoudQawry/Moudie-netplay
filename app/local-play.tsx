@@ -28,10 +28,10 @@ export default function LocalPlayPickerScreen() {
       <NeonCircuitBackground />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]} accessibilityLabel="Back"><MaterialCommunityIcons name="arrow-left" color="#FFFFFF" size={22} /></Pressable>
+          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]} accessibilityLabel={t("commonBack")}><MaterialCommunityIcons name="arrow-left" color="#FFFFFF" size={22} /></Pressable>
           <View><Text style={styles.eyebrow}>{t("localPlay")}</Text><Text style={styles.title}>{t("chooseSystem")}</Text></View>
         </View>
-        <Text style={styles.subtitle}>Select one of the four emulators. Your game files, saves, and control layouts stay on this device.</Text>
+        <Text style={styles.subtitle}>{t("localSubtitle")}</Text>
 
         <View style={styles.list}>
           {SYSTEMS.map((system) => (
@@ -43,7 +43,7 @@ export default function LocalPlayPickerScreen() {
           ))}
         </View>
 
-        <View style={styles.notice}><MaterialCommunityIcons name="tune-variant" size={21} color="#7AE8FF" /><Text style={styles.noticeText}>Every emulator supports separate portrait and landscape control layouts. Use EDIT to drag a control, then SIZE − / + or pinch to resize it.</Text></View>
+        <View style={styles.notice}><MaterialCommunityIcons name="tune-variant" size={21} color="#7AE8FF" /><Text style={styles.noticeText}>{t("localNotice")}</Text></View>
       </ScrollView>
     </ScreenContainer>
   );

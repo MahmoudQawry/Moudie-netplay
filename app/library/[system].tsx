@@ -8,17 +8,19 @@ import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorModule";
 import type { EmulatorCoreCapability, EmulatorSystem } from "@/modules/moudie-emulator/src/MoudieEmulator.types";
+import { useLanguage } from "@/lib/language";
 
 const routeSystems: Record<string, EmulatorSystem> = { famicom: "nes", nes: "nes", ps1: "ps1", psp: "psp", sega: "sega" };
 
-const displayMeta: Record<EmulatorSystem, { title: string; subtitle: string; color: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
-  nes: { title: "Famicom / NES", subtitle: "Classic controller · Up to 4 controller slots when supported", color: "#F6C453", icon: "controller-classic-outline" },
-  ps1: { title: "PlayStation 1", subtitle: "PCSX-ReARMed · Save states and full controller editing", color: "#B978FF", icon: "sony-playstation" },
-  psp: { title: "PlayStation Portable", subtitle: "PPSSPP · PSP network profile for supported games", color: "#33D8FF", icon: "gamepad-outline" },
-  sega: { title: "Sega Genesis", subtitle: "Genesis Plus GX · 3 or 6 button layouts", color: "#68E69A", icon: "gamepad-variant-outline" },
+const displayMeta: Record<EmulatorSystem, { title: string; subtitleKey: "lsNesSubtitle" | "lsPs1Subtitle" | "lsPspSubtitle" | "lsSegaSubtitle"; color: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
+  nes: { title: "Famicom / NES", subtitleKey: "lsNesSubtitle", color: "#F6C453", icon: "controller-classic-outline" },
+  ps1: { title: "PlayStation 1", subtitleKey: "lsPs1Subtitle", color: "#B978FF", icon: "sony-playstation" },
+  psp: { title: "PlayStation Portable", subtitleKey: "lsPspSubtitle", color: "#33D8FF", icon: "gamepad-outline" },
+  sega: { title: "Sega Genesis", subtitleKey: "lsSegaSubtitle", color: "#68E69A", icon: "gamepad-variant-outline" },
 };
 
 export default function EmulatorLibraryScreen() {
+  const { t } = useLanguage();
   const { system: rawSystem } = useLocalSearchParams<{ system?: string }>();
   const system = routeSystems[rawSystem || "famicom"] ?? "nes";
   const meta = displayMeta[system];
@@ -29,11 +31,11 @@ export default function EmulatorLibraryScreen() {
 
   useEffect(() => { setCapability(MoudieEmulatorModule.getCoreCatalog().find((item) => item.system === system) ?? null); }, [system]);
 
-  const accepted = useMemo(() => capability?.acceptedExtensions.length ? capability.acceptedExtensions.map((extension) => `.${extension.toUpperCase()}`).join(" · ") : "Shown inside the Android APK", [capability]);
+  const accepted = useMemo(() => capability?.acceptedExtensions.length ? capability.acceptedExtensions.map((extension) => `.${extension.toUpperCase()}`).join(" · ") : t("lsShownInApk"), [capability, t]);
 
   const chooseGame = async () => {
     if (!capability || (!capability.available && !capability.downloadable)) {
-      Alert.alert("Android core required", capability?.message || "Install the full Android APK to run this emulator.");
+      Alert.alert(t("lsCoreRequired"), capability?.message || t("lsInstallApk"));
       return;
     }
     try {
@@ -41,10 +43,10 @@ export default function EmulatorLibraryScreen() {
       const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: false, type: "*/*" });
       if (result.canceled) return;
       const asset = result.assets?.[0];
-      if (!asset?.uri || !asset.name) throw new Error("Could not select a game file.");
+      if (!asset?.uri || !asset.name) throw new Error(t("lsSelectError"));
       await MoudieEmulatorModule.launchNativeGame(system, asset.uri, asset.name, { orientation, aspectRatio, settingsMode: false });
     } catch (error) {
-      Alert.alert("Could not start the game", error instanceof Error ? error.message : "An unexpected error occurred while opening the game file.");
+      Alert.alert(t("startGameError"), error instanceof Error ? error.message : t("lsUnexpected"));
     } finally { setLoading(false); }
   };
 
@@ -53,29 +55,29 @@ export default function EmulatorLibraryScreen() {
     <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]} containerClassName="bg-background">
       <NeonCircuitBackground />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}><Pressable onPress={() => router.back()} style={styles.back} accessibilityLabel="Back"><MaterialCommunityIcons name="arrow-left" color="#FFFFFF" size={22} /></Pressable><Text style={styles.headerText}>EMULATOR LIBRARY</Text></View>
+        <View style={styles.header}><Pressable onPress={() => router.back()} style={styles.back} accessibilityLabel={t("commonBack")}><MaterialCommunityIcons name="arrow-left" color="#FFFFFF" size={22} /></Pressable><Text style={styles.headerText}>{t("lsHeader")}</Text></View>
         <View style={[styles.hero, { borderColor: `${meta.color}88` }]}>
           <View style={[styles.heroGlow, { backgroundColor: meta.color }]} /><View style={[styles.iconShell, { borderColor: meta.color }]}><MaterialCommunityIcons name={meta.icon} size={45} color={meta.color} /></View>
-          <Text style={styles.title}>{meta.title}</Text><Text style={styles.subtitle}>{meta.subtitle}</Text>
-          <View style={styles.coreRow}><Text style={[styles.coreName, { color: meta.color }]}>{capability?.coreName || "CHECKING CORE"}</Text><View style={[styles.statusDot, { backgroundColor: capability?.available ? "#62E9A1" : capability?.downloadable ? "#75E9FF" : "#FFB677" }]} /><Text style={styles.statusText}>{capability?.available ? "CORE READY" : capability?.downloadable ? "DOWNLOADS AT FIRST LAUNCH" : "ANDROID APK REQUIRED"}</Text></View>
+          <Text style={styles.title}>{meta.title}</Text><Text style={styles.subtitle}>{t(meta.subtitleKey)}</Text>
+          <View style={styles.coreRow}><Text style={[styles.coreName, { color: meta.color }]}>{capability?.coreName || t("lsCheckingCore")}</Text><View style={[styles.statusDot, { backgroundColor: capability?.available ? "#62E9A1" : capability?.downloadable ? "#75E9FF" : "#FFB677" }]} /><Text style={styles.statusText}>{capability?.available ? t("lsCoreReady") : capability?.downloadable ? t("lsDownloadsFirst") : t("androidRequired")}</Text></View>
         </View>
         <View style={styles.panel}>
-          <Text style={styles.panelTitle}>HOW THIS EMULATOR WORKS</Text>
-          <Text style={styles.panelText}>Choose a legal game file stored on your device. Moudie never uploads your game or BIOS. Configure portrait and landscape controls before playing; the game screen remains free of move and resize tools.</Text>
-          {system === "ps1" && <Text style={styles.isoNotice}>PS1 supports ISO files as well as BIN, CUE, CHD, and PBP.</Text>}
-          <View style={styles.detailRow}><MaterialCommunityIcons name="file-outline" color="#75E9FF" size={18} /><Text style={styles.detailText}>Supported extensions: {accepted}</Text></View>
-          <View style={styles.detailRow}><MaterialCommunityIcons name="cellphone-link" color="#C98AFF" size={18} /><Text style={styles.detailText}>Portrait and landscape play are both supported with independent controller layouts.</Text></View>
-          <View style={styles.detailRow}><MaterialCommunityIcons name="content-save-outline" color="#F8CF68" size={18} /><Text style={styles.detailText}>Local save/load state is available from the in-game toolbar.</Text></View>
+          <Text style={styles.panelTitle}>{t("lsHowTitle")}</Text>
+          <Text style={styles.panelText}>{t("lsHowText")}</Text>
+          {system === "ps1" && <Text style={styles.isoNotice}>{t("lsIsoNotice")}</Text>}
+          <View style={styles.detailRow}><MaterialCommunityIcons name="file-outline" color="#75E9FF" size={18} /><Text style={styles.detailText}>{t("lsExtPrefix")} {accepted}</Text></View>
+          <View style={styles.detailRow}><MaterialCommunityIcons name="cellphone-link" color="#C98AFF" size={18} /><Text style={styles.detailText}>{t("lsOrientations")}</Text></View>
+          <View style={styles.detailRow}><MaterialCommunityIcons name="content-save-outline" color="#F8CF68" size={18} /><Text style={styles.detailText}>{t("lsSaveNote")}</Text></View>
         </View>
         <View style={styles.settingsPanel}>
-          <Text style={styles.settingsTitle}>EMULATOR SETTINGS</Text>
-          <Text style={styles.settingsLabel}>PLAY ORIENTATION</Text>
+          <Text style={styles.settingsTitle}>{t("lsSettingsTitle")}</Text>
+          <Text style={styles.settingsLabel}>{t("lsPlayOrientation")}</Text>
           <View style={styles.settingRow}>{(["portrait", "landscape"] as const).map((value) => <Pressable key={value} onPress={() => setOrientation(value)} style={[styles.settingOption, orientation === value && { borderColor: meta.color, backgroundColor: `${meta.color}28` }]}><Text style={styles.settingOptionText}>{value.toUpperCase()}</Text></Pressable>)}</View>
-          <Text style={styles.settingsLabel}>SCREEN RATIO</Text>
+          <Text style={styles.settingsLabel}>{t("lsScreenRatio")}</Text>
           <View style={styles.settingRow}>{(["fit", "4:3", "16:9"] as const).map((value) => <Pressable key={value} onPress={() => setAspectRatio(value)} style={[styles.settingOption, aspectRatio === value && { borderColor: meta.color, backgroundColor: `${meta.color}28` }]}><Text style={styles.settingOptionText}>{value === "fit" ? "FIT" : value}</Text></Pressable>)}</View>
         </View>
-        <Pressable onPress={chooseGame} disabled={loading} style={({ pressed }) => [styles.launch, { backgroundColor: meta.color }, (pressed || loading) && styles.launchPressed]}>{loading ? <ActivityIndicator color="#09121D" /> : <MaterialCommunityIcons name="folder-open-outline" size={23} color="#09121D" />}<Text style={styles.launchText}>{loading ? "PREPARING GAME…" : "CHOOSE GAME & START"}</Text></Pressable>
-        <Text style={styles.legal}>By choosing a file, you confirm that you have the right to use it. Moudie does not include ROMs or BIOS files.</Text>
+        <Pressable onPress={chooseGame} disabled={loading} style={({ pressed }) => [styles.launch, { backgroundColor: meta.color }, (pressed || loading) && styles.launchPressed]}>{loading ? <ActivityIndicator color="#09121D" /> : <MaterialCommunityIcons name="folder-open-outline" size={23} color="#09121D" />}<Text style={styles.launchText}>{loading ? t("lsPreparing") : t("lsChooseStart")}</Text></Pressable>
+        <Text style={styles.legal}>{t("lsLegal")}</Text>
       </ScrollView>
     </ScreenContainer>
   );

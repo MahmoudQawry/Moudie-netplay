@@ -7,6 +7,7 @@ import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
 import { getProfileName, saveProfileName, saveRoomCredential } from "@/lib/room-storage";
+import { useLanguage } from "@/lib/language";
 import { joinPublicRealtimeRoom, listPublicRealtimeRooms, type RealtimePublicRoom } from "@/lib/realtime-room-service";
 
 type JoinAs = "player" | "spectator";
@@ -14,6 +15,7 @@ type JoinAs = "player" | "spectator";
 const systemAccent: Record<RealtimePublicRoom["system"], string> = { ps1: "#C05DFF", psp: "#38D4FF", nes: "#FF727A", sega: "#70E59A" };
 
 export default function PublicLobbyScreen() {
+  const { t } = useLanguage();
   const [displayName, setDisplayName] = useState("");
   const [joinAs, setJoinAs] = useState<JoinAs>("player");
   const [rooms, setRooms] = useState<RealtimePublicRoom[]>([]);
@@ -25,7 +27,7 @@ export default function PublicLobbyScreen() {
       setLoading(true);
       setRooms(await listPublicRealtimeRooms());
     } catch (error) {
-      Alert.alert("Could not load public lobbies", error instanceof Error ? error.message : "Try refreshing in a moment.");
+      Alert.alert(t("lbLoadError"), error instanceof Error ? error.message : t("lbLoadErrorBody"));
     } finally {
       setLoading(false);
     }
@@ -39,7 +41,7 @@ export default function PublicLobbyScreen() {
   const joinLobby = async (room: RealtimePublicRoom) => {
     if (displayName.trim().length < 2) {
       haptic.error();
-      Alert.alert("Add a display name", "Enter at least two characters before joining a public lobby.");
+      Alert.alert(t("lbNameAlert"), t("lbNameAlertBody"));
       return;
     }
     try {
@@ -51,7 +53,7 @@ export default function PublicLobbyScreen() {
       router.replace({ pathname: "/room/[roomId]", params: { roomId: String(membership.roomId) } });
     } catch (error) {
       haptic.error();
-      Alert.alert("Could not join public lobby", error instanceof Error ? error.message : "Refresh the lobby list and try again.");
+      Alert.alert(t("lbJoinError"), error instanceof Error ? error.message : t("lbJoinErrorBody"));
       void refresh();
     } finally {
       setJoiningRoomId(null);
@@ -68,28 +70,28 @@ export default function PublicLobbyScreen() {
       onRefresh={() => void refresh()}
       ListHeaderComponent={<View>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]} accessibilityLabel="Go back"><MaterialCommunityIcons name="arrow-left" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} /><View><Text style={styles.title}>PUBLIC LOBBY</Text><Text style={styles.subtitle}>OLD EQUAL GOLD</Text></View></View>
-          <Pressable onPress={() => router.push({ pathname: "/create-room", params: { visibility: "public" } })} style={({ pressed }) => [styles.hostButton, pressed && styles.pressed]} accessibilityLabel="Host public lobby"><MaterialCommunityIcons name="plus" size={21} color="#081127" /></Pressable>
+          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]} accessibilityLabel={t("commonBack")}><MaterialCommunityIcons name="arrow-left" size={21} color="#F8F5FF" /></Pressable>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} /><View><Text style={styles.title}>{t("lbTitle")}</Text><Text style={styles.subtitle}>{t("slogan")}</Text></View></View>
+          <Pressable onPress={() => router.push({ pathname: "/create-room", params: { visibility: "public" } })} style={({ pressed }) => [styles.hostButton, pressed && styles.pressed]} accessibilityLabel={t("hostPublicLobby")}><MaterialCommunityIcons name="plus" size={21} color="#081127" /></Pressable>
         </View>
-        <View style={styles.hero}><MaterialCommunityIcons name="account-group-outline" size={32} color="#69E8FF" /><View style={styles.heroCopy}><Text style={styles.heroTitle}>FIND A CLASSIC SESSION</Text><Text style={styles.heroText}>Join an open lobby. Standard systems support 4 players and 4 spectators; NES supports 2 players and 6 spectators.</Text></View></View>
-        <Text style={styles.label}>YOUR DISPLAY NAME</Text>
-        <TextInput value={displayName} onChangeText={setDisplayName} style={styles.input} placeholder="Example: Alex" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
-        <Text style={styles.label}>JOIN AS</Text>
+        <View style={styles.hero}><MaterialCommunityIcons name="account-group-outline" size={32} color="#69E8FF" /><View style={styles.heroCopy}><Text style={styles.heroTitle}>{t("lbFindSession")}</Text><Text style={styles.heroText}>{t("lbHeroText")}</Text></View></View>
+        <Text style={styles.label}>{t("lbDisplayName")}</Text>
+        <TextInput value={displayName} onChangeText={setDisplayName} style={styles.input} placeholder={t("lbExample")} placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
+        <Text style={styles.label}>{t("lbJoinAs")}</Text>
         <View style={styles.roleRow}>
-          <Pressable onPress={() => { haptic.selection(); setJoinAs("player"); }} style={({ pressed }) => [styles.roleButton, joinAs === "player" && styles.roleSelected, pressed && styles.pressed]}><MaterialCommunityIcons name="gamepad-variant-outline" size={18} color={joinAs === "player" ? "#69E8FF" : "#A49CB7"} /><Text style={styles.roleText}>PLAYER</Text></Pressable>
-          <Pressable onPress={() => { haptic.selection(); setJoinAs("spectator"); }} style={({ pressed }) => [styles.roleButton, joinAs === "spectator" && styles.roleSelected, pressed && styles.pressed]}><MaterialCommunityIcons name="eye-outline" size={18} color={joinAs === "spectator" ? "#D9A3FF" : "#A49CB7"} /><Text style={styles.roleText}>SPECTATOR</Text></Pressable>
+          <Pressable onPress={() => { haptic.selection(); setJoinAs("player"); }} style={({ pressed }) => [styles.roleButton, joinAs === "player" && styles.roleSelected, pressed && styles.pressed]}><MaterialCommunityIcons name="gamepad-variant-outline" size={18} color={joinAs === "player" ? "#69E8FF" : "#A49CB7"} /><Text style={styles.roleText}>{t("player")}</Text></Pressable>
+          <Pressable onPress={() => { haptic.selection(); setJoinAs("spectator"); }} style={({ pressed }) => [styles.roleButton, joinAs === "spectator" && styles.roleSelected, pressed && styles.pressed]}><MaterialCommunityIcons name="eye-outline" size={18} color={joinAs === "spectator" ? "#D9A3FF" : "#A49CB7"} /><Text style={styles.roleText}>{t("spectator")}</Text></Pressable>
         </View>
-        <View style={styles.listHeading}><Text style={styles.listTitle}>OPEN LOBBIES</Text><Pressable onPress={() => void refresh()} style={({ pressed }) => [styles.refresh, pressed && styles.pressed]}><MaterialCommunityIcons name="refresh" size={17} color="#7BEAFF" /><Text style={styles.refreshText}>REFRESH</Text></Pressable></View>
+        <View style={styles.listHeading}><Text style={styles.listTitle}>{t("lbOpenLobbies")}</Text><Pressable onPress={() => void refresh()} style={({ pressed }) => [styles.refresh, pressed && styles.pressed]}><MaterialCommunityIcons name="refresh" size={17} color="#7BEAFF" /><Text style={styles.refreshText}>{t("lbRefresh")}</Text></Pressable></View>
       </View>}
-      ListEmptyComponent={loading ? <View style={styles.empty}><ActivityIndicator color="#69E8FF" /><Text style={styles.emptyText}>Checking open lobbies…</Text></View> : <View style={styles.empty}><MaterialCommunityIcons name="radar" size={34} color="#705A91" /><Text style={styles.emptyTitle}>NO OPEN LOBBIES YET</Text><Text style={styles.emptyText}>Host the first public session, or ask a friend for a private room code.</Text></View>}
+      ListEmptyComponent={loading ? <View style={styles.empty}><ActivityIndicator color="#69E8FF" /><Text style={styles.emptyText}>{t("lbChecking")}</Text></View> : <View style={styles.empty}><MaterialCommunityIcons name="radar" size={34} color="#705A91" /><Text style={styles.emptyTitle}>{t("lbNoneYet")}</Text><Text style={styles.emptyText}>{t("lbNoneText")}</Text></View>}
       renderItem={({ item: room }) => {
         const accent = systemAccent[room.system];
         const canJoin = joinAs === "player" ? room.activePlayers < room.maxPlayers : room.spectators < room.maxSpectators;
         return <View style={[styles.roomCard, { borderColor: `${accent}77` }]}>
           <View style={[styles.systemBadge, { backgroundColor: `${accent}22` }]}><Text style={[styles.systemText, { color: accent }]}>{room.system.toUpperCase()}</Text></View>
-          <View style={styles.roomCopy}><Text style={styles.roomName} numberOfLines={1}>{room.name}</Text><Text style={styles.roomStats}>{room.activePlayers}/{room.maxPlayers} PLAYERS · {room.spectators}/{room.maxSpectators} SPECTATORS · {room.readyPlayers} READY</Text></View>
-          <Pressable disabled={!canJoin || joiningRoomId !== null} onPress={() => void joinLobby(room)} style={({ pressed }) => [styles.joinButton, (!canJoin || joiningRoomId !== null) && styles.disabled, pressed && styles.pressed]}>{joiningRoomId === room.id ? <ActivityIndicator color="#081127" /> : <Text style={styles.joinText}>{canJoin ? "JOIN" : "FULL"}</Text>}</Pressable>
+          <View style={styles.roomCopy}><Text style={styles.roomName} numberOfLines={1}>{room.name}</Text><Text style={styles.roomStats}>{room.activePlayers}/{room.maxPlayers} {t("lbPlayersShort")} · {room.spectators}/{room.maxSpectators} {t("lbSpectatorsShort")} · {room.readyPlayers} {t("lbReadyShort")}</Text></View>
+          <Pressable disabled={!canJoin || joiningRoomId !== null} onPress={() => void joinLobby(room)} style={({ pressed }) => [styles.joinButton, (!canJoin || joiningRoomId !== null) && styles.disabled, pressed && styles.pressed]}>{joiningRoomId === room.id ? <ActivityIndicator color="#081127" /> : <Text style={styles.joinText}>{canJoin ? t("lbJoinBtn") : t("lbFull")}</Text>}</Pressable>
         </View>;
       }}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
