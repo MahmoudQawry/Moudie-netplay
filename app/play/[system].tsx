@@ -7,14 +7,13 @@ import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } fro
 import { CustomizableController } from "@/components/customizable-controller";
 import { CustomizableGameScreen } from "@/components/customizable-game-screen";
 
-type SystemId = "famicom" | "ps1" | "psp" | "sega" | "arcade";
+type SystemId = "famicom" | "ps1" | "psp" | "sega";
 
 const systemMeta: Record<SystemId, { name: string; initials: string; accent: string; status: string }> = {
   famicom: { name: "Famicom / NES", initials: "NES", accent: "#F5C84C", status: "FCEUmm Core" },
   ps1: { name: "PlayStation 1", initials: "PS1", accent: "#B978FF", status: "PCSX-ReARMed Core" },
   psp: { name: "PlayStation Portable", initials: "PSP", accent: "#45DDFC", status: "PPSSPP Core" },
   sega: { name: "Sega Genesis", initials: "SEGA", accent: "#70E39B", status: "Genesis Plus GX Core" },
-  arcade: { name: "Arcade", initials: "ARCADE", accent: "#FF886D", status: "MAME Arcade Core" },
 };
 
 function isSystemId(value: string | string[] | undefined): value is SystemId {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { useLanguage } from "@/lib/language";
 import { RoomChat } from "@/components/room-chat";
 import { RoomVoiceChat } from "@/components/room-voice-chat";
 import { getNetplayServiceUrl } from "@/constants/oauth";
@@ -27,6 +28,7 @@ function isPs1GameFile(name: string) {
 }
 
 export default function PS1Screen() {
+  const { t } = useLanguage();
   const { roomId, orientation, aspectRatio } = useLocalSearchParams<{ roomId: string; orientation?: string; aspectRatio?: string }>();
   const numericRoomId = Number(roomId);
   const [playerOrientation, setPlayerOrientation] = useState<"portrait" | "landscape">(orientation === "portrait" ? "portrait" : "landscape");
@@ -50,7 +52,8 @@ export default function PS1Screen() {
   const snapshotQuery = useRealtimeRoomSnapshot(numericRoomId, credential);
   const membership = snapshotQuery.data?.members.find((member) => member.id === credential?.memberId);
   const activeMembers = (snapshotQuery.data?.members ?? []).filter((member) => member.role !== "spectator").sort((left, right) => left.role === "host" ? -1 : right.role === "host" ? 1 : left.id - right.id);
-  const assignedPlayer = membership?.role === "spectator" ? null : (activeMembers.findIndex((member) => member.id === credential?.memberId) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  const assignedIndex = activeMembers.findIndex((member) => member.id === credential?.memberId) + 1;
+  const assignedPlayer = membership?.role === "spectator" || assignedIndex > 4 ? null : assignedIndex as 1 | 2 | 3 | 4;
   const matchingPlayers = game ? activeMembers.filter((member) => member.isReady && member.gameFingerprint === game.fingerprint && member.coreVersion === PS1_NETPLAY_CORE_VERSION) : [];
   const ps1NetplayReady = Boolean(game && credential && activeMembers.length >= 2 && matchingPlayers.length === activeMembers.length);
 
@@ -117,10 +120,10 @@ export default function PS1Screen() {
       const asset = result.assets[0];
       if (!isPs1GameFile(asset.name)) {
         haptic.error();
-        Alert.alert("Unsupported file", "Choose a complete PS1 .bin, .iso, .chd, or .pbp file. A CUE file is not selected here because it needs its companion BIN file.");
+        Alert.alert(t("unsupportedFile"), t("choosePs1File"));
         return;
       }
-      if (Platform.OS === "web") throw new Error("PS1 game verification and room preparation are available in the Android APK only.");
+      if (Platform.OS === "web") throw new Error(t("ps1AndroidOnly"));
       setStatus("Checking the local PS1 game fingerprint to verify that the other player selected the same file…");
       const fingerprint = await MoudieEmulatorModule.fingerprintPS1Game(asset.uri, asset.name);
       setStatus("Preparing the PS1 core and local file now for a fast synchronized start…");
@@ -132,7 +135,7 @@ export default function PS1Screen() {
       haptic.success();
     } catch (error) {
       haptic.error();
-      Alert.alert("Could not choose the file", error instanceof Error ? error.message : "Try again and choose a game file from storage.");
+      Alert.alert(t("chooseFileError"), error instanceof Error ? error.message : t("ps1GameError"));
     } finally {
       setIsPicking(false);
     }
@@ -155,7 +158,7 @@ export default function PS1Screen() {
       haptic.success();
     } catch (error) {
       haptic.error();
-      Alert.alert("Could not mark ready", error instanceof Error ? error.message : "Try again.");
+      Alert.alert(t("readyError"), error instanceof Error ? error.message : t("tryAgain"));
     }
   };
 
@@ -169,7 +172,7 @@ export default function PS1Screen() {
   const launchGame = async (withNetplay = false, settingsMode = false, synchronizedStart = false) => {
     if (!game) return;
     if (Platform.OS === "web") {
-      Alert.alert("Android APK required", "The native PS1 player runs in the Android APK and is not available in the web preview.");
+      Alert.alert(t("androidRequired"), t("ps1AndroidOnly"));
       return;
     }
     try {
@@ -182,7 +185,7 @@ export default function PS1Screen() {
         fingerprint: game.fingerprint,
         player: assignedPlayer,
       } : undefined;
-      if (withNetplay && !netplay) throw new Error("PS1 NetPlay requires every active player (2–8) to select the same complete game file and core.");
+      if (withNetplay && !netplay) throw new Error(t("ps1NetplayNeedsPlayers"));
       setStatus(netplay ? "Preparing PS1 NetPlay and assigning this device inside the room…" : "Preparing the game file and opening PCSX-ReARMed…");
       await MoudieEmulatorModule.launchPS1Game(game.uri, game.name, netplay, { ...playerOptions, settingsMode });
       setStatus(netplay ? "The PS1 player is open and linked to the room. Wait for the in-game verification message." : "The local player is open. Returning from the game brings you back to this room.");
@@ -190,7 +193,7 @@ export default function PS1Screen() {
       haptic.error();
       const message = error instanceof Error ? error.message : "Could not start the PS1 player.";
       setStatus(message);
-      Alert.alert("Could not start the game", message);
+      Alert.alert(t("startGameError"), message);
     } finally {
       setIsLaunching(false);
     }
@@ -199,7 +202,7 @@ export default function PS1Screen() {
 
   const pickBios = async () => {
     if (Platform.OS === "web") {
-      Alert.alert("Android APK required", "Local BIOS checking and installation are available in the Android APK only.");
+      Alert.alert(t("androidRequired"), t("biosAndroidOnly"));
       return;
     }
     try {
@@ -210,10 +213,10 @@ export default function PS1Screen() {
       const nextStatus = await MoudieEmulatorModule.installPS1Bios(asset.uri, asset.name);
       setBiosStatus(nextStatus);
       haptic.success();
-      Alert.alert("BIOS added", "The BIOS file was stored locally in the app. It is never uploaded or shared.");
+      Alert.alert(t("biosAdded"), t("biosStored"));
     } catch (error) {
       haptic.error();
-      Alert.alert("Could not add BIOS", error instanceof Error ? error.message : "Choose a legal dump with a supported name.");
+      Alert.alert(t("biosAddError"), error instanceof Error ? error.message : t("biosLegalDump"));
     } finally {
       setIsInstallingBios(false);
     }
@@ -270,7 +273,7 @@ export default function PS1Screen() {
 
         {Platform.OS !== "web" && <>
           <RoomChat socket={roomConnected ? socketRef.current : null} title="PS1 ROOM CHAT" />
-          <RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={assignedPlayer === 1} remoteOnline={remoteOnline} />
+          <RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={assignedPlayer === 1} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} />
         </>}
 
         <View style={styles.statusCard}>

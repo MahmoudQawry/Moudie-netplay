@@ -4,7 +4,7 @@ import type { EmulatorCoreCapability, EmulatorRuntimeStatus, EmulatorSystem, Mou
 
 class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEvents> {
   getRuntimeStatus(): EmulatorRuntimeStatus {
-    return { runtime: "web-preview", supportedSystems: ["nes", "ps1", "psp", "sega", "arcade"], nativeBuildRequired: true };
+    return { runtime: "web-preview", supportedSystems: ["nes", "ps1", "psp", "sega"], nativeBuildRequired: true };
   }
 
   getBiosStatus() {
@@ -26,13 +26,12 @@ class MoudieEmulatorModule extends NativeModule<MoudieEmulatorModuleEvents> {
       ["ps1", "PlayStation 1", "PCSX-ReARMed", "retroarch", 8],
       ["psp", "PlayStation Portable", "PPSSPP", "psp-network", 4],
       ["sega", "Sega Genesis / Mega Drive", "Genesis Plus GX", "retroarch", 4],
-      ["arcade", "Arcade", "MAME Arcade", "retroarch", 4],
     ].map(([system, title, coreName, netplay, maxControllerSlots]) => ({
       system: system as EmulatorSystem,
       title: title as string,
       coreName: coreName as string,
       available: false,
-      downloadable: system === "arcade",
+      downloadable: false,
       localPlay: false,
       netplay: netplay as EmulatorCoreCapability["netplay"],
       maxRoomMembers: 10,

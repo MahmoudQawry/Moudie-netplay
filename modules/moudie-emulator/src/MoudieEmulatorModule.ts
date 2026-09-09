@@ -8,7 +8,7 @@ export type PS1NetplayOptions = {
   memberId: number;
   memberToken: string;
   fingerprint: string;
-  player: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  player: 1 | 2 | 3 | 4;
 };
 
 export type UniversalNetplayOptions = {
@@ -16,10 +16,10 @@ export type UniversalNetplayOptions = {
   roomId: number;
   memberId: number;
   memberToken: string;
-  system: "psp" | "sega" | "arcade";
+  system: "psp" | "sega";
   fingerprint: string;
   coreVersion: string;
-  player: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  player: 1 | 2 | 3 | 4;
 };
 
 export type PlayerLaunchOptions = {

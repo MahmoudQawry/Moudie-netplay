@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Socket } from "socket.io-client";
+import { useLanguage } from "@/lib/language";
 
 type ChatMessage = { id: string; memberId: number; displayName: string; text: string; sentAt: number };
 
 export function RoomChat({ socket, title = "ROOM CHAT" }: { socket: Socket | null; title?: string }) {
+  const { t } = useLanguage();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
 
@@ -26,13 +28,13 @@ export function RoomChat({ socket, title = "ROOM CHAT" }: { socket: Socket | nul
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.title}>{title.includes("ROOM CHAT") ? t("roomChat") : title}</Text>
       <View style={styles.messages}>
-        {messages.length ? messages.slice(-4).map((message) => <Text key={message.id} style={styles.message}><Text style={styles.sender}>{message.displayName}: </Text>{message.text}</Text>) : <Text style={styles.empty}>{socket?.connected ? "Send a message to the room." : "Connect to the room channel to enable chat."}</Text>}
+        {messages.length ? messages.slice(-4).map((message) => <Text key={message.id} style={styles.message}><Text style={styles.sender}>{message.displayName}: </Text>{message.text}</Text>) : <Text style={styles.empty}>{socket?.connected ? t("writeMessage") : t("connectChat")}</Text>}
       </View>
       <View style={styles.composer}>
-        <TextInput value={draft} onChangeText={setDraft} editable={Boolean(socket?.connected)} placeholder="Write a message…" placeholderTextColor="#71839A" style={styles.input} textAlign="left" returnKeyType="send" onSubmitEditing={send} />
-        <Pressable onPress={send} disabled={!socket?.connected || !draft.trim()} style={({ pressed }) => [styles.send, (!socket?.connected || !draft.trim() || pressed) && styles.sendDisabled]}><Text style={styles.sendText}>SEND</Text></Pressable>
+        <TextInput value={draft} onChangeText={setDraft} editable={Boolean(socket?.connected)} placeholder={t("writeMessage")} placeholderTextColor="#71839A" style={styles.input} textAlign="left" returnKeyType="send" onSubmitEditing={send} />
+        <Pressable onPress={send} disabled={!socket?.connected || !draft.trim()} style={({ pressed }) => [styles.send, (!socket?.connected || !draft.trim() || pressed) && styles.sendDisabled]}><Text style={styles.sendText}>{t("send")}</Text></Pressable>
       </View>
     </View>
   );

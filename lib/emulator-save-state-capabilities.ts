@@ -1,4 +1,4 @@
-export type EmulatorSystemId = "nes" | "ps1" | "psp" | "sega" | "arcade";
+export type EmulatorSystemId = "nes" | "ps1" | "psp" | "sega";
 
 export type SaveStateCapability = {
   available: boolean;
@@ -15,5 +15,4 @@ export const SAVE_STATE_CAPABILITIES: Record<EmulatorSystemId, SaveStateCapabili
   ps1: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
   psp: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
   sega: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
-  arcade: { available: true, slots: 5, label: "Five local save slots are available inside the player" },
 };

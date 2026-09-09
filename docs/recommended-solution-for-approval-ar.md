@@ -16,7 +16,6 @@
 | PSP | PPSSPP الأصلي | يستعمل شبكة PSP Ad-Hoc/Infrastructure أو relay؛ لا يستعمل RetroArch Netplay التقليدي. |
 | NES/Famicom | FCEUmm | تشغيل محلي وNetplay، ويدعم 4 لاعبين حيث تدعم اللعبة multitap. |
 | Sega | Genesis Plus GX | تشغيل محلي وNetplay للألعاب التي تدعم منافذ اللاعبين المناسبة. |
-| Arcade | MAME عبر Libretro، بقائمة ألعاب متحقق منها | قاعدة آركيد مستقرة، مع التزام GPL والـROMs المرخصة فقط. |
 | الغرف والحسابات | Moudie API + MySQL/PostgreSQL + Redis | حسابات الضيوف، playerTag، حضور، جاهزية، حظر، ورسائل. |
 | الصوت والمشاهدة | LiveKit SFU + Coturn | صوت لعشرة أعضاء ومشاهدة من دون شبكة mesh هشة. |
 
@@ -75,7 +74,6 @@
 3. تفعيل غرف عشرة أعضاء، الاستعداد، الشات، وحسابات الضيوف.
 4. نشر LiveKit + Coturn وربط الصوت والمشاهدة.
 5. تشغيل RetroArch Netplay لـ FCEUmm ثم PS1، واختبار قائمة ألعاب محددة.
-6. إضافة Genesis Plus GX وPPSSPP بمسار شبكته الأصلي، ثم MAME بقائمة آركيد مرخصة ومختبرة.
 7. اختبار أجهزة وشبكات فعلية، ومراقبة FPS/ping/loss، وفتح Beta تدريجيًا.
 
 ## المراجع

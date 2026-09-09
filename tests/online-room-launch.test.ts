@@ -6,7 +6,7 @@ const projectRoot = resolve(__dirname, "..");
 const readProjectFile = (relativePath: string) => readFileSync(resolve(projectRoot, relativePath), "utf8");
 
 describe("online room launch safeguards", () => {
-  it("uses current launch callbacks when synchronized PS1, PSP, Sega, or Arcade start events arrive", () => {
+  it("uses current launch callbacks when synchronized PS1, PSP, Sega, start events arrive", () => {
     const ps1 = readProjectFile("app/ps1/[roomId].tsx");
     const psp = readProjectFile("app/psp/[roomId].tsx");
     const native = readProjectFile("app/native/[system]/[roomId].tsx");
@@ -81,7 +81,6 @@ describe("online room launch safeguards", () => {
     expect(module).toContain('AsyncFunction("prepareFastLaunch")');
     expect(module).toContain('val sourceKey = MessageDigest.getInstance("SHA-256")');
     expect(moduleBridge).toContain("prepareFastLaunch(system: EmulatorSystem");
-    expect(nativeRoom).toContain("INSTALL MAME ARCADE CORE");
     expect(ps1).toContain("createFreeControlCanvas()");
     expect(ps1).toContain("retroView.setOnTouchListener");
     expect(famicom).toContain("retroView.setOnTouchListener");

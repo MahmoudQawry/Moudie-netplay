@@ -1,6 +1,6 @@
 import { getNetplayServiceUrl } from "@/constants/oauth";
 
-export type RealtimeSystem = "ps1" | "psp" | "nes" | "sega" | "arcade";
+export type RealtimeSystem = "ps1" | "psp" | "nes" | "sega";
 export type RealtimeRole = "host" | "player" | "spectator";
 export type RealtimeMember = { id: number; roomId: number; displayName: string; role: RealtimeRole; isReady: boolean; gameFingerprint: string | null; coreVersion: string | null };
 export type RealtimeSnapshot = { room: { id: number; joinCode: string; name: string; system: RealtimeSystem; maxPlayers: number; maxSpectators: number; visibility: "public" | "private"; status: "waiting" | "active" | "closed" }; members: RealtimeMember[] };

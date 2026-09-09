@@ -45,7 +45,7 @@ class MoudieEmulatorModule : Module() {
           "acceptedExtensions" to definition.extensions.sorted(),
           "message" to when {
             available -> "${definition.coreName} is ready for local play."
-            NativeCoreCatalog.isDownloadable(definition) -> "The official ${definition.coreName} core downloads when Arcade is launched for the first time. Internet access and storage space are required."
+            NativeCoreCatalog.isDownloadable(definition) -> "The official ${definition.coreName} core downloads when the selected emulator is launched for the first time. Internet access and storage space are required."
             else -> "The ${definition.coreName} core is not included in this APK."
           },
         )
@@ -82,7 +82,7 @@ class MoudieEmulatorModule : Module() {
         "ready" to (available || downloadable),
         "message" to when {
           available -> "${definition.title} is prepared. You can start local play now."
-          downloadable -> "${definition.title} is prepared. The Arcade core downloads automatically when the first game starts."
+          downloadable -> "${definition.title} is prepared. The The selected core is packaged in the app."
           else -> "The ${definition.coreName} core is not included in this build."
         },
       )
@@ -149,7 +149,7 @@ class MoudieEmulatorModule : Module() {
               val memberToken = config["memberToken"] as? String
               val fingerprint = config["fingerprint"] as? String
               val player = (config["player"] as? Number)?.toInt()
-              if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && !fingerprint.isNullOrBlank() && player in 1..8) {
+              if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && !fingerprint.isNullOrBlank() && player in 1..4) {
                 putExtra(PS1PlayerActivity.EXTRA_NETPLAY_SERVER_URL, serverUrl)
                 putExtra(PS1PlayerActivity.EXTRA_NETPLAY_ROOM_ID, roomId)
                 putExtra(PS1PlayerActivity.EXTRA_NETPLAY_MEMBER_ID, memberId)
@@ -200,7 +200,7 @@ class MoudieEmulatorModule : Module() {
             val fingerprint = config["fingerprint"] as? String
             val player = (config["player"] as? Number)?.toInt()
             val coreVersion = config["coreVersion"] as? String
-            if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && sessionSystem == definition.system && !fingerprint.isNullOrBlank() && !coreVersion.isNullOrBlank() && player in 1..8) {
+            if (!serverUrl.isNullOrBlank() && roomId != null && memberId != null && !memberToken.isNullOrBlank() && sessionSystem == definition.system && !fingerprint.isNullOrBlank() && !coreVersion.isNullOrBlank() && player in 1..4) {
               putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_SERVER_URL, serverUrl)
               putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_ROOM_ID, roomId)
               putExtra(UniversalLibretroPlayerActivity.EXTRA_NETPLAY_MEMBER_ID, memberId)
@@ -267,7 +267,7 @@ class MoudieEmulatorModule : Module() {
     return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
   }
 
-  private val supportedSystems = setOf("nes", "sega", "ps1", "psp", "arcade")
+  private val supportedSystems = setOf("nes", "sega", "ps1", "psp")
   private val ps1BiosCandidates = setOf("scph5500.bin", "scph5501.bin", "scph5502.bin", "scph1001.bin")
   private val ps1GameExtensions = setOf("bin", "cue", "iso", "chd", "pbp")
 
@@ -319,7 +319,6 @@ class MoudieEmulatorModule : Module() {
       ),
       "sega" to mapOf("required" to false, "available" to true, "message" to "Genesis Plus GX is bundled. Sega games normally do not require a BIOS file."),
       "psp" to mapOf("required" to false, "available" to true, "message" to "PPSSPP core and its local system assets are bundled. PSP game files remain on this device."),
-      "arcade" to mapOf("required" to false, "available" to true, "message" to "MAME Arcade is bundled. Arcade game files remain on this device and may require their original companion files."),
     )
   }
 

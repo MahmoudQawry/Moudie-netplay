@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 
-type SystemId = "famicom" | "ps1" | "psp" | "sega" | "arcade";
+type SystemId = "famicom" | "ps1" | "psp" | "sega";
 type ControlId = "UP" | "DOWN" | "LEFT" | "RIGHT" | "A" | "B" | "C" | "X" | "O" | "TRIANGLE" | "SQUARE" | "L" | "R" | "L1" | "R1" | "START" | "SELECT" | "ONE" | "TWO" | "THREE" | "FOUR";
 type Orientation = "portrait" | "landscape";
 type Position = { x: number; y: number; size: number };
@@ -45,12 +45,6 @@ const profiles: Record<SystemId, { controls: ControlId[]; accent: string; labels
     controls: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "C", "START"],
     labels: { UP: "▲", DOWN: "▼", LEFT: "◀", RIGHT: "▶", A: "A", B: "B", C: "C", START: "START" },
     defaults: { UP: { x: 13, y: 54, size: 54 }, DOWN: { x: 13, y: 73, size: 54 }, LEFT: { x: 3, y: 64, size: 54 }, RIGHT: { x: 23, y: 64, size: 54 }, A: { x: 64, y: 67, size: 56 }, B: { x: 76, y: 61, size: 56 }, C: { x: 88, y: 55, size: 56 }, START: { x: 46, y: 89, size: 44 } },
-  },
-  arcade: {
-    accent: "#FF886D",
-    controls: ["UP", "DOWN", "LEFT", "RIGHT", "ONE", "TWO", "THREE", "FOUR", "START"],
-    labels: { UP: "▲", DOWN: "▼", LEFT: "◀", RIGHT: "▶", ONE: "1", TWO: "2", THREE: "3", FOUR: "4", START: "START" },
-    defaults: { UP: { x: 13, y: 54, size: 58 }, DOWN: { x: 13, y: 73, size: 58 }, LEFT: { x: 3, y: 64, size: 58 }, RIGHT: { x: 23, y: 64, size: 58 }, ONE: { x: 68, y: 57, size: 55 }, TWO: { x: 81, y: 57, size: 55 }, THREE: { x: 68, y: 73, size: 55 }, FOUR: { x: 81, y: 73, size: 55 }, START: { x: 46, y: 89, size: 44 } },
   },
 };
 

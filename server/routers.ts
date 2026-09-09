@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "../shared/const.js";
-import { MIN_ACTIVE_PLAYERS, roomCapacityFor, roomMemberLimit, canStartOnlineSession, type RoomSystem } from "../shared/room-capacity.js";
+import { MIN_ACTIVE_PLAYERS, roomCapacityFor, canStartOnlineSession, type RoomSystem } from "../shared/room-capacity.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
@@ -9,7 +9,7 @@ import { createRoomMediaToken } from "./livekit";
 import { createAccessToken, createJoinCode, hashAccessToken } from "./rooms";
 import { z } from "zod";
 
-const roomSystemSchema = z.enum(["psp", "nes", "sega", "ps1", "arcade"]);
+const roomSystemSchema = z.enum(["psp", "nes", "sega", "ps1"]);
 
 /** Simple in-memory sliding-window limiter: blocks room-creation and join spam
  * from a single IP. Sufficient for the single-instance room service deployment. */
@@ -40,28 +40,14 @@ async function seatMemberInRoom(
   if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
   const system = room.system as RoomSystem;
   const capacity = roomCapacityFor(system);
-  const totalMembers = await db.getRoomMemberCount(room.id);
-  if (totalMembers >= roomMemberLimit(system)) {
-    throw new Error(`الغرفة مكتملة: ${capacity.maxPlayers} لاعبين و${capacity.maxSpectators} مشاهدين كحد أقصى.`);
-  }
-  if (joinAs === "player") {
-    const playerCount = await db.getRoomMemberCount(room.id, "player");
-    const activePlayersIncludingHost = playerCount + 1;
-    if (activePlayersIncludingHost >= capacity.maxPlayers) {
-      throw new Error(`مقاعد اللعب (${capacity.maxPlayers}) مكتملة. يمكنك الدخول كمشاهد.`);
-    }
-  } else {
-    const spectatorCount = await db.getRoomMemberCount(room.id, "spectator");
-    if (spectatorCount >= capacity.maxSpectators) {
-      throw new Error(`مقاعد المشاهدة (${capacity.maxSpectators}) مكتملة.`);
-    }
-  }
   const memberToken = createAccessToken();
-  const memberId = await db.addRoomMember({
+  const memberId = await db.addRoomMemberWithCapacity({
     roomId: room.id,
     displayName,
-    role: joinAs,
     accessTokenHash: hashAccessToken(memberToken),
+    role: joinAs,
+    maxPlayers: capacity.maxPlayers,
+    maxSpectators: capacity.maxSpectators,
   });
   return { roomId: room.id, memberId, memberToken, role: joinAs, maxPlayers: capacity.maxPlayers, maxSpectators: capacity.maxSpectators };
 }
@@ -112,8 +98,8 @@ export const appRouter = router({
       }),
     publicList: publicProcedure
       .input(z.object({ limit: z.number().int().min(1).max(50).default(30) }))
-      .query(async () => {
-        const rooms = await db.listPublicRooms(30);
+      .query(async ({ input }) => {
+        const rooms = await db.listPublicRooms(input.limit);
         return rooms.map((room) => ({
           id: room.id,
           name: room.name,

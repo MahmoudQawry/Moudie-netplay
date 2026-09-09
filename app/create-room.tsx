@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
+import { useLanguage } from "@/lib/language";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { NeonCircuitBackground } from "@/components/neon-circuit-background";
@@ -10,14 +11,13 @@ import { getProfileName, saveProfileName, saveRoomCredential } from "@/lib/room-
 import { createRealtimeRoom } from "@/lib/realtime-room-service";
 import { roomCapacityFor } from "@/shared/room-capacity";
 
-type SystemId = "psp" | "nes" | "sega" | "ps1" | "arcade";
+type SystemId = "psp" | "nes" | "sega" | "ps1";
 
 const SYSTEMS: { id: SystemId; label: string; detail: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; accent: string }[] = [
   { id: "ps1", label: "PS1", detail: "PlayStation", icon: "gamepad-variant", accent: "#C05DFF" },
   { id: "psp", label: "PSP", detail: "Portable", icon: "gamepad-outline", accent: "#38D4FF" },
   { id: "nes", label: "NES", detail: "Famicom", icon: "controller-classic-outline", accent: "#FF727A" },
   { id: "sega", label: "SEGA", detail: "Genesis", icon: "gamepad-variant-outline", accent: "#70E59A" },
-  { id: "arcade", label: "ARCADE", detail: "Arcade", icon: "controller-classic-outline", accent: "#FFAA38" },
 ];
 
 export default function CreateRoomScreen() {
@@ -28,12 +28,13 @@ export default function CreateRoomScreen() {
   const [hostName, setHostName] = useState("");
   const [creating, setCreating] = useState(false);
   const capacity = roomCapacityFor(system);
+  const { t } = useLanguage();
 
   const create = async () => {
     const normalizedHost = hostName.trim() || (await getProfileName())?.trim() || "Player";
     if (name.trim().length < 2) {
       haptic.error();
-      Alert.alert("Room name is too short", "Enter at least two characters.");
+      Alert.alert(t("nameShort"), t("nameShortText"));
       return;
     }
     try {
@@ -45,7 +46,7 @@ export default function CreateRoomScreen() {
       router.replace({ pathname: "/room/[roomId]", params: { roomId: String(room.roomId) } });
     } catch (error) {
       haptic.error();
-      Alert.alert("Could not create room", error instanceof Error ? error.message : "Try again.");
+      Alert.alert(t("createRoomError"), error instanceof Error ? error.message : t("tryAgain"));
     } finally {
       setCreating(false);
     }
@@ -57,12 +58,12 @@ export default function CreateRoomScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><MaterialCommunityIcons name="arrow-right" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>{isPublicLobby ? "HOST PUBLIC LOBBY" : "CREATE PRIVATE ROOM"}</Text></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>{isPublicLobby ? t("hostPublicLobby") : t("createPrivateRoom")}</Text></View>
           <View style={styles.headerSpace} />
         </View>
 
         <View style={styles.panel}>
-          <Text style={styles.panelLead}>CHOOSE AN EMULATOR</Text>
+          <Text style={styles.panelLead}>{t("chooseEmulator")}</Text>
           <Text style={styles.panelSub}>{isPublicLobby ? "Public lobbies are discoverable by system and open seats. Invite codes stay private." : "Choose the game system. Every system has a dedicated controller layout inside the player."}</Text>
           <View style={styles.systemGrid}>
             {SYSTEMS.map((item) => {
@@ -79,7 +80,7 @@ export default function CreateRoomScreen() {
 
           <Text style={styles.label}>{isPublicLobby ? "LOBBY NAME" : "ROOM NAME"}</Text>
           <TextInput value={name} onChangeText={setName} style={styles.input} placeholder={isPublicLobby ? "Example: Weekend Retro" : "Example: Friday Night Race"} placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
-          <Text style={styles.label}>DISPLAY NAME</Text>
+          <Text style={styles.label}>{t("displayName")}</Text>
           <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="Visible to your friends" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
 
           <View style={styles.capacityCard}>
@@ -89,13 +90,13 @@ export default function CreateRoomScreen() {
           </View>
 
           <View style={styles.featureRow}>
-            <View style={styles.feature}><MaterialCommunityIcons name="microphone-outline" size={16} color="#69E8FF" /><Text style={styles.featureText}>VOICE</Text></View>
-            <View style={styles.feature}><MaterialCommunityIcons name="message-text-outline" size={16} color="#C58AFF" /><Text style={styles.featureText}>CHAT</Text></View>
-            <View style={styles.feature}><MaterialCommunityIcons name="eye-outline" size={16} color="#FFD16A" /><Text style={styles.featureText}>SPECTATE</Text></View>
+            <View style={styles.feature}><MaterialCommunityIcons name="microphone-outline" size={16} color="#69E8FF" /><Text style={styles.featureText}>{t("voiceShort")}</Text></View>
+            <View style={styles.feature}><MaterialCommunityIcons name="message-text-outline" size={16} color="#C58AFF" /><Text style={styles.featureText}>{t("chatShort")}</Text></View>
+            <View style={styles.feature}><MaterialCommunityIcons name="eye-outline" size={16} color="#FFD16A" /><Text style={styles.featureText}>{t("spectateShort")}</Text></View>
           </View>
 
           <Pressable onPress={create} disabled={creating} style={({ pressed }) => [styles.primaryButton, (pressed || creating) && styles.buttonPressed]}>
-            {creating ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>{isPublicLobby ? "HOST PUBLIC LOBBY" : "CREATE ROOM & ENTER PLAYER"}</Text><MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" /></>}
+            {creating ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>{isPublicLobby ? t("hostPublicLobby") : t("createRoomEnter")}</Text><MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" /></>}
           </Pressable>
         </View>
       </ScrollView>

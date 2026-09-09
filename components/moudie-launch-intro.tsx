@@ -9,7 +9,6 @@ const systems: { label: string; color: string; icon: IconName; rotate: number }[
   { label: "PSP", color: "#46C8FF", icon: "gamepad-variant", rotate: -14 },
   { label: "NES", color: "#FF4D62", icon: "controller-classic-outline", rotate: -2 },
   { label: "SEGA", color: "#57D98B", icon: "gamepad-variant", rotate: 12 },
-  { label: "ARCADE", color: "#FF9A38", icon: "gamepad-variant", rotate: 26 },
 ];
 
 export function MoudieLaunchIntro({ children }: Props) {
@@ -45,7 +44,7 @@ export function MoudieLaunchIntro({ children }: Props) {
 
   return <View style={styles.host}>
     {children}
-    {introVisible && <View style={styles.screen} accessibilityLabel="Classic Era boot animation">
+    {introVisible && <View style={styles.screen} accessibilityLabel="Moudie NetPlay boot animation">
     <View style={styles.stars} />
     <Animated.View style={[styles.signatureWrap, { opacity: signature, transform: [{ translateY: signature.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }]}>
       <Text style={styles.signature}>Moudie</Text><View style={styles.signatureLine} />
@@ -59,10 +58,10 @@ export function MoudieLaunchIntro({ children }: Props) {
       </Animated.View>
       <View style={styles.envelopeBack} />
       <Animated.View style={[styles.envelopeFlap, { transform: [{ perspective: 800 }, { rotateX: flap.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-64deg"] }) }] }]} />
-      <View style={styles.envelopeFront}><Image source={require("@/assets/images/classic-era-brand-card.png")} style={styles.envelopeArt} resizeMode="cover" /></View>
+      <View style={styles.envelopeFront}><Image source={require("@/assets/images/classic-era-four-systems-card.png")} style={styles.envelopeArt} resizeMode="cover" /></View>
       <Animated.View style={[styles.seal, { opacity: seal, transform: [{ scale: seal.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }) }, { rotate: seal.interpolate({ inputRange: [0, 1], outputRange: ["-45deg", "0deg"] }) }] }]}><Text style={styles.sealText}>M</Text></Animated.View>
     </Animated.View>
-    <Animated.View style={[styles.brand, { opacity: brand, transform: [{ translateY: brand.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }]}><Text style={styles.classic}>CLASSIC ERA</Text><Text style={styles.by}>BY MOUDIE</Text></Animated.View>
+    <Animated.View style={[styles.brand, { opacity: brand, transform: [{ translateY: brand.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }]}><Text style={styles.classic}>Classic Era by Moudie</Text><Text style={styles.by}>Old Equal Gold</Text></Animated.View>
     <Animated.View style={[styles.loadingWrap, { opacity: brand }]}><View style={styles.loadingTrack}><Animated.View style={[styles.loadingFill, { width: loading.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) }]} /></View><Text style={styles.loadingText}>LOADING…</Text></Animated.View>
     <Pressable style={styles.skip} onPress={() => setIntroVisible(false)}><Text style={styles.skipText}>SKIP INTRO</Text></Pressable>
     </View>}

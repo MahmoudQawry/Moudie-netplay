@@ -15,7 +15,7 @@ data class UniversalNetplayConfig(
   val playerIndex: Int,
 )
 
-/** Dedicated low-latency emulator transport for PSP, Sega and Arcade. */
+/** Dedicated low-latency emulator transport for PSP and Sega. */
 class UniversalNetplayClient(
   private val config: UniversalNetplayConfig,
   private val onBootstrap: (playerMemberIds: List<Int>) -> Unit,
@@ -29,7 +29,7 @@ class UniversalNetplayClient(
 ) {
   companion object {
     private const val MIN_ACTIVE_PLAYERS = 2
-    private const val MAX_ACTIVE_PLAYERS = 8
+    private const val MAX_ACTIVE_PLAYERS = 4
   }
 
   private var socket: Socket? = null
@@ -38,7 +38,7 @@ class UniversalNetplayClient(
   fun connect() {
     val options = IO.Options().apply {
       path = "/api/netplay"
-      transports = arrayOf("websocket", "polling")
+      transports = arrayOf("websocket")
       reconnection = true
       timeout = 5_000
       reconnectionAttempts = 12

@@ -5,18 +5,19 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
+import { useLanguage } from "@/lib/language";
 
-type SystemId = "famicom" | "ps1" | "psp" | "sega" | "arcade";
+type SystemId = "famicom" | "ps1" | "psp" | "sega";
 
 const SYSTEMS: { id: SystemId; title: string; detail: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; accent: string }[] = [
   { id: "famicom", title: "Famicom / NES", detail: "FCEUmm · Classic 8-bit", icon: "controller-classic-outline", accent: "#F6C453" },
   { id: "ps1", title: "PlayStation 1", detail: "PCSX-ReARMed · BIN, CUE, ISO, CHD, PBP", icon: "sony-playstation", accent: "#B978FF" },
   { id: "psp", title: "PlayStation Portable", detail: "PPSSPP · ISO, CSO, CHD, PBP", icon: "gamepad-outline", accent: "#33D8FF" },
   { id: "sega", title: "Sega Genesis", detail: "Genesis Plus GX · 3 / 6 button layout", icon: "gamepad-variant-outline", accent: "#68E69A" },
-  { id: "arcade", title: "Arcade", detail: "MAME · Core downloads at first launch", icon: "controller-classic-outline", accent: "#FF8364" },
 ];
 
 export default function LocalPlayPickerScreen() {
+  const { t } = useLanguage();
   const openSystem = (system: SystemId) => {
     haptic.light();
     router.push({ pathname: "/library/[system]" as never, params: { system } } as never);
@@ -28,9 +29,9 @@ export default function LocalPlayPickerScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]} accessibilityLabel="Back"><MaterialCommunityIcons name="arrow-left" color="#FFFFFF" size={22} /></Pressable>
-          <View><Text style={styles.eyebrow}>LOCAL PLAY</Text><Text style={styles.title}>Choose your system</Text></View>
+          <View><Text style={styles.eyebrow}>{t("localPlay")}</Text><Text style={styles.title}>{t("chooseSystem")}</Text></View>
         </View>
-        <Text style={styles.subtitle}>Select one of the five emulators. Your game files, saves, and control layouts stay on this device.</Text>
+        <Text style={styles.subtitle}>Select one of the four emulators. Your game files, saves, and control layouts stay on this device.</Text>
 
         <View style={styles.list}>
           {SYSTEMS.map((system) => (

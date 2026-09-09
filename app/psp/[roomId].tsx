@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { useLanguage } from "@/lib/language";
 import { RoomChat } from "@/components/room-chat";
 import { RoomVoiceChat, type RoomVoiceChatHandle } from "@/components/room-voice-chat";
 import { getNetplayServiceUrl } from "@/constants/oauth";
@@ -18,10 +19,11 @@ const PSP_EXTENSIONS = [".iso", ".cso", ".chd", ".pbp"];
 const PSP_NETPLAY_CORE_VERSION = "ppsspp-libretro-lockstep-v1";
 
 type RoomGame = { name: string; uri: string; fingerprint: string };
-type PlayerSeat = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-const isPlayerSeat = (value: unknown): value is PlayerSeat => typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 8;
+type PlayerSeat = 1 | 2 | 3 | 4;
+const isPlayerSeat = (value: unknown): value is PlayerSeat => typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 4;
 
 export default function PSPRoomScreen() {
+  const { t } = useLanguage();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const numericRoomId = Number(roomId);
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("landscape");
@@ -78,9 +80,9 @@ export default function PSPRoomScreen() {
       const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true, multiple: false });
       if (result.canceled) return;
       const asset = result.assets?.[0];
-      if (!asset?.name || !asset.uri) throw new Error("Could not read the selected file.");
-      if (!PSP_EXTENSIONS.some((extension) => asset.name.toLowerCase().endsWith(extension))) throw new Error("Choose a PSP ISO, CSO, CHD, or PBP file.");
-      if (Platform.OS === "web") throw new Error("PSP room verification is available in the Android APK only.");
+      if (!asset?.name || !asset.uri) throw new Error(t("unsupportedGameFile"));
+      if (!PSP_EXTENSIONS.some((extension) => asset.name.toLowerCase().endsWith(extension))) throw new Error(t("choosePspFile"));
+      if (Platform.OS === "web") throw new Error(t("pspAndroidOnly"));
       setStatus("Checking the local PSP file fingerprint…");
       const fingerprint = await MoudieEmulatorModule.fingerprintNativeGame("psp", asset.uri, asset.name);
       setStatus("Preparing the PSP core and local file now for a fast synchronized start…");
@@ -88,7 +90,7 @@ export default function PSPRoomScreen() {
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false); setStartRequested(false);
       setStatus("File, core, and local launch cache are ready. Tap READY after every active player selects the same file."); haptic.success();
-    } catch (error) { haptic.error(); Alert.alert("Could not choose PSP game", error instanceof Error ? error.message : "Try again."); setStatus("Choose a supported legal PSP file from this device."); }
+    } catch (error) { haptic.error(); Alert.alert(t("choosePspGameError"), error instanceof Error ? error.message : t("tryAgain")); setStatus("Choose a supported legal PSP file from this device."); }
     finally { setPicking(false); }
   };
 
@@ -98,7 +100,7 @@ export default function PSPRoomScreen() {
       await setRealtimeRoomReady({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, isReady: true, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
       socketRef.current?.emit("netplay:session-ready", { system: "psp", fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
       setGameReady(true); setStatus("READY confirmed. The host can start when all active players use the same file."); haptic.success();
-    } catch (error) { Alert.alert("Could not mark ready", error instanceof Error ? error.message : "Try again."); }
+    } catch (error) { Alert.alert(t("readyError"), error instanceof Error ? error.message : t("tryAgain")); }
   };
 
   const requestSynchronizedStart = () => {
@@ -109,13 +111,13 @@ export default function PSPRoomScreen() {
 
   const launchGame = async (withNetplay = false, settingsMode = false, synchronizedStart = false) => {
     if (!game) return;
-    if (Platform.OS === "web") { Alert.alert("Android APK required", "The native PSP player is available in the Android APK only."); return; }
+    if (Platform.OS === "web") { Alert.alert(t("androidRequired"), t("pspAndroidOnly")); return; }
     try {
       setLaunching(true);
       const netplay = withNetplay && credential && assignedPlayer && (synchronizedStart || roomConnected) ? { serverUrl: getNetplayServiceUrl(), roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, system: "psp" as const, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION, player: assignedPlayer } : undefined;
-      if (withNetplay && !netplay) throw new Error("PSP NetPlay needs an assigned player seat and a verified room session.");
+      if (withNetplay && !netplay) throw new Error(t("pspNetplayNeedsSeat"));
       await MoudieEmulatorModule.launchNativeGame("psp", game.uri, game.name, { ...playerOptions, settingsMode }, netplay);
-    } catch (error) { haptic.error(); const message = error instanceof Error ? error.message : "Try again."; Alert.alert("Could not start PSP", message); setStatus(message); }
+    } catch (error) { haptic.error(); const message = error instanceof Error ? error.message : t("tryAgain"); Alert.alert(t("startPspError"), message); setStatus(message); }
     finally { setLaunching(false); }
   };
   launchGameRef.current = launchGame;

@@ -14,7 +14,6 @@
 | PlayStation Portable | PPSSPP عبر Libretro | GPLv2، يحتاج ملفات مساعدة ويستفيد من Vulkan | مرحلة منفصلة بعد اختبار أجهزة Android فعلية. |
 | Famicom/NES | FCEUmm عبر Libretro | حفظ وحالات حفظ وNetplay وmultitap حتى 4 في ألعاب محددة | يحل محل التنفيذ التجريبي الحالي بعد توحيد المضيف الأصلي. |
 | Sega | Genesis Plus GX عبر Libretro | دعم واسع لنظم Sega وFrameskip وإعدادات منطقة | يدمج في الطبقة الموحدة مع حدود ألعاب Sega الحقيقية. |
-| Arcade | قرار قانوني قبل الدمج | FBNeo يفرض قيودًا غير تجارية؛ وMAME مشروع GPL وعلامته التجارية وROMs تتطلب عناية | لا أدمج أي نواة آركيد قبل مراجعة الترخيص ونموذج الربح. |
 
 سيكون إدخال ROM أو BIOS من المستخدم فقط. لن يوزع Moudie ROMs أو BIOS ضمن التطبيق. لكل لعبة، يُخزن التطبيق تجزئة المحتوى والإعدادات ونسخة النواة، ولا يسمح بجلسة أونلاين إذا اختلفت بين اللاعبين. [1] [2] [3] [4]
 
@@ -87,5 +86,3 @@ Lobby
 [4]: https://docs.libretro.com/library/genesis_plus_gx/ "Genesis Plus GX عبر Libretro"
 [5]: https://docs.livekit.io/reference/internals/livekit-sfu/ "LiveKit: P2P وSFU"
 [6]: https://github.com/coturn/coturn "Coturn: TURN/STUN"
-[7]: https://raw.githubusercontent.com/finalburnneo/FBNeo/master/src/license.txt "ترخيص FBNeo"
-[8]: https://www.mamedev.org/legal.html "معلومات MAME القانونية"

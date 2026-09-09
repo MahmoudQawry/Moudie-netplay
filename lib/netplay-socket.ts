@@ -35,8 +35,11 @@ export function createNetplaySocket(credentials: NetplayCredentials): Socket {
   if (!baseUrl) throw new Error("Could not determine the room server. Check the app's internet connection.");
   return io(baseUrl, {
     path: "/api/netplay",
-    transports: ["websocket", "polling"],
-    upgrade: true,
+    // Game input and WebRTC signalling are latency-sensitive. Polling can
+    // introduce visible frame stalls, so use the direct transport and rely on
+    // Socket.IO reconnection when a network changes.
+    transports: ["websocket"],
+    upgrade: false,
     auth: credentials,
     timeout: 20_000,
     reconnection: true,

@@ -15,8 +15,8 @@ describe("NetPlay input relay", () => {
     expect(normalizeNetplayInput("player", { button: "B", isDown: true, frame: 7, player: 8 }, 4)).toEqual({ player: 4, button: "B", isDown: true, frame: 7 });
   });
 
-  it("accepts all eight valid player seats", () => {
-    for (const player of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
+  it("accepts all four valid player seats", () => {
+    for (const player of [1, 2, 3, 4] as const) {
       expect(normalizeNetplayInput("player", { button: "A", isDown: true, frame: 1 }, player)?.player).toBe(player);
     }
   });
@@ -24,5 +24,6 @@ describe("NetPlay input relay", () => {
   it("rejects malformed input instead of relaying it", () => {
     expect(normalizeNetplayInput("host", { button: "INVALID", isDown: true })).toBeNull();
     expect(normalizeNetplayInput("host", { button: "B", isDown: "yes" })).toBeNull();
+    expect(normalizeNetplayInput("player", { button: "A", isDown: true, player: 5 })).toBeNull();
   });
 });

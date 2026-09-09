@@ -12,11 +12,11 @@ import { trpc } from "@/lib/trpc";
 import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
 import { roomCapacityFor } from "@/shared/room-capacity";
 
-const SYSTEM_LABEL: Record<string, string> = { psp: "PSP", nes: "Famicom / NES", sega: "Sega Genesis", ps1: "PlayStation 1", arcade: "Arcade" };
+const SYSTEM_LABEL: Record<string, string> = { psp: "PSP", nes: "Famicom / NES", sega: "Sega Genesis", ps1: "PlayStation 1" };
 
 type MediaToken = { configured: boolean; url?: string; roomName?: string; token?: string; canPublish?: boolean; message?: string };
 
-type RoomSystem = "nes" | "ps1" | "psp" | "sega" | "arcade";
+type RoomSystem = "nes" | "ps1" | "psp" | "sega";
 
 export default function RoomScreen() {
   const { roomId: rawRoomId } = useLocalSearchParams<{ roomId: string }>();
@@ -131,7 +131,7 @@ export default function RoomScreen() {
           <Pressable onPress={() => router.push({ pathname: "/ps1/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>ENTER PS1 SETTINGS</Text></Pressable>
         ) : snapshot.room.system === "psp" ? (
           <Pressable onPress={() => router.push({ pathname: "/psp/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>ENTER PSP SETTINGS</Text></Pressable>
-        ) : snapshot.room.system === "sega" || snapshot.room.system === "arcade" ? (
+        ) : snapshot.room.system === "sega" ? (
           <Pressable onPress={() => router.push({ pathname: "/native/[system]/[roomId]", params: { system: snapshot.room.system, roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>ENTER {SYSTEM_LABEL[snapshot.room.system].toUpperCase()} SETTINGS</Text></Pressable>
         ) : (
           <View style={styles.nextCard}><Text style={styles.nextTitle}>PLAYER PREPARATION</Text><Text style={styles.nextText}>Text chat and voice are available while the {SYSTEM_LABEL[snapshot.room.system]} room player is prepared.</Text><Text style={styles.progress}>{readyCount} READY PLAYERS OUT OF {playerCount}</Text></View>

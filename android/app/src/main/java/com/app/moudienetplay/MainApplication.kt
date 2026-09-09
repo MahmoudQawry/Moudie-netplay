@@ -1,7 +1,11 @@
 package com.app.moudienetplay
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.ComponentCallbacks2
 import android.content.res.Configuration
+import android.os.Build
 import android.util.Log
 
 import com.facebook.react.PackageList
@@ -41,6 +45,13 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val channel = NotificationChannel("classic-era-background", "Classic Era background play", NotificationManager.IMPORTANCE_LOW).apply {
+        description = "Background emulator and room status"
+        setShowBadge(false)
+      }
+      getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    }
     val priorUncaughtHandler = Thread.getDefaultUncaughtExceptionHandler()
     Thread.setDefaultUncaughtExceptionHandler { thread, error ->
       Log.e("MoudieStartup", "Uncaught startup failure on ${thread.name}", error)
@@ -53,6 +64,14 @@ class MainApplication : Application(), ReactApplication {
     }
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
+  }
+
+  override fun onTrimMemory(level: Int) {
+    super.onTrimMemory(level)
+    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+      // Discard only small temporary cache files; ROMs, saves, and user files are preserved.
+      cacheDir.listFiles()?.filter { it.isFile && it.length() < 8L * 1024 * 1024 }?.forEach { it.delete() }
+    }
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {

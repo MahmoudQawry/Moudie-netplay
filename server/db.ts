@@ -92,7 +92,7 @@ export async function getUserByOpenId(openId: string) {
 export async function createRoom(input: {
   joinCode: string;
   name: string;
-  system: "psp" | "nes" | "sega" | "ps1" | "arcade";
+  system: "psp" | "nes" | "sega" | "ps1";
   hostName: string;
   maxPlayers: number;
   hostTokenHash: string;
@@ -194,6 +194,49 @@ export async function addRoomMember(input: {
     accessTokenHash: input.accessTokenHash,
   });
   return Number(result[0].insertId);
+}
+
+/** Atomically reserves a room seat so concurrent joins cannot exceed capacity. */
+export async function addRoomMemberWithCapacity(input: {
+  roomId: number;
+  displayName: string;
+  accessTokenHash: string;
+  role: "player" | "spectator";
+  maxPlayers: number;
+  maxSpectators: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("خدمة الغرف غير متاحة حالياً.");
+
+  return db.transaction(async (tx) => {
+    const [room] = await tx.select({ id: gameRooms.id, status: gameRooms.status })
+      .from(gameRooms)
+      .where(eq(gameRooms.id, input.roomId))
+      .limit(1)
+      .for("update");
+    if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
+
+    const members = await tx.select({ role: roomMembers.role }).from(roomMembers).where(eq(roomMembers.roomId, input.roomId));
+    const activePlayers = members.filter((member) => member.role === "host" || member.role === "player").length;
+    const spectators = members.filter((member) => member.role === "spectator").length;
+    if (activePlayers + spectators >= input.maxPlayers + input.maxSpectators) {
+      throw new Error(`الغرفة مكتملة: ${input.maxPlayers} لاعبين و${input.maxSpectators} مشاهدين كحد أقصى.`);
+    }
+    if (input.role === "player" && activePlayers >= input.maxPlayers) {
+      throw new Error(`مقاعد اللعب (${input.maxPlayers}) مكتملة. يمكنك الدخول كمشاهد.`);
+    }
+    if (input.role === "spectator" && spectators >= input.maxSpectators) {
+      throw new Error(`مقاعد المشاهدة (${input.maxSpectators}) مكتملة.`);
+    }
+
+    const result = await tx.insert(roomMembers).values({
+      roomId: input.roomId,
+      displayName: input.displayName,
+      role: input.role,
+      accessTokenHash: input.accessTokenHash,
+    });
+    return Number(result[0].insertId);
+  });
 }
 
 export async function getRoomMemberCount(roomId: number, role?: "host" | "player" | "spectator") {

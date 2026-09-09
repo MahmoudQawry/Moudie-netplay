@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/lib/language";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { NeonCircuitBackground } from "@/components/neon-circuit-background";
@@ -16,18 +17,19 @@ export default function JoinRoomScreen() {
   const [displayName, setDisplayName] = useState("");
   const [joinAs, setJoinAs] = useState<JoinAs>("player");
   const [joining, setJoining] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => { getProfileName().then((saved) => saved && setDisplayName(saved)); }, []);
 
   const join = async () => {
     if (joinCode.trim().length !== 6) {
       haptic.error();
-      Alert.alert("Check the code", "A room code has six letters or numbers.");
+      Alert.alert(t("checkCode"), t("roomCodeLength"));
       return;
     }
     if (displayName.trim().length < 2) {
       haptic.error();
-      Alert.alert("Add a display name", "Enter at least two characters for your room name.");
+      Alert.alert(t("addDisplayName"), t("nameShortText"));
       return;
     }
     try {
@@ -39,7 +41,7 @@ export default function JoinRoomScreen() {
       router.replace({ pathname: "/room/[roomId]", params: { roomId: String(result.roomId) } });
     } catch (error) {
       haptic.error();
-      Alert.alert("Could not join", error instanceof Error ? error.message : "Check the room code and try again.");
+      Alert.alert(t("joinError"), error instanceof Error ? error.message : t("checkCodeAndRetry"));
     } finally {
       setJoining(false);
     }
@@ -51,34 +53,34 @@ export default function JoinRoomScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><MaterialCommunityIcons name="arrow-left" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-brand-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>JOIN PRIVATE ROOM</Text></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>{t("joinPrivateRoom")}</Text></View>
           <View style={styles.headerSpace} />
         </View>
         <View style={styles.panel}>
-          <Text style={styles.label}>ROOM CODE</Text>
+          <Text style={styles.label}>{t("roomCode")}</Text>
           <TextInput value={joinCode} onChangeText={(value) => setJoinCode(value.toUpperCase().replace(/[^A-Z2-9]/g, "").slice(0, 6))} autoCapitalize="characters" autoCorrect={false} maxLength={6} style={styles.codeInput} placeholder="ABC123" placeholderTextColor="#756E87" textAlign="center" returnKeyType="done" />
-          <Text style={styles.label}>DISPLAY NAME</Text>
+          <Text style={styles.label}>{t("displayName")}</Text>
           <TextInput value={displayName} onChangeText={setDisplayName} style={styles.input} placeholder="Example: Alex" placeholderTextColor="#827B97" textAlign="left" returnKeyType="done" />
 
-          <Text style={styles.label}>HOW DO YOU WANT TO JOIN?</Text>
+          <Text style={styles.label}>{t("joinAs")}</Text>
           <View style={styles.roleRow}>
             <Pressable onPress={() => { haptic.selection(); setJoinAs("player"); }} style={({ pressed }) => [styles.roleCard, joinAs === "player" && styles.roleSelected, pressed && styles.pressed]}>
               <MaterialCommunityIcons name="gamepad-variant-outline" size={24} color={joinAs === "player" ? "#65E8FF" : "#9B93AD"} />
-              <Text style={[styles.roleTitle, joinAs === "player" && styles.roleTitleSelected]}>PLAYER</Text>
-              <Text style={styles.roleText}>You control the game</Text>
+              <Text style={[styles.roleTitle, joinAs === "player" && styles.roleTitleSelected]}>{t("player")}</Text>
+              <Text style={styles.roleText}>{t("controlGame")}</Text>
             </Pressable>
             <Pressable onPress={() => { haptic.selection(); setJoinAs("spectator"); }} style={({ pressed }) => [styles.roleCard, joinAs === "spectator" && styles.roleSelected, pressed && styles.pressed]}>
               <MaterialCommunityIcons name="eye-outline" size={24} color={joinAs === "spectator" ? "#D9A3FF" : "#9B93AD"} />
-              <Text style={[styles.roleTitle, joinAs === "spectator" && styles.roleTitleSelected]}>SPECTATOR</Text>
-              <Text style={styles.roleText}>Watch, talk, and chat</Text>
+              <Text style={[styles.roleTitle, joinAs === "spectator" && styles.roleTitleSelected]}>{t("spectator")}</Text>
+              <Text style={styles.roleText}>{t("watchTalkChat")}</Text>
             </Pressable>
           </View>
 
           <Pressable onPress={join} disabled={joining} style={({ pressed }) => [styles.primaryButton, (pressed || joining) && styles.buttonPressed]}>
-            {joining ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>JOIN ROOM</Text><MaterialCommunityIcons name="login-variant" size={20} color="#FFFFFF" /></>}
+            {joining ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={styles.primaryText}>{t("joinRoom")}</Text><MaterialCommunityIcons name="login-variant" size={20} color="#FFFFFF" /></>}
           </Pressable>
           <Pressable onPress={() => router.push("/create-room")} style={({ pressed }) => [styles.createPrivateButton, pressed && styles.buttonPressed]}>
-            <MaterialCommunityIcons name="plus-circle-outline" size={18} color="#8DEBFF" /><Text style={styles.createPrivateText}>CREATE A PRIVATE ROOM FOR FRIENDS</Text>
+            <MaterialCommunityIcons name="plus-circle-outline" size={18} color="#8DEBFF" /><Text style={styles.createPrivateText}>{t("createPrivateForFriends")}</Text>
           </Pressable>
         </View>
         <View style={styles.helper}><MaterialCommunityIcons name="shield-lock-outline" size={18} color="#69E8FF" /><Text style={styles.helperText}>Your room code and membership stay on this device. Game files are never sent to the room.</Text></View>

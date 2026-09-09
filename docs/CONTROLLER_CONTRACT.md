@@ -7,7 +7,6 @@ This document is the source of truth for controller behavior and layout. Any fut
 - The supplied PlayStation 1 controller image is the visual reference for the directional controls.
 - This is not a request to copy another emulator UI. The four directions must read as one connected, interlocking PlayStation-style cross/D-pad, with the directional arms meeting in the center rather than appearing as four isolated floating buttons.
 - Keep Moudie's current neon/color identity. Do not copy Sony branding, trademarks, or external application artwork.
-- Apply the same controller language to all five systems: Famicom/NES, PS1, PSP, Sega, and Arcade.
 - Face buttons remain appropriate for each system, while the D-pad keeps the connected reference shape.
 
 ## 2. Touch behavior is a hard requirement
@@ -34,12 +33,11 @@ This document is the source of truth for controller behavior and layout. Any fut
 - Preserve the supplied boot/logo design requirements.
 - Local play remains independent from online rooms.
 - Voice and gameplay channels remain separate for rooms and should provide low-latency group voice behavior rather than a fake/non-functional toggle.
-- Room limits remain: Famicom/NES exactly 2 players + up to 6 spectators; PS1/PSP/Sega/Arcade 2–6 players + up to 4 spectators.
 - Emulator changes must prioritize stability, smooth performance, acceptable image quality, and not crashing the app.
 
 ## 5. Acceptance test before release
 
-For every one of the five emulators, test at minimum:
+For every one of the four emulators, test at minimum:
 
 1. Hold UP + face button simultaneously.
 2. Hold LEFT, then add RIGHT/another face button and release them independently.

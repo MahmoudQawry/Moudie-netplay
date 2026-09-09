@@ -32,7 +32,7 @@ class Ps1NetplayClient(
   fun connect() {
     val options = IO.Options().apply {
       path = "/api/netplay"
-      transports = arrayOf("websocket", "polling")
+      transports = arrayOf("websocket")
       reconnection = true
       timeout = 5_000
       reconnectionAttempts = 12
@@ -77,7 +77,7 @@ class Ps1NetplayClient(
             if (memberId > 0) add(memberId)
           }
         }
-        if (startAt > 0L && playerMemberIds.size in 2..8) onSessionGo(startAt, playerMemberIds)
+        if (startAt > 0L && playerMemberIds.size in 2..4) onSessionGo(startAt, playerMemberIds)
       }
       on("netplay:ps1-state-request") { onStateRequest() }
       on("netplay:ps1-input") { args ->

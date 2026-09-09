@@ -1,70 +1,33 @@
+import * as DocumentPicker from "expo-document-picker";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-
+import { Alert, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
-import { getProfileName, saveProfileName } from "@/lib/room-storage";
+import { useLanguage } from "@/lib/language";
+import { ensureProfileId, getProfileAvatar, getProfileName, saveProfileAvatar, saveProfileId, saveProfileName } from "@/lib/room-storage";
+
+const languages = [{ id: "ar", flag: "🇪🇬", label: "العربية" }, { id: "en", flag: "🇺🇸", label: "English" }, { id: "fr", flag: "🇫🇷", label: "Français" }] as const;
 
 export default function SettingsScreen() {
   const [name, setName] = useState("");
-  useEffect(() => { getProfileName().then((saved) => saved && setName(saved)); }, []);
-
-  const save = async () => {
-    if (name.trim().length < 2) {
-      haptic.error();
-      Alert.alert("Name is too short", "Enter at least two characters.");
-      return;
-    }
-    await saveProfileName(name.trim());
-    haptic.success();
-    Alert.alert("Saved", "This name will be shown when you join new rooms.");
-  };
-
-  return (
-    <ScreenContainer className="px-5">
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.eyebrow}>SETTINGS</Text>
-        <Text style={styles.title}>Identity & Privacy</Text>
-
-        <Text style={styles.label}>DISPLAY NAME</Text>
-        <TextInput value={name} onChangeText={setName} placeholder="Your name in rooms" placeholderTextColor="#74869C" textAlign="left" style={styles.input} returnKeyType="done" />
-        <Pressable onPress={save} style={({ pressed }) => [styles.button, pressed && styles.pressed]}><Text style={styles.buttonText}>SAVE NAME</Text></Pressable>
-
-        <View style={styles.privacy}>
-          <Text style={styles.privacyTitle}>SESSION PRIVACY</Text>
-          <Text style={styles.privacyText}>Your room membership token is stored securely on this device. The app never carries or uploads game files to the service.</Text>
-        </View>
-
-        <View style={styles.brandBlock}>
-          <Text style={styles.brandName}>Classic Era by Moudie</Text>
-          <Text style={styles.slogan}>Old Equal Gold</Text>
-        </View>
-
-        <View style={styles.info}>
-          <Text style={styles.infoLabel}>INTERFACE VERSION</Text>
-          <Text style={styles.infoValue}>Classic Era</Text>
-        </View>
-      </ScrollView>
-    </ScreenContainer>
-  );
+  const [userId, setUserId] = useState("");
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const { language, setLanguage, t } = useLanguage();
+  useEffect(() => { Promise.all([getProfileName(), ensureProfileId(), getProfileAvatar()]).then(([savedName, id, savedAvatar]) => { if (savedName) setName(savedName); setUserId(id); setAvatar(savedAvatar); }); }, []);
+  const save = async () => { if (name.trim().length < 2) { haptic.error(); Alert.alert(t("nameShort"), t("nameShortText")); return; } await saveProfileName(name.trim()); await saveProfileId(userId); haptic.success(); Alert.alert(t("saved"), t("savedText")); };
+  const chooseAvatar = async () => { const result = await DocumentPicker.getDocumentAsync({ type: "image/*", copyToCacheDirectory: true }); if (!result.canceled && result.assets[0]?.uri) { setAvatar(result.assets[0].uri); await saveProfileAvatar(result.assets[0].uri); } };
+  const shareId = () => Share.share({ message: `${t("shareText")} ${userId}.` });
+  const selectLanguage = async (id: "ar" | "en" | "fr") => { await setLanguage(id); };
+  return <ScreenContainer className="px-5"><ScrollView contentContainerStyle={styles.content}>
+    <Text style={styles.eyebrow}>{t("settings")}</Text><Text style={styles.title}>{t("profile")}</Text>
+    <View style={styles.profileCard}><Pressable onPress={chooseAvatar} style={styles.avatarButton}>{avatar ? <Image source={{ uri: avatar }} style={styles.avatar} /> : <Text style={styles.avatarLetter}>{name.slice(0, 1).toUpperCase() || "M"}</Text>}<Text style={styles.avatarHint}>{t("changePhoto")}</Text></Pressable><View style={styles.profileCopy}><Text style={styles.profileTitle}>{name || t("newPlayer")}</Text><Text style={styles.profileId}>{userId}</Text><Pressable onPress={shareId}><Text style={styles.share}>{t("share")}</Text></Pressable></View></View>
+    <Text style={styles.label}>{t("username")}</Text><TextInput value={name} onChangeText={setName} placeholder={t("publicName")} placeholderTextColor="#74869C" style={styles.input} maxLength={32} />
+    <Text style={styles.label}>{t("userId")}</Text><TextInput value={userId} onChangeText={setUserId} placeholder="MN-3xxxxxx" placeholderTextColor="#74869C" style={styles.input} autoCapitalize="characters" maxLength={16} />
+    <Pressable onPress={save} style={({ pressed }) => [styles.button, pressed && styles.pressed]}><Text style={styles.buttonText}>{t("save")}</Text></Pressable>
+    <Text style={styles.section}>{t("language")}</Text><View style={styles.languageRow}>{languages.map((item) => <Pressable key={item.id} onPress={() => selectLanguage(item.id)} style={[styles.language, language === item.id && styles.languageActive]}><Text style={styles.flag}>{item.flag}</Text><Text style={styles.languageText}>{item.label}</Text></Pressable>)}</View>
+    <View style={styles.menu}>{["about", "policy", "privacyPolicy", "community", "contact", "help", "suggestions"].map((key) => <Pressable key={key} onPress={() => Alert.alert(t(key), t("pendingText"))} style={styles.menuItem}><Text style={styles.menuText}>{t(key)}</Text><Text style={styles.chevron}>›</Text></Pressable>)}</View>
+    <View style={styles.privacy}><Text style={styles.privacyTitle}>{t("localPrivacy")}</Text><Text style={styles.privacyText}>{t("privacyText")}</Text></View>
+    <View style={styles.brandBlock}><Text style={styles.brandName}>{t("brandName")}</Text><Text style={styles.slogan}>{t("slogan")}</Text></View>
+  </ScrollView></ScreenContainer>;
 }
-
-const styles = StyleSheet.create({
-  content: { paddingTop: 17, paddingBottom: 28 },
-  eyebrow: { color: "#62C2EB", fontSize: 13, fontWeight: "900", letterSpacing: 0.8 },
-  title: { color: "#F3F7FB", fontSize: 29, fontWeight: "900", marginTop: 5 },
-  label: { color: "#DCE7F1", fontSize: 15, fontWeight: "800", marginTop: 26, marginBottom: 9 },
-  input: { backgroundColor: "#1D2A3C", borderRadius: 14, borderWidth: 1, borderColor: "#30445E", minHeight: 52, paddingHorizontal: 14, color: "#F3F7FB", fontSize: 16 },
-  button: { minHeight: 50, borderRadius: 15, backgroundColor: "#146C94", alignItems: "center", justifyContent: "center", marginTop: 12 },
-  buttonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
-  privacy: { backgroundColor: "#162235", borderRadius: 16, padding: 15, marginTop: 26 },
-  privacyTitle: { color: "#F4C662", fontSize: 14, fontWeight: "900" },
-  privacyText: { color: "#B4C2D0", fontSize: 13, lineHeight: 20, marginTop: 5 },
-  brandBlock: { marginTop: 26, alignItems: "center", paddingVertical: 10 },
-  brandName: { color: "#F2EEFF", fontSize: 15, fontWeight: "900", letterSpacing: 0.5 },
-  slogan: { color: "#71E8FF", fontSize: 12, fontWeight: "900", marginTop: 5, letterSpacing: 1.1 },
-  info: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 19, borderBottomWidth: 1, borderBottomColor: "#30445E" },
-  infoLabel: { color: "#DCE7F1", fontSize: 14, fontWeight: "800" },
-  infoValue: { color: "#8398AC", fontSize: 13 },
-  pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
-});
+const styles = StyleSheet.create({ content: { paddingTop: 17, paddingBottom: 34 }, eyebrow: { color: "#62C2EB", fontSize: 13, fontWeight: "900", letterSpacing: .8 }, title: { color: "#F3F7FB", fontSize: 29, fontWeight: "900", marginTop: 5 }, profileCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#162235", borderRadius: 20, padding: 15, marginTop: 22, borderWidth: 1, borderColor: "#30445E" }, avatarButton: { alignItems: "center" }, avatar: { width: 66, height: 66, borderRadius: 33 }, avatarLetter: { width: 66, height: 66, borderRadius: 33, backgroundColor: "#6A48B8", color: "#FFF", fontSize: 30, fontWeight: "900", textAlign: "center", textAlignVertical: "center" }, avatarHint: { color: "#74E6FF", fontSize: 8, fontWeight: "900", marginTop: 5 }, profileCopy: { marginLeft: 14, flex: 1 }, profileTitle: { color: "#FFF", fontSize: 18, fontWeight: "900" }, profileId: { color: "#AEBFD0", fontSize: 13, marginTop: 4 }, share: { color: "#71E8FF", fontSize: 10, fontWeight: "900", marginTop: 9 }, label: { color: "#DCE7F1", fontSize: 13, fontWeight: "800", marginTop: 19, marginBottom: 8 }, input: { backgroundColor: "#1D2A3C", borderRadius: 14, borderWidth: 1, borderColor: "#30445E", minHeight: 50, paddingHorizontal: 14, color: "#F3F7FB", fontSize: 16 }, button: { minHeight: 50, borderRadius: 15, backgroundColor: "#146C94", alignItems: "center", justifyContent: "center", marginTop: 14 }, buttonText: { color: "#FFF", fontSize: 14, fontWeight: "900" }, section: { color: "#DCE7F1", fontSize: 14, fontWeight: "900", marginTop: 28, marginBottom: 9 }, languageRow: { flexDirection: "row", gap: 8 }, language: { flex: 1, alignItems: "center", justifyContent: "center", minHeight: 67, borderRadius: 14, backgroundColor: "#162235", borderWidth: 1, borderColor: "#30445E" }, languageActive: { borderColor: "#63DFFF", backgroundColor: "#12364B" }, flag: { fontSize: 24 }, languageText: { color: "#EAF4FA", fontSize: 11, fontWeight: "800", marginTop: 5 }, menu: { marginTop: 24, backgroundColor: "#162235", borderRadius: 17, overflow: "hidden", borderWidth: 1, borderColor: "#30445E" }, menuItem: { minHeight: 51, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: "#2A3A50" }, menuText: { color: "#E5EEF5", fontSize: 11, fontWeight: "800" }, chevron: { color: "#71E8FF", fontSize: 25 }, privacy: { backgroundColor: "#162235", borderRadius: 16, padding: 15, marginTop: 23 }, privacyTitle: { color: "#F4C662", fontSize: 13, fontWeight: "900" }, privacyText: { color: "#B4C2D0", fontSize: 12, lineHeight: 19, marginTop: 5 }, brandBlock: { marginTop: 25, alignItems: "center" }, brandName: { color: "#F2EEFF", fontSize: 15, fontWeight: "900" }, slogan: { color: "#71E8FF", fontSize: 12, fontWeight: "900", marginTop: 5 }, pressed: { opacity: .8 } });

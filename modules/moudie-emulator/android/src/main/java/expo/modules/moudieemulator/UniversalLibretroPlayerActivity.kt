@@ -35,7 +35,7 @@ import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
-/** Native Libretro player used by PSP, Sega and Arcade.
+/** Native Libretro player used by PSP and Sega.
  * Keeps physical-controller style multi-touch while preserving editable controls and screen.
  */
 class UniversalLibretroPlayerActivity : ComponentActivity() {
@@ -167,7 +167,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     val fingerprint = intent.getStringExtra(EXTRA_NETPLAY_FINGERPRINT).orEmpty()
     val coreVersion = intent.getStringExtra(EXTRA_NETPLAY_CORE_VERSION).orEmpty()
     val player = intent.getIntExtra(EXTRA_NETPLAY_PLAYER, 0)
-    if (serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || coreVersion.isBlank() || player !in 1..8) return
+    if (serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || coreVersion.isBlank() || player !in 1..4) return
     localMemberId = memberId
     localPlayerIndex = player - 1
     lockstepNetplay = true

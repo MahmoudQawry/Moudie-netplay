@@ -1,6 +1,6 @@
 import type { StyleProp, ViewStyle } from "react-native";
 
-export type EmulatorSystem = "nes" | "sega" | "ps1" | "psp" | "arcade";
+export type EmulatorSystem = "nes" | "sega" | "ps1" | "psp";
 
 export type EmulatorRuntimeStatus = {
   runtime: "android-native" | "web-preview";
@@ -39,4 +39,4 @@ export type MoudieEmulatorViewProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-export const EMULATOR_SYSTEMS: EmulatorSystem[] = ["nes", "ps1", "psp", "sega", "arcade"];
+export const EMULATOR_SYSTEMS: EmulatorSystem[] = ["nes", "ps1", "psp", "sega"];

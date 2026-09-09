@@ -18,11 +18,8 @@
 
 المصدر: https://docs.libretro.com/library/ppsspp/
 
-## الآركيد: FinalBurn Neo
 
-مستودع FinalBurn Neo الرسمي نشط وذو تاريخ تطوير كبير، ويصف نفسه بأنه محاكي متعدد الأنظمة للآركيد. يظهر فيه بناء Meson واختبارات على مستوى التعريفات، ما يجعله مرشحًا قويًا من ناحية الصيانة، لكن يجب فحص ملف الترخيص وتوافق Android/Libretro بصورة تفصيلية قبل ضمه. طريق الدمج الأكثر أمانًا هو نواة FBNeo عبر Libretro بدل محاولة تضمين واجهة سطح المكتب مباشرة.
 
-المصدر: https://github.com/finalburnneo/FBNeo
 
 ## NES وSega عبر Libretro
 
@@ -34,11 +31,8 @@
 - https://docs.libretro.com/library/fceumm/
 - https://docs.libretro.com/library/genesis_plus_gx/
 
-## قيد ترخيص FBNeo
 
-نص ترخيص FBNeo يسمح بالاستخدام والتعديل والتوزيع لكنه يمنع البيع أو الربح من مادة FBNeo الأصلية، ويلزم نشر التعديلات وإرفاق نص الترخيص، ويحظر توزيع ROMs بلا حق قانوني. كما يشير إلى شروط MAME. لذلك لا يمكن اختياره بلا مراجعة قانونية إذا كان المشروع سيتضمن اشتراكًا أو إعلانات أو أي نموذج ربحي.
 
-المصدر: https://raw.githubusercontent.com/finalburnneo/FBNeo/master/src/license.txt
 
 ## الصوت لعشر أعضاء وTURN
 
@@ -62,11 +56,8 @@ Coturn هو تنفيذ مفتوح المصدر لخادمي TURN وSTUN. يدع�
 - https://firebase.google.com/docs/auth/web/anonymous-auth
 - https://firebase.google.com/docs/auth
 
-## مراجعة MAME كبديل آركيد
 
-ترخيص MAME الحالي هو GPLv2 أو أحدث للمشروع ككل، مع ملفات فردية قد تحمل تراخيص أقل تقييدًا. صفحة MAME القانونية تنبه إلى العلامة التجارية وحقوق ROMs وإلى أن تضمين المشروع أو استخدام اسمه وشعاره يخضع لقيود إضافية. لذلك لا يحل MAME مشكلة الترخيص وحده؛ إن اختير، يجب توزيع التزامات GPL المناسبة، عدم استخدام علامة MAME بلا إذن، وعدم توزيع ROMs إلا بتصريح صريح من أصحاب الحقوق.
 
-المصدر: https://www.mamedev.org/legal.html
 
 ## دليل NetPlay لعشرة لاعبين
 

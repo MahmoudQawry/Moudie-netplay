@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerNetplayServer } from "../netplay";
 import { registerUniversalNetplayServer } from "../universal-netplay";
+import { isAllowedOrigin } from "./cors";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -35,7 +36,14 @@ async function startServer() {
 
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin) res.header("Access-Control-Allow-Origin", origin);
+    if (origin && !isAllowedOrigin(origin)) {
+      res.sendStatus(403);
+      return;
+    }
+    if (origin) {
+      res.header("Access-Control-Allow-Origin", origin);
+      res.header("Vary", "Origin");
+    }
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
     res.header("Access-Control-Allow-Credentials", "true");

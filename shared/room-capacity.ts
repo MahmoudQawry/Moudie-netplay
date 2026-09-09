@@ -1,13 +1,12 @@
-export type RoomSystem = "nes" | "ps1" | "psp" | "sega" | "arcade";
+export type RoomSystem = "nes" | "ps1" | "psp" | "sega";
 
 export const MIN_ACTIVE_PLAYERS = 2;
-export const STANDARD_MAX_ACTIVE_PLAYERS = 8;
-// Compatibility export for server code that applies the standard room limit.
-// NES/Famicom callers must use roomCapacityFor("nes") and remain capped at two players.
+export const STANDARD_MAX_ACTIVE_PLAYERS = 4;
+export const STANDARD_MAX_SPECTATORS = 4;
+// Compatibility exports for server and native relay code.
 export const MAX_ACTIVE_PLAYERS = STANDARD_MAX_ACTIVE_PLAYERS;
-export const STANDARD_MAX_SPECTATORS = 2;
-export const FAMICOM_MAX_ACTIVE_PLAYERS = 8;
-export const FAMICOM_MAX_SPECTATORS = 2;
+export const FAMICOM_MAX_ACTIVE_PLAYERS = 2;
+export const FAMICOM_MAX_SPECTATORS = 6;
 
 export type RoomCapacity = {
   minPlayers: number;
@@ -15,12 +14,16 @@ export type RoomCapacity = {
   maxSpectators: number;
 };
 
+/**
+ * Room membership is capped at eight people for every emulator.
+ * Systems with four-controller support use 4 players + 4 spectators.
+ * Famicom/NES remains a two-controller system, so it uses 2 players + 6 spectators.
+ */
 export const ROOM_CAPACITIES: Record<RoomSystem, RoomCapacity> = {
   nes: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: FAMICOM_MAX_ACTIVE_PLAYERS, maxSpectators: FAMICOM_MAX_SPECTATORS },
   ps1: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: STANDARD_MAX_ACTIVE_PLAYERS, maxSpectators: STANDARD_MAX_SPECTATORS },
   psp: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: STANDARD_MAX_ACTIVE_PLAYERS, maxSpectators: STANDARD_MAX_SPECTATORS },
   sega: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: STANDARD_MAX_ACTIVE_PLAYERS, maxSpectators: STANDARD_MAX_SPECTATORS },
-  arcade: { minPlayers: MIN_ACTIVE_PLAYERS, maxPlayers: STANDARD_MAX_ACTIVE_PLAYERS, maxSpectators: STANDARD_MAX_SPECTATORS },
 };
 
 export function roomCapacityFor(system: RoomSystem): RoomCapacity {

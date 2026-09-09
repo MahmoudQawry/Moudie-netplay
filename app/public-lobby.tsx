@@ -11,7 +11,7 @@ import { joinPublicRealtimeRoom, listPublicRealtimeRooms, type RealtimePublicRoo
 
 type JoinAs = "player" | "spectator";
 
-const systemAccent: Record<RealtimePublicRoom["system"], string> = { ps1: "#C05DFF", psp: "#38D4FF", nes: "#FF727A", sega: "#70E59A", arcade: "#FFAA38" };
+const systemAccent: Record<RealtimePublicRoom["system"], string> = { ps1: "#C05DFF", psp: "#38D4FF", nes: "#FF727A", sega: "#70E59A" };
 
 export default function PublicLobbyScreen() {
   const [displayName, setDisplayName] = useState("");
@@ -69,10 +69,10 @@ export default function PublicLobbyScreen() {
       ListHeaderComponent={<View>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]} accessibilityLabel="Go back"><MaterialCommunityIcons name="arrow-left" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-brand-icon.png")} style={styles.brandIcon} /><View><Text style={styles.title}>PUBLIC LOBBY</Text><Text style={styles.subtitle}>OLD EQUAL GOLD</Text></View></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} /><View><Text style={styles.title}>PUBLIC LOBBY</Text><Text style={styles.subtitle}>OLD EQUAL GOLD</Text></View></View>
           <Pressable onPress={() => router.push({ pathname: "/create-room", params: { visibility: "public" } })} style={({ pressed }) => [styles.hostButton, pressed && styles.pressed]} accessibilityLabel="Host public lobby"><MaterialCommunityIcons name="plus" size={21} color="#081127" /></Pressable>
         </View>
-        <View style={styles.hero}><MaterialCommunityIcons name="account-group-outline" size={32} color="#69E8FF" /><View style={styles.heroCopy}><Text style={styles.heroTitle}>FIND A CLASSIC SESSION</Text><Text style={styles.heroText}>Join an open lobby. The room supports up to 8 players and 2 spectators; invite codes are never shown here.</Text></View></View>
+        <View style={styles.hero}><MaterialCommunityIcons name="account-group-outline" size={32} color="#69E8FF" /><View style={styles.heroCopy}><Text style={styles.heroTitle}>FIND A CLASSIC SESSION</Text><Text style={styles.heroText}>Join an open lobby. Standard systems support 4 players and 4 spectators; NES supports 2 players and 6 spectators.</Text></View></View>
         <Text style={styles.label}>YOUR DISPLAY NAME</Text>
         <TextInput value={displayName} onChangeText={setDisplayName} style={styles.input} placeholder="Example: Alex" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
         <Text style={styles.label}>JOIN AS</Text>

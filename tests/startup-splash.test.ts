@@ -49,7 +49,7 @@ describe("Android startup splash safeguards", () => {
     const lobby = readProjectFile("app/(tabs)/index.tsx");
     const intro = readProjectFile("components/moudie-launch-intro.tsx");
     const recovery = readProjectFile("components/startup-recovery-boundary.tsx");
-    ["PS1", "PSP", "NES", "SEGA", "ARCADE", "SKIP INTRO", "Moudie"].forEach((label) => expect(intro).toContain(label));
+    ["PS1", "PSP", "NES", "SEGA", "SKIP INTRO", "Moudie"].forEach((label) => expect(intro).toContain(label));
     expect(intro).toContain('import { MaterialCommunityIcons } from "@expo/vector-icons"');
     expect(intro).toContain("Animated.sequence([");
     expect(intro).toContain("Animated.stagger(110");
@@ -68,12 +68,19 @@ describe("Android startup splash safeguards", () => {
   it("keeps the reviewed entry, settings, and launch screens English-only", () => {
     const englishOnlyPaths = [
       "app/(tabs)/index.tsx",
-      "app/(tabs)/settings.tsx",
       "app/play/[system].tsx",
       "app/room/[roomId].tsx",
       "components/moudie-launch-intro.tsx",
-      "lib/language.tsx",
     ];
     englishOnlyPaths.forEach((path) => expect(readProjectFile(path)).not.toMatch(/[\u0600-\u06FF]/));
+    const settings = readProjectFile("app/(tabs)/settings.tsx");
+    expect(settings).toContain("🇪🇬");
+    expect(settings).toContain("🇺🇸");
+    expect(settings).toContain("🇫🇷");
+    expect(settings).not.toContain("🇬🇧");
+    const language = readProjectFile("lib/language.tsx");
+    expect(language).toContain('AppLanguage = "ar" | "en" | "fr"');
+    expect(language).toContain("الرئيسية");
+    expect(language).toContain("Bibliothèque");
   });
 });

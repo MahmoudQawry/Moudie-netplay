@@ -7,20 +7,22 @@ import { NeonCircuitBackground } from "@/components/neon-circuit-background";
 import { ScreenContainer } from "@/components/screen-container";
 import { haptic } from "@/lib/haptics";
 import { getProfileName } from "@/lib/room-storage";
+import { useLanguage } from "@/lib/language";
 
 export default function LobbyScreen() {
   const [profileName, setProfileName] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => { getProfileName().then(setProfileName); }, []);
 
   const copy = {
     retro: "CLASSIC GAMES, YOUR WAY",
-    title: "Your classic game lobby",
+    title: t("title"),
     intro: "Choose a play route first. Select your emulator, local game file, and settings only when you are ready to play.",
-    local: "LOCAL PLAY",
+    local: t("localPlay"),
     localText: "Choose a system and play your legal game file on this device, with no online connection.",
     create: "PUBLIC LOBBY",
-    createText: "Find an open classic-game lobby or host one for up to 8 players and 2 spectators.",
+    createText: "Find an open classic-game lobby or host one for up to 4 players and 4 spectators (NES uses 2 players and 6 spectators).",
     join: "JOIN PRIVATE ROOM",
     joinText: "Enter a simple invite code from your friends, then choose player or spectator mode.",
     tip: "Before a game starts, use Controller Settings and Screen Settings to save independent portrait and landscape layouts.",
@@ -34,8 +36,8 @@ export default function LobbyScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View style={styles.brandRow}>
-              <Image source={require("@/assets/images/classic-era-brand-icon.png")} style={styles.brandIcon} resizeMode="cover" />
-              <View><Text style={styles.brand}>MOUDIE</Text><Text style={styles.brandSub}>CLASSIC ERA · NETPLAY</Text><Text style={styles.slogan}>Old Equal Gold</Text></View>
+              <Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} resizeMode="cover" />
+              <View><Text style={styles.brand}>Classic Era by Moudie</Text><Text style={styles.brandSub}>FOUR SYSTEMS · NETPLAY</Text><Text style={styles.slogan}>Old Equal Gold</Text></View>
             </View>
             <Pressable onPress={() => router.push("/(tabs)/settings")} style={({ pressed }) => [styles.profile, pressed && styles.pressed]} accessibilityLabel="Open settings">
               <MaterialCommunityIcons name="account-circle-outline" size={22} color="#B978FF" />
@@ -45,7 +47,7 @@ export default function LobbyScreen() {
 
           <View style={styles.hero}>
             <View style={[styles.orb, styles.orbCyan]} /><View style={[styles.orb, styles.orbPurple]} />
-            <Image source={require("@/assets/images/classic-era-brand-card.png")} style={styles.heroIcon} resizeMode="cover" />
+            <Image source={require("@/assets/images/classic-era-four-systems-card.png")} style={styles.heroIcon} resizeMode="cover" />
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>{copy.retro}</Text>
               <Text style={styles.heroTitle}>{copy.title}</Text>

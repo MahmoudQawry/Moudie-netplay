@@ -267,7 +267,7 @@ class PS1PlayerActivity : ComponentActivity() {
     val memberToken = intent.getStringExtra(EXTRA_NETPLAY_MEMBER_TOKEN).orEmpty()
     val fingerprint = intent.getStringExtra(EXTRA_NETPLAY_FINGERPRINT).orEmpty()
     val player = intent.getIntExtra(EXTRA_NETPLAY_PLAYER, 1)
-    if (serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || player !in 1..8) return
+    if (serverUrl.isBlank() || roomId <= 0 || memberId <= 0 || memberToken.length < 20 || fingerprint.length != 64 || player !in 1..4) return
     localMemberId = memberId
     localPlayerIndex = player - 1
     lockstepNetplay = true

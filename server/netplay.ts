@@ -2,13 +2,14 @@ import type { Server as HttpServer } from "http";
 import { Server } from "socket.io";
 
 import * as db from "./db";
-import { normalizeNetplayInput } from "../lib/netplay-protocol";
+import { normalizeNetplayInput, type NetplayPlayerSeat } from "../lib/netplay-protocol";
 import { createSessionBarrier, type ReadySessionPeer } from "../lib/netplay-session-barrier";
 import { normalizeSyncId } from "../lib/netplay-sync";
 import { hashAccessToken } from "./rooms";
-import { MAX_ACTIVE_PLAYERS } from "../shared/room-capacity";
+import { socketCors } from "./_core/cors";
+import { roomCapacityFor } from "../shared/room-capacity";
 
-type NetplaySystem = "ps1" | "nes" | "psp" | "sega" | "arcade";
+type NetplaySystem = "ps1" | "nes" | "psp" | "sega";
 
 type NetplaySession = {
   roomId: number;
@@ -16,6 +17,7 @@ type NetplaySession = {
   displayName: string;
   role: "host" | "player" | "spectator";
   clientKind: "room-ui" | "ps1-player" | "universal-player";
+  assignedPlayer: NetplayPlayerSeat | null;
 };
 
 type InputPayload = { button?: unknown; isDown?: unknown; frame?: unknown };
@@ -46,7 +48,7 @@ const memberKey = (roomId: number, memberId: number, clientKind: NetplaySession[
 export function registerNetplayServer(server: HttpServer) {
   const io = new Server(server, {
     path: "/api/netplay",
-    cors: { origin: true, credentials: true },
+    cors: socketCors,
     transports: ["websocket", "polling"],
     maxHttpBufferSize: 5e6,
   });
@@ -55,18 +57,8 @@ export function registerNetplayServer(server: HttpServer) {
   const ps1InitialStateAcks = new Map<number, Set<number>>();
   const famicomSnapshots = new Map<number, AuthoritativeSnapshot>();
   const universalSnapshots = new Map<string, UniversalSnapshot>();
+  const universalInitialStateAcks = new Map<string, Set<number>>();
   const pendingSessions = new Map<number, PendingSession>();
-
-  // Snapshot caches and session barriers are per-room and must not outlive an
-  // abandoned room; sweep entries idle for 10 minutes on a periodic timer.
-  const SNAPSHOT_IDLE_MS = 600_000;
-  setInterval(() => {
-    const now = Date.now();
-    for (const [roomId, snapshot] of ps1Snapshots) if (now - snapshot.updatedAt > SNAPSHOT_IDLE_MS) ps1Snapshots.delete(roomId);
-    for (const [roomId, snapshot] of famicomSnapshots) if (now - snapshot.updatedAt > SNAPSHOT_IDLE_MS) famicomSnapshots.delete(roomId);
-    for (const [key, snapshot] of universalSnapshots) if (now - snapshot.updatedAt > SNAPSHOT_IDLE_MS) universalSnapshots.delete(key);
-    for (const roomId of ps1InitialStateAcks.keys()) if (!ps1Snapshots.has(roomId)) ps1InitialStateAcks.delete(roomId);
-  }, SNAPSHOT_IDLE_MS);
 
   io.use(async (socket, next) => {
     const auth = socket.handshake.auth as Record<string, unknown> | undefined;
@@ -90,6 +82,7 @@ export function registerNetplayServer(server: HttpServer) {
         displayName: member.displayName,
         role: member.role,
         clientKind,
+        assignedPlayer: null,
       } satisfies NetplaySession;
       next();
     } catch {
@@ -119,12 +112,14 @@ export function registerNetplayServer(server: HttpServer) {
         if (right.role === "host") return 1;
         return left.id - right.id;
       });
-    const assignedPlayer = session.role === "spectator"
+    const maxPlayers = snapshot ? roomCapacityFor(snapshot.room.system as NetplaySystem).maxPlayers : 0;
+    const assignedPlayer: NetplayPlayerSeat | null = session.role === "spectator"
       ? null
       : (() => {
           const index = activeSeats.findIndex((member) => member.id === session.memberId);
-          return index >= 0 && index < MAX_ACTIVE_PLAYERS ? index + 1 : null;
+          return index >= 0 && index < maxPlayers ? (index + 1) as NetplayPlayerSeat : null;
         })();
+    session.assignedPlayer = assignedPlayer;
     socket.emit("netplay:joined", {
       memberId: session.memberId,
       role: session.role,
@@ -136,7 +131,7 @@ export function registerNetplayServer(server: HttpServer) {
 
     socket.on("netplay:input", (payload: InputPayload) => {
       if (session.role === "spectator") return;
-      const input = normalizeNetplayInput(session.role, payload ?? {});
+      const input = normalizeNetplayInput(session.role, payload ?? {}, session.assignedPlayer ?? undefined);
       if (!input) return;
       socket.to(channel).emit("netplay:input", {
         memberId: session.memberId,
@@ -158,7 +153,7 @@ export function registerNetplayServer(server: HttpServer) {
 
     socket.on("netplay:session-ready", (payload: SessionReadyPayload) => {
       if (session.clientKind !== "room-ui" || session.role === "spectator") return;
-      const system = payload?.system === "ps1" || payload?.system === "nes" || payload?.system === "psp" || payload?.system === "sega" || payload?.system === "arcade" ? payload.system : null;
+      const system = payload?.system === "ps1" || payload?.system === "nes" || payload?.system === "psp" || payload?.system === "sega" ? payload.system : null;
       const fingerprint = typeof payload?.fingerprint === "string" ? payload.fingerprint.toLowerCase() : "";
       const coreVersion = typeof payload?.coreVersion === "string" ? payload.coreVersion.trim() : "";
       if (!system || !/^[a-f0-9]{64}$/.test(fingerprint) || !coreVersion) return;
@@ -169,9 +164,10 @@ export function registerNetplayServer(server: HttpServer) {
 
     socket.on("netplay:session-start-request", async (payload: SessionStartPayload) => {
       if (session.clientKind !== "room-ui" || session.role !== "host") return;
-      const system = payload?.system === "ps1" || payload?.system === "nes" || payload?.system === "psp" || payload?.system === "sega" || payload?.system === "arcade" ? payload.system : null;
+      const system = payload?.system === "ps1" || payload?.system === "nes" || payload?.system === "psp" || payload?.system === "sega" ? payload.system : null;
       if (!system) return;
       const roomSnapshot = await db.getRoomSnapshot(session.roomId).catch(() => undefined);
+      const capacity = roomSnapshot ? roomCapacityFor(roomSnapshot.room.system as NetplaySystem) : null;
       const activeMemberIds = (roomSnapshot?.members ?? []).filter((member) => member.role !== "spectator").map((member) => member.id);
       const readyPeers = Array.from(io.sockets.adapter.rooms.get(channel) ?? [])
         .map((socketId) => io.sockets.sockets.get(socketId))
@@ -182,16 +178,18 @@ export function registerNetplayServer(server: HttpServer) {
         .map((peer) => peer?.data.readySession as ReadySessionData | undefined)
         .filter((ready): ready is ReadySessionData => Boolean(ready && ready.system === system));
       const readyMemberIds = new Set(readyPeers.map((peer) => peer.memberId));
-      const everyActivePlayerReady = activeMemberIds.length >= 2 && activeMemberIds.length <= MAX_ACTIVE_PLAYERS && activeMemberIds.every((memberId) => readyMemberIds.has(memberId));
+      const everyActivePlayerReady = Boolean(capacity && activeMemberIds.length >= capacity.minPlayers && activeMemberIds.length <= capacity.maxPlayers && activeMemberIds.every((memberId) => readyMemberIds.has(memberId)));
       const barrier = everyActivePlayerReady ? createSessionBarrier(readyPeers, Date.now()) : null;
       if (!barrier) {
-        socket.emit("netplay:session-start-refused", { message: "ينبغي أن يتصل جميع اللاعبين النشطين (من 2 إلى 8) ويؤكدوا ملف اللعبة وإصدار المحرك نفسه قبل البدء." });
+        const range = capacity ? `${capacity.minPlayers} إلى ${capacity.maxPlayers}` : "العدد المسموح";
+        socket.emit("netplay:session-start-refused", { message: `ينبغي أن يتصل جميع اللاعبين النشطين (من ${range}) ويؤكدوا ملف اللعبة وإصدار المحرك نفسه قبل البدء.` });
         return;
       }
       ps1Snapshots.delete(session.roomId);
       ps1InitialStateAcks.delete(session.roomId);
       famicomSnapshots.delete(session.roomId);
       universalSnapshots.delete(`${session.roomId}:${system}`);
+      universalInitialStateAcks.delete(`${session.roomId}:${system}`);
       pendingSessions.set(session.roomId, { system, barrier });
       io.to(channel).emit("netplay:session-start", { system, ...barrier });
     });
@@ -314,7 +312,7 @@ export function registerNetplayServer(server: HttpServer) {
     });
 
     socket.on("netplay:universal-ready", (payload: SessionReadyPayload) => {
-      const system = payload?.system === "psp" || payload?.system === "sega" || payload?.system === "arcade" ? payload.system : null;
+      const system = payload?.system === "psp" || payload?.system === "sega" ? payload.system : null;
       const fingerprint = typeof payload?.fingerprint === "string" ? payload.fingerprint.toLowerCase() : "";
       const coreVersion = typeof payload?.coreVersion === "string" ? payload.coreVersion.trim() : "";
       const pending = pendingSessions.get(session.roomId);
@@ -378,15 +376,26 @@ export function registerNetplayServer(server: HttpServer) {
       }
     });
 
-    socket.on("netplay:universal-sync-ack", (payload: Ps1SyncAckPayload) => {
+    socket.on("netplay:universal-sync-ack", async (payload: Ps1SyncAckPayload) => {
       const syncId = normalizeSyncId(payload?.syncId);
       const system = socket.data.universalSystem as Exclude<NetplaySystem, "ps1" | "nes"> | undefined;
       if (syncId === null || !system || typeof socket.data.universalFingerprint !== "string") return;
       socket.to(channel).emit("netplay:universal-sync-ack", { memberId: session.memberId, syncId, appliedAt: Date.now() });
       const pending = pendingSessions.get(session.roomId);
-      if (syncId === 0 && pending?.system === system && session.role === "player") {
-        io.to(channel).emit("netplay:universal-session-go", { system, fingerprint: socket.data.universalFingerprint, startAt: Date.now() + 1200 });
-        pendingSessions.delete(session.roomId);
+      if (syncId === 0 && pending?.system === system && (session.role === "host" || session.role === "player")) {
+        const roomSnapshot = await db.getRoomSnapshot(session.roomId).catch(() => undefined);
+        const activePlayerIds = (roomSnapshot?.members ?? [])
+          .filter((member) => member.role === "host" || member.role === "player")
+          .map((member) => member.id);
+        const key = `${session.roomId}:${system}`;
+        const acknowledgements = universalInitialStateAcks.get(key) ?? new Set<number>();
+        acknowledgements.add(session.memberId);
+        universalInitialStateAcks.set(key, acknowledgements);
+        if (activePlayerIds.length >= 2 && activePlayerIds.every((memberId) => acknowledgements.has(memberId))) {
+          io.to(channel).emit("netplay:universal-session-go", { system, fingerprint: socket.data.universalFingerprint, startAt: Date.now() + 1200, playerMemberIds: activePlayerIds });
+          universalInitialStateAcks.delete(key);
+          pendingSessions.delete(session.roomId);
+        }
       }
     });
 

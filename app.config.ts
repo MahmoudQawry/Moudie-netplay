@@ -18,7 +18,7 @@ const schemeFromBundleId = `manus${timestamp}`;
 const env = {
   appName: "Classic Era by Moudie",
   appSlug: "moudie-netplay",
-  logoUrl: "./assets/images/classic-era-brand-icon.png",
+  logoUrl: "./assets/images/classic-era-four-systems-icon.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -27,9 +27,9 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.5.0",
+  version: "1.7.0",
   orientation: "default",
-  icon: "./assets/images/classic-era-brand-icon.png",
+  icon: "./assets/images/classic-era-four-systems-icon.png",
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
   newArchEnabled: false,
@@ -39,12 +39,12 @@ const config: ExpoConfig = {
     infoPlist: { ITSAppUsesNonExemptEncryption: false },
   },
   android: {
-    versionCode: 45,
+    versionCode: 46,
     adaptiveIcon: {
       backgroundColor: "#101827",
-      foregroundImage: "./assets/images/classic-era-brand-icon.png",
-      backgroundImage: "./assets/images/classic-era-brand-icon.png",
-      monochromeImage: "./assets/images/classic-era-brand-icon.png",
+      foregroundImage: "./assets/images/classic-era-four-systems-icon.png",
+      backgroundImage: "./assets/images/classic-era-four-systems-icon.png",
+      monochromeImage: "./assets/images/classic-era-four-systems-icon.png",
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
@@ -69,7 +69,7 @@ const config: ExpoConfig = {
   web: {
     bundler: "metro",
     output: "single",
-    favicon: "./assets/images/classic-era-brand-icon.png",
+    favicon: "./assets/images/classic-era-four-systems-icon.png",
   },
   plugins: [
     "expo-router",

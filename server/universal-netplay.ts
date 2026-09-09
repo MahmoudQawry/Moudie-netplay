@@ -3,9 +3,10 @@ import { Server } from "socket.io";
 
 import * as db from "./db";
 import { hashAccessToken } from "./rooms";
-import { STANDARD_MAX_ACTIVE_PLAYERS } from "../shared/room-capacity";
+import { roomCapacityFor } from "../shared/room-capacity";
+import { socketCors } from "./_core/cors";
 
-type System = "psp" | "sega" | "arcade";
+type System = "psp" | "sega";
 type Role = "host" | "player" | "spectator";
 type Session = { roomId: number; memberId: number; displayName: string; role: Role };
 type Ready = { memberId: number; system: System; fingerprint: string; coreVersion: string };
@@ -13,16 +14,16 @@ type Snapshot = { snapshot: string; syncId: number; fingerprint: string; system:
 type Input = { frame: number; mask: number };
 
 const roomChannel = (roomId: number) => `universal-netplay:${roomId}`;
-const validSystem = (value: unknown): value is System => value === "psp" || value === "sega" || value === "arcade";
+const validSystem = (value: unknown): value is System => value === "psp" || value === "sega";
 const validFingerprint = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value.toLowerCase());
 const validCoreVersion = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value.trim().length <= 64;
 const validFrame = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const validMask = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffff;
 
-/** Dedicated low-latency relay for PSP/SEGA/ARCADE; lobby, chat and voice stay isolated. */
+/** Dedicated low-latency relay for PSP/SEGA; lobby, chat and voice stay isolated. */
 export function registerUniversalNetplayServer(server: HttpServer) {
   const io = new Server(server, {
-    path: "/api/universal-netplay", cors: { origin: true, credentials: true },
+    path: "/api/universal-netplay", cors: socketCors,
     transports: ["websocket", "polling"], maxHttpBufferSize: 5e6, pingInterval: 2_000, pingTimeout: 8_000,
   });
   const readyByRoom = new Map<number, Map<number, Ready>>();
@@ -31,20 +32,12 @@ export function registerUniversalNetplayServer(server: HttpServer) {
   const activeSockets = new Map<string, string>();
   const roomKey = (roomId: number, system: System) => `${roomId}:${system}`;
 
-  // Per-room caches must not outlive abandoned rooms; sweep idle entries.
-  const IDLE_MS = 600_000;
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, snapshot] of snapshotByRoom) if (now - snapshot.updatedAt > IDLE_MS) snapshotByRoom.delete(key);
-    for (const key of inputHistoryByRoom.keys()) if (!snapshotByRoom.has(key)) inputHistoryByRoom.delete(key);
-    for (const roomId of readyByRoom.keys()) if (![...activeSockets.keys()].some((socketKey) => socketKey.startsWith(`${roomId}:`))) readyByRoom.delete(roomId);
-  }, IDLE_MS);
-
   const getPlayers = async (roomId: number) => {
     const snapshot = await db.getRoomSnapshot(roomId).catch(() => undefined);
+    const maxPlayers = snapshot ? roomCapacityFor(snapshot.room.system as System).maxPlayers : 0;
     return (snapshot?.members ?? []).filter((m) => m.role === "host" || m.role === "player")
       .sort((a, b) => (a.role === "host" ? -1 : b.role === "host" ? 1 : a.id - b.id))
-      .slice(0, STANDARD_MAX_ACTIVE_PLAYERS);
+      .slice(0, maxPlayers);
   };
 
   io.use(async (socket, next) => {
@@ -76,7 +69,8 @@ export function registerUniversalNetplayServer(server: HttpServer) {
       const ready = { memberId: session.memberId, system: p.system, fingerprint: p.fingerprint.toLowerCase(), coreVersion: p.coreVersion.trim() } satisfies Ready;
       const roomReady = readyByRoom.get(session.roomId) ?? new Map<number, Ready>(); roomReady.set(session.memberId, ready); readyByRoom.set(session.roomId, roomReady);
       const active = await getPlayers(session.roomId), ids = active.map((m) => m.id);
-      if (ids.length < 2 || ids.length > STANDARD_MAX_ACTIVE_PLAYERS) return;
+      const capacity = roomCapacityFor(p.system);
+      if (ids.length < capacity.minPlayers || ids.length > capacity.maxPlayers) return;
       if (!ids.every((id) => roomReady.has(id))) return void socket.emit("universal:waiting", { readyCount: ids.filter((id) => roomReady.has(id)).length, playerCount: ids.length });
       const peers = ids.map((id) => roomReady.get(id)!); const first = peers[0];
       if (!peers.every((peer) => peer.system === first.system && peer.fingerprint === first.fingerprint && peer.coreVersion === first.coreVersion)) return void io.to(channel).emit("universal:session-refused", { message: "كل اللاعبين يجب أن يختاروا نفس ملف اللعبة ونفس إصدار المحرك." });
