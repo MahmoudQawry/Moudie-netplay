@@ -6,6 +6,8 @@ import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+export type RoomServiceDb = NonNullable<ReturnType<typeof drizzle>>;
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -197,7 +199,9 @@ export async function addRoomMember(input: {
   return Number(result[0].insertId);
 }
 
-/** Atomically reserves a room seat so concurrent joins cannot exceed capacity. */
+/** Atomically reserves a room seat so concurrent joins cannot exceed capacity.
+ * `database` is injectable so behavioral/concurrency tests can drive this
+ * function without a live MySQL instance. */
 export async function addRoomMemberWithCapacity(input: {
   roomId: number;
   displayName: string;
@@ -205,8 +209,8 @@ export async function addRoomMemberWithCapacity(input: {
   role: "player" | "spectator";
   maxPlayers: number;
   maxSpectators: number;
-}) {
-  const db = await getDb();
+}, database?: RoomServiceDb) {
+  const db = database ?? (await getDb());
   if (!db) throw new Error("خدمة الغرف غير متاحة حالياً.");
 
   return db.transaction(async (tx) => {
