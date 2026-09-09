@@ -40,7 +40,8 @@ export default function PSPRoomScreen() {
   const [launching, setLaunching] = useState(false);
   const [gameReady, setGameReady] = useState(false);
   const [startRequested, setStartRequested] = useState(false);
-  const [status, setStatus] = useState("Choose the same legal PSP file on both devices.");
+  const [status, setStatus] = useState<string | null>(null);
+  const statusText = status === null ? t("pspInitialStatus") : status;
   const snapshotQuery = useRealtimeRoomSnapshot(numericRoomId, credential, 4_000);
   const playerOptions = { orientation, aspectRatio };
 
@@ -57,8 +58,8 @@ export default function PSPRoomScreen() {
     if (!credential || Platform.OS === "web") return;
     const socket = createNetplaySocket({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken });
     socketRef.current = socket;
-    const connected = () => { setRoomConnected(true); setStatus("Room channel connected. Choose your local file and mark READY."); };
-    const disconnected = () => { setRoomConnected(false); setRemoteOnline(false); setStatus("Room channel disconnected. Reconnecting automatically…"); };
+    const connected = () => { setRoomConnected(true); setStatus(t("pspChannelConnected")); };
+    const disconnected = () => { setRoomConnected(false); setRemoteOnline(false); setStatus(t("pspChannelDisconnected")); };
     const joined = (payload: { onlineMemberIds?: number[]; assignedPlayer?: number }) => {
       setRemoteOnline(Boolean(payload.onlineMemberIds?.some((id) => id !== credential.memberId)));
       setAssignedPlayer(isPlayerSeat(payload.assignedPlayer) ? payload.assignedPlayer : null);
@@ -66,10 +67,10 @@ export default function PSPRoomScreen() {
     const presence = (payload: { memberId?: number; online?: boolean }) => { if (payload.memberId !== credential.memberId) setRemoteOnline(Boolean(payload.online)); };
     const start = (payload: { system?: string }) => {
       if (payload.system !== "psp") return;
-      setStatus("All active players are ready. Opening the synchronized PSP player…");
+      setStatus(t("pspAllReady"));
       void launchGameRef.current(true, false, true);
     };
-    const refused = (payload: { message?: string }) => setStatus(payload.message || "Waiting for the other player to verify the same file.");
+    const refused = (payload: { message?: string }) => setStatus(payload.message || t("pspWaitingVerify"));
     socket.on("connect", connected); socket.on("disconnect", disconnected); socket.on("netplay:joined", joined); socket.on("netplay:presence", presence); socket.on("netplay:session-start", start); socket.on("netplay:session-start-refused", refused); socket.connect();
     return () => { socket.off("connect", connected); socket.off("disconnect", disconnected); socket.off("netplay:joined", joined); socket.off("netplay:presence", presence); socket.off("netplay:session-start", start); socket.off("netplay:session-start-refused", refused); socket.disconnect(); if (socketRef.current === socket) socketRef.current = null; };
   }, [credential, game, numericRoomId]);
@@ -83,14 +84,14 @@ export default function PSPRoomScreen() {
       if (!asset?.name || !asset.uri) throw new Error(t("unsupportedGameFile"));
       if (!PSP_EXTENSIONS.some((extension) => asset.name.toLowerCase().endsWith(extension))) throw new Error(t("choosePspFile"));
       if (Platform.OS === "web") throw new Error(t("pspAndroidOnly"));
-      setStatus("Checking the local PSP file fingerprint…");
+      setStatus(t("pspCheckingFingerprint"));
       const fingerprint = await MoudieEmulatorModule.fingerprintNativeGame("psp", asset.uri, asset.name);
-      setStatus("Preparing the PSP core and local file now for a fast synchronized start…");
+      setStatus(t("pspPreparingCore"));
       await MoudieEmulatorModule.prepareFastLaunch("psp", asset.uri, asset.name);
       setGame({ name: asset.name, uri: asset.uri, fingerprint });
       setGameReady(false); setStartRequested(false);
-      setStatus("File, core, and local launch cache are ready. Tap READY after every active player selects the same file."); haptic.success();
-    } catch (error) { haptic.error(); Alert.alert(t("choosePspGameError"), error instanceof Error ? error.message : t("tryAgain")); setStatus("Choose a supported legal PSP file from this device."); }
+      setStatus(t("pspCacheReady")); haptic.success();
+    } catch (error) { haptic.error(); Alert.alert(t("choosePspGameError"), error instanceof Error ? error.message : t("tryAgain")); setStatus(t("pspPickSupported")); }
     finally { setPicking(false); }
   };
 
@@ -99,14 +100,14 @@ export default function PSPRoomScreen() {
     try {
       await setRealtimeRoomReady({ roomId: numericRoomId, memberId: credential.memberId, memberToken: credential.memberToken, isReady: true, fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
       socketRef.current?.emit("netplay:session-ready", { system: "psp", fingerprint: game.fingerprint, coreVersion: PSP_NETPLAY_CORE_VERSION });
-      setGameReady(true); setStatus("READY confirmed. The host can start when all active players use the same file."); haptic.success();
+      setGameReady(true); setStatus(t("pspReadyConfirmed")); haptic.success();
     } catch (error) { Alert.alert(t("readyError"), error instanceof Error ? error.message : t("tryAgain")); }
   };
 
   const requestSynchronizedStart = () => {
     if (!gameReady || assignedPlayer !== 1 || !remoteOnline) return;
     socketRef.current?.emit("netplay:session-start-request", { system: "psp" });
-    setStartRequested(true); setStatus("Checking both PSP files and the core before the shared start…");
+    setStartRequested(true); setStatus(t("pspCheckingBoth"));
   };
 
   const launchGame = async (withNetplay = false, settingsMode = false, synchronizedStart = false) => {
@@ -127,18 +128,18 @@ export default function PSPRoomScreen() {
   return (
     <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.topRow}><Pressable onPress={() => router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId ?? "") } })}><Text style={styles.back}>‹ BACK TO ROOM</Text></Pressable><Text style={styles.chip}>PSP ROOM</Text></View>
-        <Text style={styles.eyebrow}>PPSSPP CORE · ROOM NETPLAY</Text><Text style={styles.title}>PlayStation Portable</Text>
-        <Text style={styles.subtitle}>Each player selects the same legal local PSP file. The room verifies its fingerprint without uploading the game.</Text>
-        <View style={styles.preview}><Text style={styles.previewMark}>PSP</Text><Text style={styles.gameName}>{game?.name || "NO GAME SELECTED"}</Text><Text style={styles.previewText}>{assignedPlayer ? `PLAYER ${assignedPlayer} · ${roomConnected ? "ROOM CONNECTED" : "CONNECTING"}` : "SPECTATOR OR WAITING FOR A PLAYER SLOT"}</Text></View>
-        <Pressable onPress={pickGame} disabled={picking || launching} style={({ pressed }) => [styles.primary, (pressed || picking || launching) && styles.disabled]}>{picking ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{game ? "CHANGE PSP GAME" : "1. CHOOSE PSP GAME"}</Text>}</Pressable>
-        <View style={styles.settings}><Text style={styles.settingsTitle}>EMULATOR SETTINGS</Text><Text style={styles.settingsLabel}>PLAY ORIENTATION</Text><View style={styles.settingsRow}>{(["portrait", "landscape"] as const).map((value) => <Pressable key={value} onPress={() => setOrientation(value)} style={[styles.settingOption, orientation === value && styles.settingActive]}><Text style={styles.settingText}>{value.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.settingsLabel}>SCREEN RATIO</Text><View style={styles.settingsRow}>{(["fit", "4:3", "16:9"] as const).map((value) => <Pressable key={value} onPress={() => setAspectRatio(value)} style={[styles.settingOption, aspectRatio === value && styles.settingActive]}><Text style={styles.settingText}>{value === "fit" ? "FIT" : value}</Text></Pressable>)}</View><Text style={styles.settingsHint}>Configure a separate portrait and landscape layout before playing. Edit and resize controls never appear during the match.</Text>{game && <Pressable onPress={() => launchGame(false, true)} disabled={launching || picking} style={({ pressed }) => [styles.configure, (pressed || launching || picking) && styles.disabled]}><Text style={styles.configureText}>CONFIGURE {orientation.toUpperCase()} CONTROLS</Text></Pressable>}</View>
-        <View style={styles.statusCard}><Text style={styles.statusTitle}>NETPLAY STATUS</Text><Text style={styles.statusText}>{status}</Text></View>
-        {game && roomConnected && assignedPlayer && <Pressable onPress={markGameReady} disabled={gameReady || launching} style={({ pressed }) => [styles.readyButton, (pressed || gameReady || launching) && styles.disabled]}><Text style={styles.readyText}>{gameReady ? "READY CONFIRMED" : "2. READY"}</Text></Pressable>}
-        {canStart && <Pressable onPress={requestSynchronizedStart} style={({ pressed }) => [styles.launch, pressed && styles.disabled]}><Text style={styles.launchText}>3. START SYNCHRONIZED PSP SESSION</Text></Pressable>}
-        {startRequested && <Text style={styles.wait}>WAITING FOR THE OTHER PLAYER TO VERIFY THE SAME FILE…</Text>}
-        <View style={styles.note}><Text style={styles.noteTitle}>ROOM CONTROLS</Text><Text style={styles.noteText}>CHAT and MIC stay at the top of the player in landscape. Spectators remain in the room for voice and text chat.</Text></View>
-        {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title="PSP ROOM CHAT" /><RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} /></>}
+        <View style={styles.topRow}><Pressable onPress={() => router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId ?? "") } })}><Text style={styles.back}>‹ {t("fcBackToRoom")}</Text></Pressable><Text style={styles.chip}>{t("pspChip")}</Text></View>
+        <Text style={styles.eyebrow}>{t("pspEyebrow")}</Text><Text style={styles.title}>PlayStation Portable</Text>
+        <Text style={styles.subtitle}>{t("pspSubtitle")}</Text>
+        <View style={styles.preview}><Text style={styles.previewMark}>PSP</Text><Text style={styles.gameName}>{game?.name || t("fcNoGame")}</Text><Text style={styles.previewText}>{assignedPlayer ? `${t("rmPlayerShort")} ${assignedPlayer} · ${roomConnected ? t("pspRoomConnected") : t("pspConnecting")}` : t("pspSpectatorWait")}</Text></View>
+        <Pressable onPress={pickGame} disabled={picking || launching} style={({ pressed }) => [styles.primary, (pressed || picking || launching) && styles.disabled]}>{picking ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{game ? t("pspChangeGame") : t("pspChooseGame")}</Text>}</Pressable>
+        <View style={styles.settings}><Text style={styles.settingsTitle}>{t("lsSettingsTitle")}</Text><Text style={styles.settingsLabel}>{t("lsPlayOrientation")}</Text><View style={styles.settingsRow}>{(["portrait", "landscape"] as const).map((value) => <Pressable key={value} onPress={() => setOrientation(value)} style={[styles.settingOption, orientation === value && styles.settingActive]}><Text style={styles.settingText}>{value.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.settingsLabel}>{t("lsScreenRatio")}</Text><View style={styles.settingsRow}>{(["fit", "4:3", "16:9"] as const).map((value) => <Pressable key={value} onPress={() => setAspectRatio(value)} style={[styles.settingOption, aspectRatio === value && styles.settingActive]}><Text style={styles.settingText}>{value === "fit" ? "FIT" : value}</Text></Pressable>)}</View><Text style={styles.settingsHint}>{t("pspSettingsHint")}</Text>{game && <Pressable onPress={() => launchGame(false, true)} disabled={launching || picking} style={({ pressed }) => [styles.configure, (pressed || launching || picking) && styles.disabled]}><Text style={styles.configureText}>{orientation === "portrait" ? t("pspConfigurePortrait") : t("pspConfigureLandscape")}</Text></Pressable>}</View>
+        <View style={styles.statusCard}><Text style={styles.statusTitle}>{t("fcNetplayStatus")}</Text><Text style={styles.statusText}>{statusText}</Text></View>
+        {game && roomConnected && assignedPlayer && <Pressable onPress={markGameReady} disabled={gameReady || launching} style={({ pressed }) => [styles.readyButton, (pressed || gameReady || launching) && styles.disabled]}><Text style={styles.readyText}>{gameReady ? t("fcReadyConfirmed") : t("pspReady2")}</Text></Pressable>}
+        {canStart && <Pressable onPress={requestSynchronizedStart} style={({ pressed }) => [styles.launch, pressed && styles.disabled]}><Text style={styles.launchText}>{t("pspStartSession")}</Text></Pressable>}
+        {startRequested && <Text style={styles.wait}>{t("pspWaitingVerify")}</Text>}
+        <View style={styles.note}><Text style={styles.noteTitle}>{t("pspRoomControls")}</Text><Text style={styles.noteText}>{t("pspRoomControlsText")}</Text></View>
+        {Platform.OS !== "web" && <><RoomChat socket={roomConnected ? socketRef.current : null} title={`PSP · ${t("roomChat")}`} /><RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={Boolean(host)} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshotQuery.data?.members ?? []} /></>}
       </ScrollView>
     </ScreenContainer>
   );

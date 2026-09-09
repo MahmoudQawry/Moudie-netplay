@@ -40,6 +40,20 @@ export function canStartOnlineSession(system: RoomSystem, activePlayers: number)
   return activePlayers >= capacity.minPlayers && activePlayers <= capacity.maxPlayers;
 }
 
+export type SeatDecisionReason = "room-full" | "players-full" | "spectators-full";
+export type SeatDecision = { allowed: boolean; reason?: SeatDecisionReason };
+
+/** Pure seat-capacity decision so the DB transaction and tests share one source of truth.
+ * Host counts as an active player; the room is capped at maxPlayers + maxSpectators. */
+export function decideSeat(members: { role: string }[], requested: "player" | "spectator", capacity: RoomCapacity): SeatDecision {
+  const activePlayers = members.filter((member) => member.role === "host" || member.role === "player").length;
+  const spectators = members.filter((member) => member.role === "spectator").length;
+  if (activePlayers + spectators >= capacity.maxPlayers + capacity.maxSpectators) return { allowed: false, reason: "room-full" };
+  if (requested === "player" && activePlayers >= capacity.maxPlayers) return { allowed: false, reason: "players-full" };
+  if (requested === "spectator" && spectators >= capacity.maxSpectators) return { allowed: false, reason: "spectators-full" };
+  return { allowed: true };
+}
+
 export function activeSeatNumber(memberIds: number[], memberId: number, system: RoomSystem = "ps1"): number | null {
   const index = memberIds.indexOf(memberId);
   const maxPlayers = roomCapacityFor(system).maxPlayers;

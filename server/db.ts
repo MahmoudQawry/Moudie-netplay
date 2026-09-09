@@ -1,6 +1,7 @@
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { gameRooms, InsertUser, roomMembers, users } from "../drizzle/schema";
+import { decideSeat, roomCapacityFor, type RoomSystem } from "../shared/room-capacity";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -209,7 +210,7 @@ export async function addRoomMemberWithCapacity(input: {
   if (!db) throw new Error("خدمة الغرف غير متاحة حالياً.");
 
   return db.transaction(async (tx) => {
-    const [room] = await tx.select({ id: gameRooms.id, status: gameRooms.status })
+    const [room] = await tx.select({ id: gameRooms.id, status: gameRooms.status, system: gameRooms.system })
       .from(gameRooms)
       .where(eq(gameRooms.id, input.roomId))
       .limit(1)
@@ -217,16 +218,11 @@ export async function addRoomMemberWithCapacity(input: {
     if (!room || room.status !== "waiting") throw new Error("الغرفة غير متاحة للانضمام.");
 
     const members = await tx.select({ role: roomMembers.role }).from(roomMembers).where(eq(roomMembers.roomId, input.roomId));
-    const activePlayers = members.filter((member) => member.role === "host" || member.role === "player").length;
-    const spectators = members.filter((member) => member.role === "spectator").length;
-    if (activePlayers + spectators >= input.maxPlayers + input.maxSpectators) {
+    const decision = decideSeat(members, input.role, roomCapacityFor(room.system as RoomSystem));
+    if (!decision.allowed) {
+      if (decision.reason === "players-full") throw new Error(`مقاعد اللعب (${input.maxPlayers}) مكتملة. يمكنك الدخول كمشاهد.`);
+      if (decision.reason === "spectators-full") throw new Error(`مقاعد المشاهدة (${input.maxSpectators}) مكتملة.`);
       throw new Error(`الغرفة مكتملة: ${input.maxPlayers} لاعبين و${input.maxSpectators} مشاهدين كحد أقصى.`);
-    }
-    if (input.role === "player" && activePlayers >= input.maxPlayers) {
-      throw new Error(`مقاعد اللعب (${input.maxPlayers}) مكتملة. يمكنك الدخول كمشاهد.`);
-    }
-    if (input.role === "spectator" && spectators >= input.maxSpectators) {
-      throw new Error(`مقاعد المشاهدة (${input.maxSpectators}) مكتملة.`);
     }
 
     const result = await tx.insert(roomMembers).values({

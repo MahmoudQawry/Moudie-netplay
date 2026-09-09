@@ -22,16 +22,16 @@ const SYSTEMS: { id: SystemId; label: string; detail: string; icon: keyof typeof
 
 export default function CreateRoomScreen() {
   const { visibility } = useLocalSearchParams<{ visibility?: "public" | "private" }>();
+  const { t } = useLanguage();
   const isPublicLobby = visibility === "public";
   const [system, setSystem] = useState<SystemId>("ps1");
-  const [name, setName] = useState(isPublicLobby ? "Classic Lobby" : "Friends Session");
+  const [name, setName] = useState(isPublicLobby ? t("crDefaultLobbyName") : t("crDefaultSessionName"));
   const [hostName, setHostName] = useState("");
   const [creating, setCreating] = useState(false);
   const capacity = roomCapacityFor(system);
-  const { t } = useLanguage();
 
   const create = async () => {
-    const normalizedHost = hostName.trim() || (await getProfileName())?.trim() || "Player";
+    const normalizedHost = hostName.trim() || (await getProfileName())?.trim() || t("crFallbackHost");
     if (name.trim().length < 2) {
       haptic.error();
       Alert.alert(t("nameShort"), t("nameShortText"));
@@ -64,7 +64,7 @@ export default function CreateRoomScreen() {
 
         <View style={styles.panel}>
           <Text style={styles.panelLead}>{t("chooseEmulator")}</Text>
-          <Text style={styles.panelSub}>{isPublicLobby ? "Public lobbies are discoverable by system and open seats. Invite codes stay private." : "Choose the game system. Every system has a dedicated controller layout inside the player."}</Text>
+          <Text style={styles.panelSub}>{isPublicLobby ? t("crPublicSub") : t("crPrivateSub")}</Text>
           <View style={styles.systemGrid}>
             {SYSTEMS.map((item) => {
               const selected = system === item.id;
@@ -78,15 +78,15 @@ export default function CreateRoomScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>{isPublicLobby ? "LOBBY NAME" : "ROOM NAME"}</Text>
-          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder={isPublicLobby ? "Example: Weekend Retro" : "Example: Friday Night Race"} placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
+          <Text style={styles.label}>{isPublicLobby ? t("crLobbyName") : t("crRoomName")}</Text>
+          <TextInput value={name} onChangeText={setName} style={styles.input} placeholder={isPublicLobby ? t("crLobbyExample") : t("crRoomExample")} placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
           <Text style={styles.label}>{t("displayName")}</Text>
-          <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder="Visible to your friends" placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
+          <TextInput value={hostName} onChangeText={setHostName} style={styles.input} placeholder={t("crFriendsVisible")} placeholderTextColor="#827B97" returnKeyType="done" textAlign="left" />
 
           <View style={styles.capacityCard}>
-            <Text style={styles.capacityTitle}>ROOM CAPACITY · {capacity.maxPlayers + capacity.maxSpectators} MEMBERS</Text>
-            <Text style={styles.capacityText}>{capacity.minPlayers}-{capacity.maxPlayers} ACTIVE PLAYERS · {capacity.maxSpectators} SPECTATORS</Text>
-            <Text style={styles.capacityNote}>{system === "nes" ? "Famicom is limited to two active controller seats. The remaining room members can spectate, talk, and chat without occupying a controller seat." : "The room keeps active play and spectators separate to reduce synchronization pressure. Spectators can watch, talk, and chat without occupying a controller seat."}</Text>
+            <Text style={styles.capacityTitle}>{t("crCapacityTitle")} · {capacity.maxPlayers + capacity.maxSpectators} {t("crMembersShort")}</Text>
+            <Text style={styles.capacityText}>{capacity.minPlayers}-{capacity.maxPlayers} {t("crActivePlayersShort")} · {capacity.maxSpectators} {t("crSpectatorsShort")}</Text>
+            <Text style={styles.capacityNote}>{system === "nes" ? t("crNoteNes") : t("crNoteStd")}</Text>
           </View>
 
           <View style={styles.featureRow}>

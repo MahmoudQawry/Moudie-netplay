@@ -60,7 +60,7 @@ export default function JoinRoomScreen() {
           <Text style={styles.label}>{t("roomCode")}</Text>
           <TextInput value={joinCode} onChangeText={(value) => setJoinCode(value.toUpperCase().replace(/[^A-Z2-9]/g, "").slice(0, 6))} autoCapitalize="characters" autoCorrect={false} maxLength={6} style={styles.codeInput} placeholder="ABC123" placeholderTextColor="#756E87" textAlign="center" returnKeyType="done" />
           <Text style={styles.label}>{t("displayName")}</Text>
-          <TextInput value={displayName} onChangeText={setDisplayName} style={styles.input} placeholder="Example: Alex" placeholderTextColor="#827B97" textAlign="left" returnKeyType="done" />
+          <TextInput value={displayName} onChangeText={setDisplayName} style={styles.input} placeholder={t("lbExample")} placeholderTextColor="#827B97" textAlign="left" returnKeyType="done" />
 
           <Text style={styles.label}>{t("joinAs")}</Text>
           <View style={styles.roleRow}>
@@ -83,7 +83,7 @@ export default function JoinRoomScreen() {
             <MaterialCommunityIcons name="plus-circle-outline" size={18} color="#8DEBFF" /><Text style={styles.createPrivateText}>{t("createPrivateForFriends")}</Text>
           </Pressable>
         </View>
-        <View style={styles.helper}><MaterialCommunityIcons name="shield-lock-outline" size={18} color="#69E8FF" /><Text style={styles.helperText}>Your room code and membership stay on this device. Game files are never sent to the room.</Text></View>
+        <View style={styles.helper}><MaterialCommunityIcons name="shield-lock-outline" size={18} color="#69E8FF" /><Text style={styles.helperText}>{t("jrPrivacyNote")}</Text></View>
       </ScrollView>
     </ScreenContainer>
   );

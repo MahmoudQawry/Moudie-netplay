@@ -49,7 +49,7 @@ describe("Android startup splash safeguards", () => {
     const lobby = readProjectFile("app/(tabs)/index.tsx");
     const intro = readProjectFile("components/moudie-launch-intro.tsx");
     const recovery = readProjectFile("components/startup-recovery-boundary.tsx");
-    ["PS1", "PSP", "NES", "SEGA", "SKIP INTRO", "Moudie"].forEach((label) => expect(intro).toContain(label));
+    ["PS1", "PSP", "NES", "SEGA", "introSkip", "Moudie"].forEach((label) => expect(intro).toContain(label));
     expect(intro).toContain('import { MaterialCommunityIcons } from "@expo/vector-icons"');
     expect(intro).toContain("Animated.sequence([");
     expect(intro).toContain("Animated.stagger(110");

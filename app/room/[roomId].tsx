@@ -9,6 +9,7 @@ import { haptic } from "@/lib/haptics";
 import { createNetplaySocket } from "@/lib/netplay-socket";
 import { getRoomCredential, type RoomCredential } from "@/lib/room-storage";
 import { trpc } from "@/lib/trpc";
+import { useLanguage } from "@/lib/language";
 import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
 import { roomCapacityFor } from "@/shared/room-capacity";
 
@@ -19,6 +20,7 @@ type MediaToken = { configured: boolean; url?: string; roomName?: string; token?
 type RoomSystem = "nes" | "ps1" | "psp" | "sega";
 
 export default function RoomScreen() {
+  const { t } = useLanguage();
   const { roomId: rawRoomId } = useLocalSearchParams<{ roomId: string }>();
   const roomId = Number(rawRoomId);
   const [credential, setCredential] = useState<RoomCredential | null | undefined>(undefined);
@@ -39,7 +41,7 @@ export default function RoomScreen() {
         const next = await mediaTokenMutation.mutateAsync({ roomId, memberId: credential.memberId, memberToken: credential.memberToken });
         if (!cancelled) setMediaToken(next);
       } catch {
-        if (!cancelled) setMediaToken({ configured: false, message: "Voice channel setup failed. Confirm that LiveKit is configured on the room service." });
+        if (!cancelled) setMediaToken({ configured: false, message: t("voiceSetupFailed") });
       }
     };
     refresh();
@@ -71,7 +73,7 @@ export default function RoomScreen() {
   const share = async () => {
     if (!snapshot) return;
     haptic.light();
-    await Share.share({ message: `Join ${snapshot.room.name} on Classic Era by Moudie. Room code: ${snapshot.room.joinCode}` });
+    await Share.share({ message: `${t("rmSharePrefix")} ${snapshot.room.name} · ${t("rmShareCodeLabel")}: ${snapshot.room.joinCode}` });
   };
 
   if (credential === undefined || snapshotQuery.isLoading) {
@@ -80,9 +82,9 @@ export default function RoomScreen() {
   if (!credential || snapshotQuery.error || !snapshot) {
     return (
       <ScreenContainer className="items-center justify-center px-7">
-        <Text style={styles.errorTitle}>Could not open room</Text>
-        <Text style={styles.errorText}>This membership may be stored on another device, or the room is no longer available.</Text>
-        <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.outlineButton, pressed && styles.pressed]}><Text style={styles.outlineText}>RETURN TO LOBBY</Text></Pressable>
+        <Text style={styles.errorTitle}>{t("rmOpenError")}</Text>
+        <Text style={styles.errorText}>{t("rmOpenErrorText")}</Text>
+        <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.outlineButton, pressed && styles.pressed]}><Text style={styles.outlineText}>{t("rmReturnLobby")}</Text></Pressable>
       </ScreenContainer>
     );
   }
@@ -96,45 +98,45 @@ export default function RoomScreen() {
     <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.topRow}>
-          <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>‹ LOBBY</Text></Pressable>
-          <View style={styles.live}><View style={styles.liveDot} /><Text style={styles.liveText}>{snapshot.room.status === "waiting" ? "WAITING FOR PLAYERS" : "SESSION ACTIVE"}</Text></View>
+          <Pressable onPress={() => router.replace("/")} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>‹ {t("lobby")}</Text></Pressable>
+          <View style={styles.live}><View style={styles.liveDot} /><Text style={styles.liveText}>{snapshot.room.status === "waiting" ? t("rmWaiting") : t("rmActive")}</Text></View>
         </View>
         <Text style={styles.system}>{SYSTEM_LABEL[snapshot.room.system]}</Text>
         <Text style={styles.title}>{snapshot.room.name}</Text>
-        <Text style={styles.caption}>PRIVATE ROOM · {playerCount}/{capacity.maxPlayers} PLAYERS · {spectatorCount}/{capacity.maxSpectators} SPECTATORS</Text>
+        <Text style={styles.caption}>{t("rmPrivateRoom")} · {playerCount}/{capacity.maxPlayers} {t("lbPlayersShort")} · {spectatorCount}/{capacity.maxSpectators} {t("lbSpectatorsShort")}</Text>
 
         <View style={styles.codeCard}>
-          <Text style={styles.codeLabel}>INVITE CODE</Text>
+          <Text style={styles.codeLabel}>{t("rmInviteCode")}</Text>
           <Text style={styles.code}>{snapshot.room.joinCode}</Text>
-          <Pressable onPress={share} style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}><Text style={styles.shareText}>SHARE CODE</Text></Pressable>
+          <Pressable onPress={share} style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}><Text style={styles.shareText}>{t("rmShareCode")}</Text></Pressable>
         </View>
 
-        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ROOM MEMBERS</Text><Text style={styles.counter}>{playerCount}/{capacity.maxPlayers} PLAYERS · {spectatorCount}/{capacity.maxSpectators} SPECTATORS</Text></View>
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{t("rmMembers")}</Text><Text style={styles.counter}>{playerCount}/{capacity.maxPlayers} {t("lbPlayersShort")} · {spectatorCount}/{capacity.maxSpectators} {t("lbSpectatorsShort")}</Text></View>
         <View style={styles.memberList}>
           {snapshot.members.map((member) => (
             <View key={member.id} style={styles.member}>
               <View style={[styles.avatar, member.role === "host" && styles.avatarHost]}><Text style={styles.avatarText}>{member.displayName.slice(0, 1).toUpperCase()}</Text></View>
-              <View style={styles.memberText}><Text style={styles.memberName}>{member.displayName}{member.role === "host" ? " · PLAYER 1 · HOST" : member.role === "spectator" ? " · SPECTATOR" : ` · PLAYER ${snapshot.members.filter((entry) => entry.role !== "spectator").sort((left, right) => (left.role === "host" ? -1 : right.role === "host" ? 1 : left.id - right.id)).findIndex((entry) => entry.id === member.id) + 1}`}</Text><Text style={styles.memberStatus}>{member.role === "spectator" ? "Watching and talking in the room" : member.isReady ? "READY" : "Checking emulator"}</Text></View>
+              <View style={styles.memberText}><Text style={styles.memberName}>{member.displayName}{member.role === "host" ? ` · ${t("rmHostBadge")}` : member.role === "spectator" ? ` · ${t("spectator")}` : ` · ${t("rmPlayerShort")} ${snapshot.members.filter((entry) => entry.role !== "spectator").sort((left, right) => (left.role === "host" ? -1 : right.role === "host" ? 1 : left.id - right.id)).findIndex((entry) => entry.id === member.id) + 1}`}</Text><Text style={styles.memberStatus}>{member.role === "spectator" ? t("rmSpectatorStatus") : member.isReady ? t("libReady") : t("rmChecking")}</Text></View>
               <View style={[styles.readyDot, member.isReady ? styles.ready : styles.pending]} />
             </View>
           ))}
         </View>
 
         {Platform.OS !== "web" && <>
-          <RoomChat socket={roomConnected ? socketRef.current : null} title={`${SYSTEM_LABEL[snapshot.room.system]} ROOM CHAT`} />
+          <RoomChat socket={roomConnected ? socketRef.current : null} title={`${SYSTEM_LABEL[snapshot.room.system]} · ${t("roomChat")}`} />
           <RoomVoiceChat mediaToken={mediaToken} memberRole={roomMember?.role} />
         </>}
 
         {snapshot.room.system === "nes" ? (
-          <Pressable onPress={() => router.push({ pathname: "/famicom/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>ENTER FAMICOM SETTINGS</Text></Pressable>
+          <Pressable onPress={() => router.push({ pathname: "/famicom/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>{t("rmEnterFamicom")}</Text></Pressable>
         ) : snapshot.room.system === "ps1" ? (
-          <Pressable onPress={() => router.push({ pathname: "/ps1/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>ENTER PS1 SETTINGS</Text></Pressable>
+          <Pressable onPress={() => router.push({ pathname: "/ps1/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>{t("rmEnterPs1")}</Text></Pressable>
         ) : snapshot.room.system === "psp" ? (
-          <Pressable onPress={() => router.push({ pathname: "/psp/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>ENTER PSP SETTINGS</Text></Pressable>
+          <Pressable onPress={() => router.push({ pathname: "/psp/[roomId]", params: { roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>{t("rmEnterPsp")}</Text></Pressable>
         ) : snapshot.room.system === "sega" ? (
-          <Pressable onPress={() => router.push({ pathname: "/native/[system]/[roomId]", params: { system: snapshot.room.system, roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>ENTER {SYSTEM_LABEL[snapshot.room.system].toUpperCase()} SETTINGS</Text></Pressable>
+          <Pressable onPress={() => router.push({ pathname: "/native/[system]/[roomId]", params: { system: snapshot.room.system, roomId: String(roomId) } } as never)} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><Text style={styles.playText}>{t("rmEnterSega")}</Text></Pressable>
         ) : (
-          <View style={styles.nextCard}><Text style={styles.nextTitle}>PLAYER PREPARATION</Text><Text style={styles.nextText}>Text chat and voice are available while the {SYSTEM_LABEL[snapshot.room.system]} room player is prepared.</Text><Text style={styles.progress}>{readyCount} READY PLAYERS OUT OF {playerCount}</Text></View>
+          <View style={styles.nextCard}><Text style={styles.nextTitle}>{t("rmPrepTitle")}</Text><Text style={styles.nextText}>{t("rmPrepText")} {SYSTEM_LABEL[snapshot.room.system]}</Text><Text style={styles.progress}>{readyCount} {t("rmReadyOutOf")} {playerCount}</Text></View>
         )}
       </ScrollView>
     </ScreenContainer>

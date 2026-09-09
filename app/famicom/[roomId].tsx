@@ -87,7 +87,8 @@ export default function FamicomScreen() {
   const [gameReady, setGameReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isCompatLaunching, setIsCompatLaunching] = useState(false);
-  const [networkState, setNetworkState] = useState("Choose a game first");
+  const [networkState, setNetworkState] = useState<string | null>(null);
+  const networkStateText = networkState === null ? t("fcChooseGameFirst") : networkState;
   const [remoteVerified, setRemoteVerified] = useState(false);
   const [roomConnected, setRoomConnected] = useState(false);
   const [remoteOnline, setRemoteOnline] = useState(false);
@@ -185,7 +186,7 @@ export default function FamicomScreen() {
     );
     const verified = activePlayers.length >= 2 && matchingPlayers.length === activePlayers.length;
     setRemoteVerified(verified);
-    if (verified && roomConnected) setNetworkState("The other player verified the game file. The host can start the session.");
+    if (verified && roomConnected) setNetworkState(t("fcOtherVerified"));
   }, [fingerprint, roomConnected, snapshot]);
 
   const applyButton = (player: 1 | 2, button: string, isDown: boolean) => {
@@ -210,16 +211,16 @@ export default function FamicomScreen() {
       const snapshotValue = await AsyncStorage.getItem(localStateStorageKey);
       if (!snapshotValue) return;
       nativePlayerRef.current?.applyState(snapshotValue);
-      setNetworkState("The latest local game state was restored.");
+      setNetworkState(t("fcStateRestored"));
     } catch {
-      setNetworkState("Could not restore the latest local game state.");
+      setNetworkState(t("fcStateRestoreError"));
     }
   };
 
   const saveLocalState = () => {
     if (Platform.OS === "web" || !localStateStorageKey) return;
     nativePlayerRef.current?.requestState("local");
-    setNetworkState("Saving the game state locally…");
+    setNetworkState(t("fcStateSaving"));
   };
 
   const loadLocalState = async () => {
@@ -230,7 +231,7 @@ export default function FamicomScreen() {
       return;
     }
     nativePlayerRef.current?.applyState(snapshotValue);
-    setNetworkState("The latest local game state was restored.");
+    setNetworkState(t("fcStateRestored"));
     haptic.success();
   };
 
@@ -241,9 +242,9 @@ export default function FamicomScreen() {
       if (Platform.OS !== "web") await MoudieEmulatorModule.setFamicomFocusLandscape(startOrientation === "landscape");
       setFocusControlEditor(true);
       setFocusMode(true);
-      setNetworkState("Controller setup is open for this orientation. Drag or resize every control, then save and return to READY.");
+      setNetworkState(t("fcSetupOpen"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not open native focus mode.";
+      const message = error instanceof Error ? error.message : t("fcFocusErrorBody");
       setNetworkState(message);
       Alert.alert(t("focusModeError"), message);
       haptic.error();
@@ -276,21 +277,21 @@ export default function FamicomScreen() {
       try {
         browserRef.current?.nes.fromJSON(JSON.parse(message.snapshot));
         lastFamicomSyncRef.current = message.syncId;
-        setNetworkState("The host synchronized the game start.");
+        setNetworkState(t("fcHostSynced"));
       } catch {
-        setNetworkState("Could not synchronize the game start. Reload the file and reconnect to the room.");
+        setNetworkState(t("fcSyncError"));
       }
       return;
     }
     if (message.type !== "rom") return;
     const localFingerprint = fingerprintRef.current;
     if (message.fingerprint !== localFingerprint || message.coreVersion !== FAMICOM_CORE_VERSION) {
-      setNetworkState("The other player has a different game file or core version.");
+      setNetworkState(t("fcDifferentFile"));
       haptic.error();
       return;
     }
     setRemoteVerified(true);
-    setNetworkState("Game compatibility verified. The host can start the two-player session.");
+    setNetworkState(t("fcVerified"));
     haptic.success();
   };
 
@@ -300,11 +301,11 @@ export default function FamicomScreen() {
       const currentFingerprint = fingerprintRef.current;
       if (!currentFingerprint) return;
       connection.send({ type: "rom", fingerprint: currentFingerprint, coreVersion: FAMICOM_CORE_VERSION });
-      setNetworkState("Connected to the other device. Verifying the game file…");
+      setNetworkState(t("fcConnectedVerifying"));
     });
     connection.on("data", receiveMessage);
-    connection.on("close", () => setNetworkState("Connection to the other player was closed."));
-    connection.on("error", () => setNetworkState("Could not complete the connection. Check that the other player opened the Famicom player."));
+    connection.on("close", () => setNetworkState(t("fcConnectionClosed")));
+    connection.on("error", () => setNetworkState(t("fcConnectionError")));
   };
 
   const connectNativeNetplay = () => {
@@ -313,7 +314,7 @@ export default function FamicomScreen() {
       socketRef.current?.disconnect();
       setRoomConnected(false);
       setRemoteOnline(false);
-      setNetworkState("Connecting the room NetPlay channel…");
+      setNetworkState(t("fcConnectingChannel"));
       const socket = createNetplaySocket({ roomId, memberId: credential.memberId, memberToken: credential.memberToken });
       socketRef.current = socket;
       qualityStopRef.current?.();
@@ -321,20 +322,20 @@ export default function FamicomScreen() {
       qualityStopRef.current = startNetplayQualityMonitor(socket, setNetplayQuality);
       socket.on("connect", () => {
         setRoomConnected(true);
-        setNetworkState("The room channel is ready. Wait for the other player to join and choose the same file.");
+        setNetworkState(t("fcChannelReady"));
       });
       socket.on("connect_error", () => {
         setRoomConnected(false);
-        setNetworkState("Could not connect to the room. Check your internet connection and try again.");
+        setNetworkState(t("fcChannelError"));
       });
       socket.on("disconnect", () => {
         assignedPlayerRef.current = null;
         setAssignedPlayer(null);
         setRoomConnected(false);
         setRemoteOnline(false);
-        setNetworkState("Room connection interrupted; reconnecting automatically…");
+        setNetworkState(t("fcInterrupted"));
       });
-      socket.io.on("reconnect_attempt", () => setNetworkState("Reconnecting to the room…"));
+      socket.io.on("reconnect_attempt", () => setNetworkState(t("fcReconnecting")));
       socket.on("netplay:joined", (payload: { onlineMemberIds?: number[]; assignedPlayer?: 1 | 2 }) => {
         const player = payload.assignedPlayer === 1 ? 1 : payload.assignedPlayer === 2 ? 2 : null;
         assignedPlayerRef.current = player;
@@ -350,19 +351,19 @@ export default function FamicomScreen() {
         if (netplaySyncTimeoutRef.current) clearTimeout(netplaySyncTimeoutRef.current);
         if (assignedPlayerRef.current === 1) nativePlayerRef.current?.requestState("netplay");
         else socket.emit("netplay:state-request", { minimumSyncId: lastFamicomSyncRef.current });
-        setNetworkState("Game compatibility confirmed. Synchronizing the shared starting state…");
+        setNetworkState(t("fcSyncingStart"));
         netplaySyncTimeoutRef.current = setTimeout(() => {
-          setNetworkState("The shared Famicom state is delayed. Keep both players in the game, verify the same .nes file, then restart the room session.");
+          setNetworkState(t("fcSyncDelayed"));
         }, 12_000);
       });
       socket.on("netplay:session-start-refused", (payload: { message?: string }) => {
-        setNetworkState(payload.message ?? "Waiting for the other player to confirm the game file and core.");
+        setNetworkState(payload.message ?? t("fcWaitingConfirm"));
       });
       socket.on("netplay:famicom-waiting", (payload: { message?: string }) => {
-        setNetworkState(payload.message ?? "Synchronizing the shared Famicom state from the host…");
+        setNetworkState(payload.message ?? t("fcSyncingFromHost"));
       });
       socket.on("room:error", (payload: { message?: string }) => {
-        setNetworkState(payload.message ?? "The room reported an error while preparing Famicom NetPlay.");
+        setNetworkState(payload.message ?? t("fcRoomError"));
       });
       socket.on("netplay:input", (payload: { player: 1 | 2; button: ButtonName; isDown: boolean }) => {
         applyButtonRef.current(payload.player, payload.button, payload.isDown);
@@ -381,7 +382,7 @@ export default function FamicomScreen() {
         setChatMessages((current) => [...current.slice(-39), message]);
       });
     } catch (error) {
-      setNetworkState(error instanceof Error ? error.message : "Could not prepare the NetPlay connection.");
+      setNetworkState(error instanceof Error ? error.message : t("fcNetplayPrepareError"));
     }
   };
 
@@ -413,7 +414,7 @@ export default function FamicomScreen() {
         setRomBase64(base64);
         setGameReady(false);
         setRemoteVerified(false);
-        setNetworkState("Loading the game locally on this device…");
+        setNetworkState(t("fcLoadingLocal"));
         haptic.success();
         return;
       }
@@ -431,10 +432,10 @@ export default function FamicomScreen() {
       setRomName(asset.name);
       setGameReady(false);
       setRemoteVerified(false);
-      setNetworkState("The game is running locally. Connect the other player after they choose the same game.");
+      setNetworkState(t("fcRunningLocal"));
       haptic.success();
     } catch (error) {
-      setNetworkState("Could not run this file. Try another compatible .nes file.");
+      setNetworkState(t("fcFileError"));
       haptic.error();
       Alert.alert(t("startGameError"), error instanceof Error ? error.message : t("famicomGameError"));
     } finally {
@@ -452,14 +453,14 @@ export default function FamicomScreen() {
       connectionRef.current?.close();
       peerRef.current?.destroy();
       setRemoteVerified(false);
-      setNetworkState(isHost ? "Preparing the room connection…" : "Connecting to the host…");
+      setNetworkState(isHost ? t("fcPreparingRoom") : t("fcConnectingHost"));
       const peerModule = await import("peerjs");
       const PeerConstructor = peerModule.default;
       const peer = (isHost ? new PeerConstructor(peerIdForRoom(roomId)) : new PeerConstructor()) as unknown as PeerInstance;
       peerRef.current = peer;
-      peer.on("error", () => setNetworkState(isHost ? "Could not reserve the room connection. Try again in a minute." : "The host is not ready yet. Ask them to connect first."));
+      peer.on("error", () => setNetworkState(isHost ? t("fcReserveError") : t("fcHostNotReady")));
       if (isHost) {
-        peer.on("open", () => setNetworkState("The room connection is ready. Wait for the second player to connect."));
+        peer.on("open", () => setNetworkState(t("fcRoomReady")));
         peer.on("connection", (incoming) => attachConnection(incoming as Connection));
       } else {
         peer.on("open", () => {
@@ -468,7 +469,7 @@ export default function FamicomScreen() {
         });
       }
     } catch {
-      setNetworkState("Could not start NetPlay on this connection. Update the browser and try again.");
+      setNetworkState(t("fcNetplayStartError"));
       haptic.error();
     }
   };
@@ -486,7 +487,7 @@ export default function FamicomScreen() {
       });
       socketRef.current?.emit("netplay:session-ready", { system: "nes", fingerprint, coreVersion: FAMICOM_CORE_VERSION });
       setGameReady(true);
-      setNetworkState("Your game file is marked ready. Wait for the other player, then the host starts the session.");
+      setNetworkState(t("fcMarkedReady"));
       haptic.success();
     } catch (error) {
       haptic.error();
@@ -501,7 +502,7 @@ export default function FamicomScreen() {
       if (Platform.OS !== "web") {
         if (!socketRef.current?.connected || !remoteOnline) throw new Error(t("waitOtherPlayer"));
         socketRef.current.emit("netplay:session-start-request", { system: "nes" });
-        setNetworkState("Verifying the file and core on both devices before starting…");
+        setNetworkState(t("fcVerifyingBoth"));
         haptic.success();
         return;
       }
@@ -510,7 +511,7 @@ export default function FamicomScreen() {
         throw new Error(t("connectionIncomplete"));
       }
       connectionRef.current.send({ type: "state", snapshot: JSON.stringify(initialState), syncId: ++famicomSyncSequenceRef.current });
-      setNetworkState("The two-player session is active. The host is Player 1 and the guest is Player 2.");
+      setNetworkState(t("fcSessionActive"));
       haptic.success();
     } catch (error) {
       Alert.alert(t("sessionStartError"), error instanceof Error ? error.message : t("waitPlayersReady"));
@@ -521,7 +522,7 @@ export default function FamicomScreen() {
     if (isDown && Platform.OS !== "web") nativePlayerRef.current?.resumeAudio();
     const player = Platform.OS === "web" ? (isHost ? 1 : 2) : (assignedPlayer ?? (romBase64 ? 1 : null));
     if (!player) {
-      if (isDown) setNetworkState("Confirming this device role in the room. Wait a moment, then press the button again.");
+      if (isDown) setNetworkState(t("fcConfirmingRole"));
       return;
     }
     const sendTransitions = (transitions: { button: ButtonName; isDown: boolean }[]) => {
@@ -552,7 +553,7 @@ export default function FamicomScreen() {
     if (isDown && Platform.OS !== "web") nativePlayerRef.current?.resumeAudio();
     const player = Platform.OS === "web" ? (isHost ? 1 : 2) : (assignedPlayer ?? (romBase64 ? 1 : null));
     if (!player) {
-      if (isDown) setNetworkState("Confirming this device role in the room. Wait a moment, then press the button again.");
+      if (isDown) setNetworkState(t("fcConfirmingRole"));
       return;
     }
     applyButton(player, button, isDown);
@@ -578,21 +579,21 @@ export default function FamicomScreen() {
       <StatusBar style="light" hidden={focusMode} animated />
       <ScrollView contentContainerStyle={[styles.content, focusMode && styles.focusContent]}>
         <View style={styles.topActions}>
-          <Pressable onPress={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>{focusMode ? "SAVE & RETURN TO EMULATOR SETTINGS" : "‹ BACK TO ROOM"}</Text></Pressable>
-          {focusMode ? (!gameActive && <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={({ pressed }) => [styles.focusButton, focusControlEditor && styles.focusButtonActive, pressed && styles.pressed]}><Text style={styles.focusButtonText}>{focusControlEditor ? "SAVE CONTROLS" : "CONFIGURE CONTROLS"}</Text></Pressable>) : romName && <Pressable onPress={openFamicomControllerSetup} disabled={isCompatLaunching} style={({ pressed }) => [styles.focusButton, (pressed || isCompatLaunching) && styles.pressed]}><Text style={styles.focusButtonText}>{isCompatLaunching ? "OPENING SETTINGS…" : "CONTROLLER SETTINGS"}</Text></Pressable>}
+          <Pressable onPress={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><Text style={styles.backText}>{focusMode ? t("fcSaveReturn") : t("fcBackToRoom")}</Text></Pressable>
+          {focusMode ? (!gameActive && <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={({ pressed }) => [styles.focusButton, focusControlEditor && styles.focusButtonActive, pressed && styles.pressed]}><Text style={styles.focusButtonText}>{focusControlEditor ? t("fcSaveControls") : t("fcConfigureControls")}</Text></Pressable>) : romName && <Pressable onPress={openFamicomControllerSetup} disabled={isCompatLaunching} style={({ pressed }) => [styles.focusButton, (pressed || isCompatLaunching) && styles.pressed]}><Text style={styles.focusButtonText}>{isCompatLaunching ? t("fcOpeningSettings") : t("fcControllerSettings")}</Text></Pressable>}
         </View>
-        {!focusMode && <><Text style={styles.eyebrow}>FAMICOM · NETPLAY</Text><Text style={styles.title}>GAME PLAYER</Text><Text style={styles.subtitle}>Choose the same .nes file on both devices. The file stays local and is never uploaded or shared by Moudie NetPlay.</Text></>}
+        {!focusMode && <><Text style={styles.eyebrow}>{t("fcEyebrow")}</Text><Text style={styles.title}>{t("fcGamePlayer")}</Text><Text style={styles.subtitle}>{t("fcSubtitle")}</Text></>}
 
         <View {...screenPanResponder.panHandlers} style={[styles.emulatorFrame, focusMode && styles.focusFrame, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9, minHeight: undefined }, { transform: [{ translateX: screenLayout.x }, { translateY: screenLayout.y }, { scale: screenLayout.scale }] }]}>
-          {Platform.OS === "web" ? <View ref={mountRef as never} style={[styles.webMount, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9 }]} /> : romBase64 ? <FamicomNativePlayer ref={nativePlayerRef} romBase64={romBase64} onStatus={setNetworkState} onReady={restoreLocalState} onState={(snapshotValue, requestId) => { if (localStateStorageKey) AsyncStorage.setItem(localStateStorageKey, snapshotValue).catch(() => undefined); if (requestId === "netplay" && assignedPlayer === 1) socketRef.current?.emit("netplay:state", { snapshot: snapshotValue, syncId: ++famicomSyncSequenceRef.current }); if (requestId === "local") setNetworkState("Game state saved locally."); }} /> : null}
-          {!romName && <View style={styles.emptyScreen}><Text style={styles.emptyIcon}>▦</Text><Text style={styles.emptyText}>NO GAME SELECTED</Text></View>}
-          {Platform.OS !== "web" && romName && (gameActive || localNativeGameActive || focusControlEditor) && <DraggableHudControls system="famicom" editable={focusControlEditor} microphoneMuted={inGameMicMuted} speakerEnabled={inGameSpeakerEnabled} onToggleChat={() => setInGameChatOpen((open) => !open)} onToggleMicrophone={() => { const muted = !inGameMicMuted; setInGameMicMuted(muted); voiceChatRef.current?.setMicrophoneEnabled(!muted); }} onToggleSpeaker={() => { const enabled = !inGameSpeakerEnabled; setInGameSpeakerEnabled(enabled); voiceChatRef.current?.setSpeakerEnabled(enabled); }} onSave={saveLocalState} onLoad={() => { void loadLocalState(); }} onEditLayout={() => { setFocusMode(true); setFocusControlEditor(true); setNetworkState("Edit mode: drag or resize the controls, HUD, and game screen for this orientation, then save and return."); }} onExit={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} />}
+          {Platform.OS === "web" ? <View ref={mountRef as never} style={[styles.webMount, screenAspect !== "fit" && { aspectRatio: screenAspect === "4:3" ? 4 / 3 : 16 / 9 }]} /> : romBase64 ? <FamicomNativePlayer ref={nativePlayerRef} romBase64={romBase64} onStatus={setNetworkState} onReady={restoreLocalState} onState={(snapshotValue, requestId) => { if (localStateStorageKey) AsyncStorage.setItem(localStateStorageKey, snapshotValue).catch(() => undefined); if (requestId === "netplay" && assignedPlayer === 1) socketRef.current?.emit("netplay:state", { snapshot: snapshotValue, syncId: ++famicomSyncSequenceRef.current }); if (requestId === "local") setNetworkState(t("fcStateSaved")); }} /> : null}
+          {!romName && <View style={styles.emptyScreen}><Text style={styles.emptyIcon}>▦</Text><Text style={styles.emptyText}>{t("fcNoGame")}</Text></View>}
+          {Platform.OS !== "web" && romName && (gameActive || localNativeGameActive || focusControlEditor) && <DraggableHudControls system="famicom" editable={focusControlEditor} microphoneMuted={inGameMicMuted} speakerEnabled={inGameSpeakerEnabled} onToggleChat={() => setInGameChatOpen((open) => !open)} onToggleMicrophone={() => { const muted = !inGameMicMuted; setInGameMicMuted(muted); voiceChatRef.current?.setMicrophoneEnabled(!muted); }} onToggleSpeaker={() => { const enabled = !inGameSpeakerEnabled; setInGameSpeakerEnabled(enabled); voiceChatRef.current?.setSpeakerEnabled(enabled); }} onSave={saveLocalState} onLoad={() => { void loadLocalState(); }} onEditLayout={() => { setFocusMode(true); setFocusControlEditor(true); setNetworkState(t("fcEditMode")); }} onExit={() => focusMode ? setFocusMode(false) : router.replace({ pathname: "/room/[roomId]", params: { roomId: String(roomId) } })} />}
           {Platform.OS !== "web" && gameActive && inGameChatOpen && <View style={styles.inGameChatOverlay}><TextInput value={chatDraft} onChangeText={setChatDraft} placeholder={t("writeMessage")} placeholderTextColor="#A7B7C7" style={styles.inGameChatInput} returnKeyType="send" onSubmitEditing={() => { sendChat(); setInGameChatOpen(false); }} /><Pressable onPress={() => { sendChat(); setInGameChatOpen(false); }} style={styles.inGameChatSend}><Text style={styles.inGameChatSendText}>{t("send")}</Text></Pressable></View>}
         </View>
         {focusMode && romName && <View style={[styles.focusPortraitControls, !controlsEnabled && styles.controlsMuted]}>
-          {focusControlEditor && <View style={{ position: "absolute", top: 8, right: 8, zIndex: 6, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(8, 18, 31, 0.9)", borderWidth: 1, borderColor: "#4A7895", borderRadius: 11, padding: 5 }}><Text style={{ color: "#CFEAFF", fontSize: 9, fontWeight: "900", marginHorizontal: 2 }}>SCREEN</Text><Pressable onPress={() => adjustScreenScale(-0.05)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#1B4965", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>−</Text></Pressable><Pressable onPress={() => adjustScreenScale(0.05)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#1B4965", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>+</Text></Pressable></View>}
+          {focusControlEditor && <View style={{ position: "absolute", top: 8, right: 8, zIndex: 6, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(8, 18, 31, 0.9)", borderWidth: 1, borderColor: "#4A7895", borderRadius: 11, padding: 5 }}><Text style={{ color: "#CFEAFF", fontSize: 9, fontWeight: "900", marginHorizontal: 2 }}>{t("fcScreen")}</Text><Pressable onPress={() => adjustScreenScale(-0.05)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#1B4965", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>−</Text></Pressable><Pressable onPress={() => adjustScreenScale(0.05)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "#1B4965", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "900" }}>+</Text></Pressable></View>}
           <View style={styles.focusTelemetry}>
-            <Text style={styles.focusMetric}>FPS {fps ?? "—"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>{roomConnected ? formatNetplayQuality(netplayQuality) : "LOCAL"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>P{assignedPlayer ?? 1}</Text>
+            <Text style={styles.focusMetric}>FPS {fps ?? "—"}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>{roomConnected ? formatNetplayQuality(netplayQuality) : t("fcLocal")}</Text><Text style={styles.focusMetricDivider}>·</Text><Text style={styles.focusMetric}>P{assignedPlayer ?? 1}</Text>
           </View>
           <CustomizableController
             system="famicom"
@@ -603,20 +604,20 @@ export default function FamicomScreen() {
             }}
           />
         </View>}
-        {!focusMode && <><Pressable onPress={pickRom} disabled={loading || isCompatLaunching} style={({ pressed }) => [styles.pickButton, (pressed || loading || isCompatLaunching) && styles.pressed]}>{loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.pickText}>{romName ? "CHANGE GAME FILE" : "1. CHOOSE .NES FILE"}</Text>}</Pressable>{romName && <Text style={styles.romName}>LOCAL FILE: {romName}</Text>}{romName && <View style={styles.startOptions}><Text style={styles.startOptionsTitle}>EMULATOR SCREEN & CONTROLS</Text><Text style={styles.startOptionsLabel}>ORIENTATION</Text><View style={styles.optionRow}>{(["portrait", "landscape"] as const).map((option) => <Pressable key={option} onPress={() => setStartOrientation(option)} style={[styles.optionButton, startOrientation === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.startOptionsLabel}>SCREEN RATIO</Text><View style={styles.optionRow}>{(["fit", "4:3", "16:9"] as const).map((option) => <Pressable key={option} onPress={() => setScreenAspect(option)} style={[styles.optionButton, screenAspect === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option === "fit" ? "FIT" : option}</Text></Pressable>)}</View><Pressable onPress={openFamicomControllerSetup} style={styles.confirmStartButton}><Text style={styles.confirmStartText}>CONFIGURE CONTROLS & SCREEN</Text></Pressable></View>}{romName && Platform.OS !== "web" && <View style={[styles.utilityRow, physicalHorizontalRow]}><Pressable onPress={saveLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>LOCAL SAVE</Text></Pressable><Pressable onPress={loadLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>LOAD SAVE</Text></Pressable></View>}</>}
+        {!focusMode && <><Pressable onPress={pickRom} disabled={loading || isCompatLaunching} style={({ pressed }) => [styles.pickButton, (pressed || loading || isCompatLaunching) && styles.pressed]}>{loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.pickText}>{romName ? t("fcChangeFile") : t("fcChooseNes")}</Text>}</Pressable>{romName && <Text style={styles.romName}>{t("fcLocalFile")}: {romName}</Text>}{romName && <View style={styles.startOptions}><Text style={styles.startOptionsTitle}>{t("fcScreenControls")}</Text><Text style={styles.startOptionsLabel}>{t("lsPlayOrientation")}</Text><View style={styles.optionRow}>{(["portrait", "landscape"] as const).map((option) => <Pressable key={option} onPress={() => setStartOrientation(option)} style={[styles.optionButton, startOrientation === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option.toUpperCase()}</Text></Pressable>)}</View><Text style={styles.startOptionsLabel}>{t("lsScreenRatio")}</Text><View style={styles.optionRow}>{(["fit", "4:3", "16:9"] as const).map((option) => <Pressable key={option} onPress={() => setScreenAspect(option)} style={[styles.optionButton, screenAspect === option && styles.optionButtonActive]}><Text style={styles.optionText}>{option === "fit" ? "FIT" : option}</Text></Pressable>)}</View><Pressable onPress={openFamicomControllerSetup} style={styles.confirmStartButton}><Text style={styles.confirmStartText}>{t("fcConfigureScreen")}</Text></Pressable></View>}{romName && Platform.OS !== "web" && <View style={[styles.utilityRow, physicalHorizontalRow]}><Pressable onPress={saveLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>{t("fcLocalSave")}</Text></Pressable><Pressable onPress={loadLocalState} style={({ pressed }) => [styles.minorButton, pressed && styles.pressed]}><Text style={styles.minorText}>{t("fcLoadSave")}</Text></Pressable></View>}</>}
 
-        {!focusMode && <><View style={styles.statusCard}><Text style={styles.statusTitle}>NETPLAY STATUS</Text><Text style={styles.statusText}>{networkState}</Text><Text style={styles.progress}>{readyCount} READY OUT OF {snapshot?.members.length ?? 0}</Text></View>
-        {romName && (Platform.OS === "web" ? !remoteVerified : !roomConnected) && <Pressable onPress={connectNetPlay} style={({ pressed }) => [styles.connectButton, pressed && styles.pressed]}><Text style={styles.connectText}>{Platform.OS === "web" ? (isHost ? "2. PREPARE ROOM CONNECTION" : "2. CONNECT TO OTHER PLAYER") : "2. CONNECT NETPLAY CHANNEL"}</Text></Pressable>}
-        {Platform.OS !== "web" && romName && roomConnected && <Text style={styles.connectionLine}>{remoteOnline ? "● OTHER PLAYER CONNECTED" : "○ WAITING FOR OTHER PLAYER"}</Text>}
-        {Platform.OS !== "web" && romName && roomConnected && <Pressable onPress={markGameReady} disabled={gameReady} style={({ pressed }) => [styles.startButton, (pressed || gameReady) && styles.pressed]}><Text style={styles.startText}>{gameReady ? "READY CONFIRMED" : "3. READY"}</Text></Pressable>}
-        {canStart && <Pressable onPress={startSession} style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}><Text style={styles.startText}>4. START SYNCHRONIZED SESSION</Text></Pressable>}
-        {gameReady && remoteVerified && (Platform.OS === "web" ? !isHost : assignedPlayer === 2) && <Text style={styles.waitText}>VERIFIED. WAIT FOR THE HOST TO START THE SESSION.</Text>}</>}
+        {!focusMode && <><View style={styles.statusCard}><Text style={styles.statusTitle}>{t("fcNetplayStatus")}</Text><Text style={styles.statusText}>{networkStateText}</Text><Text style={styles.progress}>{readyCount} {t("rmReadyOutOf")} {snapshot?.members.length ?? 0}</Text></View>
+        {romName && (Platform.OS === "web" ? !remoteVerified : !roomConnected) && <Pressable onPress={connectNetPlay} style={({ pressed }) => [styles.connectButton, pressed && styles.pressed]}><Text style={styles.connectText}>{Platform.OS === "web" ? (isHost ? t("fcPrepareHost") : t("fcConnectOther")) : t("fcConnectChannel")}</Text></Pressable>}
+        {Platform.OS !== "web" && romName && roomConnected && <Text style={styles.connectionLine}>{remoteOnline ? `● ${t("fcOtherConnected")}` : `○ ${t("fcWaitingOther")}`}</Text>}
+        {Platform.OS !== "web" && romName && roomConnected && <Pressable onPress={markGameReady} disabled={gameReady} style={({ pressed }) => [styles.startButton, (pressed || gameReady) && styles.pressed]}><Text style={styles.startText}>{gameReady ? t("fcReadyConfirmed") : t("fcReady3")}</Text></Pressable>}
+        {canStart && <Pressable onPress={startSession} style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}><Text style={styles.startText}>{t("fcStartSession")}</Text></Pressable>}
+        {gameReady && remoteVerified && (Platform.OS === "web" ? !isHost : assignedPlayer === 2) && <Text style={styles.waitText}>{t("fcVerifiedWait")}</Text>}</>}
 
-        {!focusMode && Platform.OS !== "web" && romName && <View style={styles.chatCard}><Text style={styles.chatTitle}>{t("roomChat")}</Text><View style={styles.chatMessages}>{chatMessages.length ? chatMessages.slice(-4).map((message) => <Text key={message.id} style={styles.chatMessage}><Text style={styles.chatSender}>{message.displayName}: </Text>{message.text}</Text>) : <Text style={styles.chatEmpty}>{roomConnected ? "Write a message to the other player." : "Connect the NetPlay channel to enable chat."}</Text>}</View><View style={styles.chatComposer}><TextInput value={chatDraft} onChangeText={setChatDraft} editable={roomConnected} placeholder={t("writeMessage")} placeholderTextColor="#71839A" style={styles.chatInput} textAlign="left" returnKeyType="send" onSubmitEditing={sendChat} /><Pressable onPress={sendChat} disabled={!roomConnected || !chatDraft.trim()} style={({ pressed }) => [styles.chatSend, (pressed || !roomConnected || !chatDraft.trim()) && styles.chatSendDisabled]}><Text style={styles.chatSendText}>{t("send")}</Text></Pressable></View></View>}
+        {!focusMode && Platform.OS !== "web" && romName && <View style={styles.chatCard}><Text style={styles.chatTitle}>{t("roomChat")}</Text><View style={styles.chatMessages}>{chatMessages.length ? chatMessages.slice(-4).map((message) => <Text key={message.id} style={styles.chatMessage}><Text style={styles.chatSender}>{message.displayName}: </Text>{message.text}</Text>) : <Text style={styles.chatEmpty}>{roomConnected ? t("fcChatHint") : t("connectChat")}</Text>}</View><View style={styles.chatComposer}><TextInput value={chatDraft} onChangeText={setChatDraft} editable={roomConnected} placeholder={t("writeMessage")} placeholderTextColor="#71839A" style={styles.chatInput} textAlign="left" returnKeyType="send" onSubmitEditing={sendChat} /><Pressable onPress={sendChat} disabled={!roomConnected || !chatDraft.trim()} style={({ pressed }) => [styles.chatSend, (pressed || !roomConnected || !chatDraft.trim()) && styles.chatSendDisabled]}><Text style={styles.chatSendText}>{t("send")}</Text></Pressable></View></View>}
         {!focusMode && Platform.OS !== "web" && romName && <RoomVoiceChat ref={voiceChatRef} socket={roomConnected ? socketRef.current : null} isHost={assignedPlayer === 1} remoteOnline={remoteOnline} memberId={credential?.memberId} members={snapshot?.members ?? []} />}
 
-        {!focusMode && romName && <View style={[styles.controls, !controlsEnabled && styles.controlsMuted]}><View style={styles.controllerHeader}><Text style={styles.controlLabel}>{localNativeGameActive ? `LOCAL CONTROLS · PLAYER ${assignedPlayer ?? 1}` : gameActive ? `CONTROLS · PLAYER ${Platform.OS === "web" ? (isHost ? 1 : 2) : assignedPlayer ?? 1}` : "CONTROLS APPEAR AFTER THE HOST STARTS PLAY"}</Text>{!gameActive && <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={styles.editorButton}><Text style={styles.editorButtonText}>{focusControlEditor ? "SAVE CONTROLS" : "CONFIGURE CONTROLS"}</Text></Pressable>}</View><CustomizableController system="famicom" editable={focusControlEditor && !gameActive} onButtonChange={(button, isDown) => { if (button === "UP" || button === "DOWN" || button === "LEFT" || button === "RIGHT" || button === "A" || button === "B" || button === "START" || button === "SELECT") setLocalButton(button, isDown); }} /><Pressable onPress={() => Platform.OS === "web" ? browserRef.current?.nes.reset() : nativePlayerRef.current?.reset()} style={({ pressed }) => [styles.resetButton, pressed && styles.pressed]}><Text style={styles.resetText}>RESET GAME</Text></Pressable></View>}
-        {!focusMode && <View style={styles.warning}><Text style={styles.warningTitle}>HOW TO PLAY</Text><Text style={styles.warningText}>{Platform.OS === "web" ? "Browser NetPlay requires a stable connection and the same game file on both sides." : "Choose the same .nes file, connect the NetPlay channel on both devices, then let the host start the session. Host controls are Player 1 and guest controls are Player 2."}</Text></View>}
+        {!focusMode && romName && <View style={[styles.controls, !controlsEnabled && styles.controlsMuted]}><View style={styles.controllerHeader}><Text style={styles.controlLabel}>{localNativeGameActive ? `${t("fcLocalControls")} · ${t("rmPlayerShort")} ${assignedPlayer ?? 1}` : gameActive ? `${t("fcControls")} · ${t("rmPlayerShort")} ${Platform.OS === "web" ? (isHost ? 1 : 2) : assignedPlayer ?? 1}` : t("fcControlsAfterStart")}</Text>{!gameActive && <Pressable onPress={() => setFocusControlEditor((value) => !value)} style={styles.editorButton}><Text style={styles.editorButtonText}>{focusControlEditor ? t("fcSaveControls") : t("fcConfigureControls")}</Text></Pressable>}</View><CustomizableController system="famicom" editable={focusControlEditor && !gameActive} onButtonChange={(button, isDown) => { if (button === "UP" || button === "DOWN" || button === "LEFT" || button === "RIGHT" || button === "A" || button === "B" || button === "START" || button === "SELECT") setLocalButton(button, isDown); }} /><Pressable onPress={() => Platform.OS === "web" ? browserRef.current?.nes.reset() : nativePlayerRef.current?.reset()} style={({ pressed }) => [styles.resetButton, pressed && styles.pressed]}><Text style={styles.resetText}>{t("fcResetGame")}</Text></Pressable></View>}
+        {!focusMode && <View style={styles.warning}><Text style={styles.warningTitle}>{t("fcHowToPlay")}</Text><Text style={styles.warningText}>{Platform.OS === "web" ? t("fcHowWeb") : t("fcHowNative")}</Text></View>}
       </ScrollView>
     </ScreenContainer>
   );

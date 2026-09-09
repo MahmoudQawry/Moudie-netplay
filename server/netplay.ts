@@ -24,7 +24,9 @@ type InputPayload = { button?: unknown; isDown?: unknown; frame?: unknown };
 type ChatPayload = { text?: unknown };
 type StatePayload = { snapshot?: unknown; syncId?: unknown };
 type SignalPayload = { targetMemberId?: unknown; signal?: unknown };
-type VoiceStatusPayload = { microphoneEnabled?: unknown; speakerEnabled?: unknown };
+type VoiceStatusPayload = { microphoneEnabled?: unknown; speakerEnabled?: unknown; voiceMode?: unknown; voiceChannel?: unknown };
+const VOICE_MODES = new Set(["ptt", "open"]);
+const VOICE_CHANNELS = new Set(["room", "team"]);
 type SessionReadyPayload = { system?: unknown; fingerprint?: unknown; coreVersion?: unknown };
 type SessionStartPayload = { system?: unknown };
 type Ps1ReadyPayload = { fingerprint?: unknown; coreVersion?: unknown };
@@ -229,10 +231,14 @@ export function registerNetplayServer(server: HttpServer) {
     });
 
     socket.on("netplay:voice-status", (payload: VoiceStatusPayload) => {
+      const voiceMode = typeof payload?.voiceMode === "string" && VOICE_MODES.has(payload.voiceMode) ? payload.voiceMode : undefined;
+      const voiceChannel = typeof payload?.voiceChannel === "string" && VOICE_CHANNELS.has(payload.voiceChannel) ? payload.voiceChannel : undefined;
       socket.to(channel).emit("netplay:voice-status", {
         memberId: session.memberId,
         microphoneEnabled: Boolean(payload?.microphoneEnabled),
         speakerEnabled: Boolean(payload?.speakerEnabled),
+        voiceMode,
+        voiceChannel,
       });
     });
 

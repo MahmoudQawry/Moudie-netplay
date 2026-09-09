@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } fro
 
 import { CustomizableController } from "@/components/customizable-controller";
 import { CustomizableGameScreen } from "@/components/customizable-game-screen";
+import { useLanguage } from "@/lib/language";
 
 type SystemId = "famicom" | "ps1" | "psp" | "sega";
 
@@ -21,6 +22,7 @@ function isSystemId(value: string | string[] | undefined): value is SystemId {
 }
 
 export default function LocalPlayScreen() {
+  const { t } = useLanguage();
   const { system: rawSystem, mode } = useLocalSearchParams<{ system?: string; mode?: string }>();
   const system: SystemId = isSystemId(rawSystem) ? rawSystem : "famicom";
   const meta = systemMeta[system];
@@ -39,7 +41,7 @@ export default function LocalPlayScreen() {
         <CustomizableGameScreen system={system} editable={editing} orientation={orientation} />
 
         <View pointerEvents="box-none" style={styles.topOverlay}>
-          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]} accessibilityLabel="Back">
+          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]} accessibilityLabel={t("commonBack")}>
             <MaterialCommunityIcons name="arrow-left" size={21} color="#FFFFFF" />
           </Pressable>
           <View style={styles.telemetry}>
@@ -50,20 +52,20 @@ export default function LocalPlayScreen() {
             <View style={styles.stat}><Text style={styles.statLabel}>PLAYER</Text><Text style={styles.statValue}>P1</Text></View>
           </View>
           <View style={styles.actionRow}>
-            <Pressable onPress={() => setChatOpen((value) => !value)} style={({ pressed }) => [styles.iconButton, chatOpen && styles.iconActive, pressed && styles.pressed]} accessibilityLabel="Open text chat">
+            <Pressable onPress={() => setChatOpen((value) => !value)} style={({ pressed }) => [styles.iconButton, chatOpen && styles.iconActive, pressed && styles.pressed]} accessibilityLabel={t("playOpenChat")}>
               <MaterialCommunityIcons name="message-text-outline" size={19} color="#FFFFFF" />
             </Pressable>
             <Pressable onPress={() => setEditing((value) => !value)} style={({ pressed }) => [styles.customizeButton, editing && [styles.customizeButtonActive, { borderColor: meta.accent }], pressed && styles.pressed]}>
               <MaterialCommunityIcons name={editing ? "content-save-check-outline" : "tune-variant"} size={18} color={editing ? meta.accent : "#FFFFFF"} />
-              <Text style={[styles.customizeText, editing && { color: meta.accent }]}>{editing ? "DONE" : "EDIT"}</Text>
+              <Text style={[styles.customizeText, editing && { color: meta.accent }]}>{editing ? t("playDone") : t("playEdit")}</Text>
             </Pressable>
           </View>
         </View>
 
         <View pointerEvents="none" style={styles.centerBrand}>
           <Text style={[styles.centerInitials, { color: `${meta.accent}22` }]}>{meta.initials}</Text>
-          {editing ? <Text style={styles.editHint}>The game screen and every control are independent. Drag or resize each item, then save a separate layout for this system and orientation.</Text> : <Text style={styles.engineHint}>{meta.status} · {localMode ? "LOCAL PLAY" : "ONLINE ROOM"} · {orientation.toUpperCase()}</Text>}
-          {lastButton && !editing && <Text style={styles.buttonHint}>Pressed: {lastButton}</Text>}
+          {editing ? <Text style={styles.editHint}>{t("playEditHint")}</Text> : <Text style={styles.engineHint}>{meta.status} · {localMode ? t("localPlay") : t("playOnlineRoom")} · {orientation.toUpperCase()}</Text>}
+          {lastButton && !editing && <Text style={styles.buttonHint}>{t("playPressed")} {lastButton}</Text>}
         </View>
 
         <View style={styles.controllerLayer} pointerEvents="box-none">
@@ -77,10 +79,10 @@ export default function LocalPlayScreen() {
 
         {chatOpen && (
           <View style={styles.chatPanel}>
-            <View style={styles.chatHeading}><Text style={styles.chatTitle}>TEXT CHAT</Text><Pressable onPress={() => setChatOpen(false)}><MaterialCommunityIcons name="close" size={18} color="#CFC6DF" /></Pressable></View>
-            <Text style={styles.chatHint}>{localMode ? "Local messages remain on this device." : "Room messages are sent to connected members."}</Text>
+            <View style={styles.chatHeading}><Text style={styles.chatTitle}>{t("playChatTitle")}</Text><Pressable onPress={() => setChatOpen(false)}><MaterialCommunityIcons name="close" size={18} color="#CFC6DF" /></Pressable></View>
+            <Text style={styles.chatHint}>{localMode ? t("playChatHintLocal") : t("playChatHintRoom")}</Text>
             <View style={styles.chatComposer}>
-              <TextInput value={message} onChangeText={setMessage} placeholder="Type a message" placeholderTextColor="#8D839C" style={styles.chatInput} returnKeyType="send" onSubmitEditing={() => setMessage("")} />
+              <TextInput value={message} onChangeText={setMessage} placeholder={t("writeMessage")} placeholderTextColor="#8D839C" style={styles.chatInput} returnKeyType="send" onSubmitEditing={() => setMessage("")} />
               <Pressable onPress={() => setMessage("")} style={styles.sendButton}><MaterialCommunityIcons name="send" size={17} color="#071016" /></Pressable>
             </View>
           </View>

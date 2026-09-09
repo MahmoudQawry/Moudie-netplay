@@ -16,17 +16,17 @@ export default function LobbyScreen() {
   useEffect(() => { getProfileName().then(setProfileName); }, []);
 
   const copy = {
-    retro: "CLASSIC GAMES, YOUR WAY",
+    retro: t("homeRetro"),
     title: t("title"),
-    intro: "Choose a play route first. Select your emulator, local game file, and settings only when you are ready to play.",
+    intro: t("homeIntro"),
     local: t("localPlay"),
-    localText: "Choose a system and play your legal game file on this device, with no online connection.",
-    create: "PUBLIC LOBBY",
-    createText: "Find an open classic-game lobby or host one for up to 4 players and 4 spectators (NES uses 2 players and 6 spectators).",
-    join: "JOIN PRIVATE ROOM",
-    joinText: "Enter a simple invite code from your friends, then choose player or spectator mode.",
-    tip: "Before a game starts, use Controller Settings and Screen Settings to save independent portrait and landscape layouts.",
-    player: "NEW PLAYER",
+    localText: t("homeLocalText"),
+    create: t("homePublicLobby"),
+    createText: t("homeCreateText"),
+    join: t("joinPrivateRoom"),
+    joinText: t("homeJoinText"),
+    tip: t("homeTip"),
+    player: t("newPlayer"),
   };
 
   return (
@@ -37,9 +37,9 @@ export default function LobbyScreen() {
           <View style={styles.header}>
             <View style={styles.brandRow}>
               <Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} resizeMode="cover" />
-              <View><Text style={styles.brand}>Classic Era by Moudie</Text><Text style={styles.brandSub}>FOUR SYSTEMS · NETPLAY</Text><Text style={styles.slogan}>Old Equal Gold</Text></View>
+              <View><Text style={styles.brand}>{t("brandName")}</Text><Text style={styles.brandSub}>{t("homeBrandSub")}</Text><Text style={styles.slogan}>{t("slogan")}</Text></View>
             </View>
-            <Pressable onPress={() => router.push("/(tabs)/settings")} style={({ pressed }) => [styles.profile, pressed && styles.pressed]} accessibilityLabel="Open settings">
+            <Pressable onPress={() => router.push("/(tabs)/settings")} style={({ pressed }) => [styles.profile, pressed && styles.pressed]} accessibilityLabel={t("homeOpenSettings")}>
               <MaterialCommunityIcons name="account-circle-outline" size={22} color="#B978FF" />
               <Text style={styles.profileName}>{profileName || copy.player}</Text>
             </Pressable>
@@ -52,7 +52,7 @@ export default function LobbyScreen() {
               <Text style={styles.heroEyebrow}>{copy.retro}</Text>
               <Text style={styles.heroTitle}>{copy.title}</Text>
               <Text style={styles.heroText}>{copy.intro}</Text>
-              <Text style={styles.heroSlogan}>Old Equal Gold</Text>
+              <Text style={styles.heroSlogan}>{t("slogan")}</Text>
             </View>
           </View>
 
