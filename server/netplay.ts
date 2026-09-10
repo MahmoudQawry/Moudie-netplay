@@ -327,19 +327,19 @@ export function registerNetplayServer(server: HttpServer) {
       socket.data.universalFingerprint = fingerprint;
       socket.data.universalCoreVersion = coreVersion;
       const peers = Array.from(io.sockets.adapter.rooms.get(channel) ?? []).map((socketId) => io.sockets.sockets.get(socketId));
-      const host = peers.find((peer) => {
-        const peerSession = peer?.data.session as NetplaySession | undefined;
-        return peerSession?.role === "host" && peerSession.clientKind === "universal-player" && peer?.data.universalSystem === system && peer?.data.universalFingerprint === fingerprint && peer?.data.universalCoreVersion === coreVersion;
-      });
-      const guest = peers.find((peer) => {
-        const peerSession = peer?.data.session as NetplaySession | undefined;
-        return peerSession?.role === "player" && peerSession.clientKind === "universal-player" && peer?.data.universalSystem === system && peer?.data.universalFingerprint === fingerprint && peer?.data.universalCoreVersion === coreVersion;
-      });
-      if (!host || !guest) {
+      const readyPlayerIds = new Set(peers
+        .filter((peer) => {
+          const peerSession = peer?.data.session as NetplaySession | undefined;
+          return (peerSession?.role === "host" || peerSession?.role === "player") && peerSession.clientKind === "universal-player" && peer?.data.universalSystem === system && peer?.data.universalFingerprint === fingerprint && peer?.data.universalCoreVersion === coreVersion;
+        })
+        .map((peer) => (peer?.data.session as NetplaySession).memberId));
+      const requiredPlayerIds = pending.barrier.playerMemberIds;
+      const host = peers.find((peer) => (peer?.data.session as NetplaySession | undefined)?.role === "host" && readyPlayerIds.has((peer?.data.session as NetplaySession).memberId));
+      if (!host || requiredPlayerIds.some((memberId) => !readyPlayerIds.has(memberId))) {
         socket.emit("netplay:universal-waiting", { message: "Waiting for the other player to choose the same game file." });
         return;
       }
-      io.to(channel).emit("netplay:universal-session-bootstrap", { system, fingerprint, hostMemberId: (host.data.session as NetplaySession).memberId });
+      io.to(channel).emit("netplay:universal-session-bootstrap", { system, fingerprint, hostMemberId: (host.data.session as NetplaySession).memberId, playerMemberIds: requiredPlayerIds });
     });
 
     socket.on("netplay:universal-input", (payload: Ps1InputPayload) => {
@@ -388,7 +388,7 @@ export function registerNetplayServer(server: HttpServer) {
       if (syncId === null || !system || typeof socket.data.universalFingerprint !== "string") return;
       socket.to(channel).emit("netplay:universal-sync-ack", { memberId: session.memberId, syncId, appliedAt: Date.now() });
       const pending = pendingSessions.get(session.roomId);
-      if (syncId === 0 && pending?.system === system && (session.role === "host" || session.role === "player")) {
+        if (syncId === 0 && pending?.system === system && (session.role === "host" || session.role === "player")) {
         const roomSnapshot = await db.getRoomSnapshot(session.roomId).catch(() => undefined);
         const activePlayerIds = (roomSnapshot?.members ?? [])
           .filter((member) => member.role === "host" || member.role === "player")
@@ -397,7 +397,8 @@ export function registerNetplayServer(server: HttpServer) {
         const acknowledgements = universalInitialStateAcks.get(key) ?? new Set<number>();
         acknowledgements.add(session.memberId);
         universalInitialStateAcks.set(key, acknowledgements);
-        if (activePlayerIds.length >= 2 && activePlayerIds.every((memberId) => acknowledgements.has(memberId))) {
+        const guestIds = activePlayerIds.filter((memberId) => memberId !== pending.barrier.hostMemberId);
+        if (guestIds.length >= 1 && guestIds.every((memberId) => acknowledgements.has(memberId))) {
           io.to(channel).emit("netplay:universal-session-go", { system, fingerprint: socket.data.universalFingerprint, startAt: Date.now() + 1200, playerMemberIds: activePlayerIds });
           universalInitialStateAcks.delete(key);
           pendingSessions.delete(session.roomId);

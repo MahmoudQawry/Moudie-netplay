@@ -60,7 +60,7 @@ export function MoudieLaunchIntro({ children }: Props) {
       </Animated.View>
       <View style={styles.envelopeBack} />
       <Animated.View style={[styles.envelopeFlap, { transform: [{ perspective: 800 }, { rotateX: flap.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-64deg"] }) }] }]} />
-      <View style={styles.envelopeFront}><Image source={require("@/assets/images/classic-era-four-systems-card.png")} style={styles.envelopeArt} resizeMode="cover" /></View>
+      <View style={styles.envelopeFront}><Image source={require("@/assets/images/classic-era-new-poster.png")} style={styles.envelopeArt} resizeMode="cover" /></View>
       <Animated.View style={[styles.seal, { opacity: seal, transform: [{ scale: seal.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }) }, { rotate: seal.interpolate({ inputRange: [0, 1], outputRange: ["-45deg", "0deg"] }) }] }]}><Text style={styles.sealText}>M</Text></Animated.View>
     </Animated.View>
     <Animated.View style={[styles.brand, { opacity: brand, transform: [{ translateY: brand.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }]}><Text style={styles.classic}>Classic Era by Moudie</Text><Text style={styles.by}>Old Equal Gold</Text></Animated.View>
