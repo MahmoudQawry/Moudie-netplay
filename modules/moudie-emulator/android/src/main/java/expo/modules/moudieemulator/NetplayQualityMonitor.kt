@@ -15,19 +15,26 @@ data class NetplayQuality(
   val jitterMs: Long? = null,
   val probeLossPercent: Int? = null,
   val grade: String = "CONNECTING",
+  val recommendedDelay: Long = 3L,
 ) {
-  fun compactLabel(): String = rttMs?.let { "PING ${it}ms · $grade" } ?: "PING — · $grade"
+  fun compactLabel(): String {
+    val delayInfo = if (rttMs != null) " D${recommendedDelay}" else ""
+    return rttMs?.let { "PING ${it}ms · $grade$delayInfo" } ?: "PING — · $grade"
+  }
 
-  /** Freeze this value once lockstep begins; changing the schedule mid-session can desynchronize peers. */
-  fun recommendedInputDelayFrames(): Long = when (grade) {
-    "STABLE" -> 2L
-    "FAIR" -> 4L
-    "UNSTABLE" -> 6L
-    else -> 7L
+  /** PUBG-style adaptive delay calculation */
+  fun recommendedInputDelayFrames(): Long = when {
+    grade == "STABLE" && (rttMs ?: 100L) <= 50L && (jitterMs ?: 0L) <= 10L -> 2L
+    grade == "STABLE" -> 3L
+    grade == "FAIR" && (rttMs ?: 150L) <= 100L -> 3L
+    grade == "FAIR" -> 4L
+    grade == "UNSTABLE" && (rttMs ?: 250L) <= 180L -> 5L
+    grade == "UNSTABLE" -> 6L
+    else -> 3L
   }
 }
 
-/** Measures an authenticated application-level RTT to the same server used by the emulator relay. */
+/** PUBG-style improved quality monitor with faster probing and adaptive delay */
 class NetplayQualityMonitor(
   private val socket: Socket,
   private val onQuality: (NetplayQuality) -> Unit,
@@ -44,6 +51,8 @@ class NetplayQualityMonitor(
   private var running = false
   private var hasRun = false
   private var listenerInstalled = false
+  private var lossStreak = 0
+  private var maxLossStreak = 0
 
   private val pongListener = Emitter.Listener { args ->
     val payload = args.firstOrNull() as? JSONObject ?: return@Listener
@@ -60,6 +69,7 @@ class NetplayQualityMonitor(
       val sequence = nextSequence++
       pending[sequence] = now
       socket.emit(probeEvent, JSONObject().put("sequence", sequence))
+      // PUBG-style: faster probing 600ms
       handler.postDelayed(this, PROBE_INTERVAL_MS)
     }
   }
@@ -94,6 +104,8 @@ class NetplayQualityMonitor(
     previousRtt = null
     smoothedRtt = null
     smoothedJitter = null
+    lossStreak = 0
+    maxLossStreak = 0
     onQuality(NetplayQuality())
   }
 
@@ -102,8 +114,10 @@ class NetplayQualityMonitor(
     val rtt = (SystemClock.elapsedRealtime() - sentAt).coerceAtLeast(0L)
     val delta = previousRtt?.let { abs(rtt - it) } ?: 0L
     previousRtt = rtt
-    smoothedRtt = smoothedRtt?.let { (it * 0.7) + (rtt * 0.3) } ?: rtt.toDouble()
-    smoothedJitter = smoothedJitter?.let { (it * 0.7) + (delta * 0.3) } ?: delta.toDouble()
+    // PUBG-style: adapt faster when jitter high
+    val rttAlpha = if (delta > 30) 0.5 else 0.3
+    smoothedRtt = smoothedRtt?.let { (it * (1 - rttAlpha)) + (rtt * rttAlpha) } ?: rtt.toDouble()
+    smoothedJitter = smoothedJitter?.let { (it * 0.65) + (delta * 0.35) } ?: delta.toDouble()
     recordOutcome(true)
     publish()
   }
@@ -117,6 +131,12 @@ class NetplayQualityMonitor(
   private fun recordOutcome(received: Boolean) {
     outcomes.addLast(received)
     while (outcomes.size > OUTCOME_WINDOW) outcomes.removeFirst()
+    if (!received) {
+      lossStreak++
+      maxLossStreak = maxOf(maxLossStreak, lossStreak)
+    } else {
+      lossStreak = 0
+    }
   }
 
   private fun publish() {
@@ -125,18 +145,30 @@ class NetplayQualityMonitor(
     val loss = outcomes.takeIf { it.isNotEmpty() }?.let { samples ->
       ((samples.count { !it } * 100.0) / samples.size).toInt()
     }
+    // PUBG-style grading with more granular thresholds
     val grade = when {
       rtt == null -> "CONNECTING"
-      rtt <= 75L && (jitter ?: 0L) <= 15L && (loss ?: 0) < 1 -> "STABLE"
+      rtt <= 60L && (jitter ?: 0L) <= 12L && (loss ?: 0) < 1 -> "STABLE"
+      rtt <= 100L && (jitter ?: 0L) <= 25L && (loss ?: 0) <= 2 -> "STABLE"
       rtt <= 150L && (jitter ?: 0L) <= 35L && (loss ?: 0) <= 4 -> "FAIR"
+      rtt <= 220L && (jitter ?: 0L) <= 50L && (loss ?: 0) <= 7 -> "FAIR"
       else -> "UNSTABLE"
     }
-    onQuality(NetplayQuality(rtt, jitter, loss, grade))
+    val recommendedDelay = when {
+      rtt == null -> 3L
+      rtt <= 50L && (jitter ?: 0L) <= 10L && (loss ?: 0) < 1 -> 2L
+      rtt <= 80L && (jitter ?: 0L) <= 20L && (loss ?: 0) < 2 -> 3L
+      rtt <= 120L && (jitter ?: 0L) <= 30L && (loss ?: 0) <= 3 -> 4L
+      rtt <= 180L && (jitter ?: 0L) <= 45L && (loss ?: 0) <= 5 -> 5L
+      rtt <= 250L -> 6L
+      else -> 7L
+    }
+    onQuality(NetplayQuality(rtt, jitter, loss, grade, recommendedDelay))
   }
 
   private companion object {
-    const val PROBE_INTERVAL_MS = 1_000L
-    const val PROBE_TIMEOUT_MS = 2_500L
-    const val OUTCOME_WINDOW = 20
+    const val PROBE_INTERVAL_MS = 600L // PUBG-style faster probing
+    const val PROBE_TIMEOUT_MS = 2000L // Reduced timeout
+    const val OUTCOME_WINDOW = 30 // Larger window for stability
   }
 }

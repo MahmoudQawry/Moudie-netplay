@@ -16,7 +16,7 @@ import { useRealtimeRoomSnapshot } from "@/lib/use-realtime-room-snapshot";
 import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorModule";
 
 const PSP_EXTENSIONS = [".iso", ".cso", ".chd", ".pbp"];
-const PSP_NETPLAY_CORE_VERSION = "ppsspp-libretro-lockstep-v1";
+const PSP_NETPLAY_CORE_VERSION = "ppsspp-libretro-lockstep-v2-pubg";
 
 type RoomGame = { name: string; uri: string; fingerprint: string };
 type PlayerSeat = 1 | 2 | 3 | 4;

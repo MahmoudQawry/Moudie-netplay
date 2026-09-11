@@ -7,6 +7,8 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.view.Choreographer
 import android.view.Gravity
@@ -54,7 +56,12 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     const val EXTRA_NETPLAY_FINGERPRINT = "expo.modules.moudieemulator.NETPLAY_FINGERPRINT"
     const val EXTRA_NETPLAY_CORE_VERSION = "expo.modules.moudieemulator.NETPLAY_CORE_VERSION"
     const val EXTRA_NETPLAY_PLAYER = "expo.modules.moudieemulator.NETPLAY_PLAYER"
-    private const val NETPLAY_FRAME_INTERVAL_MS = 17L
+    private const val NETPLAY_FRAME_INTERVAL_MS = 16L
+    private const val NETPLAY_INPUT_DELAY_FRAMES = 3L
+    private const val MAX_PREDICTION_FRAMES = 30
+    private const val JITTER_BUFFER_FRAMES = 4
+    private const val RESYNC_TIMEOUT_MS = 5000L
+    private const val FRAME_HISTORY_CLEANUP_THRESHOLD = 60
     @Volatile var onOverlayAction: ((action: String, muted: Boolean) -> Unit)? = null
   }
 
@@ -81,14 +88,21 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private var sessionPlayerMemberIds: List<Int> = emptyList()
   private var lockstepNetplay = false
   private val lockstepActive = AtomicBoolean(false)
-  private val lockstepHandler = android.os.Handler(android.os.Looper.getMainLooper())
+  private val lockstepHandler = Handler(Looper.getMainLooper())
   private val remoteFrameMasks = TreeMap<Long, MutableMap<Int, Int>>()
   private val localFrameMasks = TreeMap<Long, Int>()
   private val localPressedKeys = mutableSetOf<Int>()
   private val appliedMasksByPort = mutableMapOf<Int, Int>()
   private var nextLockstepFrame = 0L
-  private var netplayInputDelayFrames = 3L
+  private var netplayInputDelayFrames = NETPLAY_INPUT_DELAY_FRAMES
   private var netplayQuality = NetplayQuality()
+  // PUBG-style improved sync
+  private var sessionStartTimeMs = 0L
+  private var predictedFrames = 0
+  private var lastRemoteMasks = mutableMapOf<Int, Int>()
+  private var lastFrameReceivedAt = 0L
+  private var consecutiveDesyncs = 0
+  private var frameDriftMs = 0L
   @Volatile private var lastNetplaySyncId = -1L
   private var microphoneMuted = true
   private var speakerEnabled = true
@@ -237,15 +251,25 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
     if (!lockstepActive.compareAndSet(false, true)) return
     sessionPlayerMemberIds = members
     localPlayerIndex = members.indexOf(localMemberId)
+    sessionStartTimeMs = startAt
     nextLockstepFrame = 0L
+    predictedFrames = 0
+    consecutiveDesyncs = 0
+    frameDriftMs = 0L
+    lastRemoteMasks.clear()
+    lastFrameReceivedAt = android.os.SystemClock.elapsedRealtime()
     appliedMasksByPort.clear()
     synchronized(remoteFrameMasks) { remoteFrameMasks.clear() }
     synchronized(localFrameMasks) {
       localFrameMasks.clear()
-      repeat(netplayInputDelayFrames.toInt()) { frame -> localFrameMasks[frame.toLong()] = 0; netplayClient?.sendInputFrame(frame.toLong(), 0) }
+      val bufferFrames = maxOf(netplayInputDelayFrames, JITTER_BUFFER_FRAMES.toLong())
+      repeat(bufferFrames.toInt()) { frame ->
+        localFrameMasks[frame.toLong()] = 0
+        netplayClient?.sendInputFrame(frame.toLong(), 0)
+      }
     }
-    lockstepHandler.postDelayed(lockstepTick, max(0L, startAt - System.currentTimeMillis()))
-    showToast("The shared session started with synchronized inputs.")
+    lockstepHandler.postDelayed(lockstepTick, maxOf(0L, startAt - System.currentTimeMillis()))
+    showToast("Shared session started with PUBG-style sync. Delay: ${netplayInputDelayFrames} frames.")
   }
 
   private fun stopLockstep() { lockstepActive.set(false); lockstepHandler.removeCallbacksAndMessages(null) }
@@ -253,14 +277,76 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private val lockstepTick = object : Runnable {
     override fun run() {
       if (!lockstepActive.get() || !::retroView.isInitialized) return
+      val now = android.os.SystemClock.elapsedRealtime()
       val targetFrame = nextLockstepFrame + netplayInputDelayFrames
       val currentMask = currentLocalMask()
       synchronized(localFrameMasks) { localFrameMasks[targetFrame] = currentMask }
       netplayClient?.sendInputFrame(targetFrame, currentMask)
+
+      // Cleanup old history
+      synchronized(localFrameMasks) {
+        val toRemove = localFrameMasks.keys.filter { it < nextLockstepFrame - FRAME_HISTORY_CLEANUP_THRESHOLD }
+        toRemove.forEach { localFrameMasks.remove(it) }
+      }
+      synchronized(remoteFrameMasks) {
+        val toRemove = remoteFrameMasks.keys.filter { it < nextLockstepFrame - FRAME_HISTORY_CLEANUP_THRESHOLD }
+        toRemove.forEach { remoteFrameMasks.remove(it) }
+      }
+
       val localMask = synchronized(localFrameMasks) { localFrameMasks.remove(nextLockstepFrame) ?: 0 }
       val remoteMasks = synchronized(remoteFrameMasks) { remoteFrameMasks.remove(nextLockstepFrame) }
       val remoteMembers = sessionPlayerMemberIds.filter { it != localMemberId }
-      if (remoteMasks == null || remoteMembers.any { it !in remoteMasks }) { lockstepHandler.postDelayed(this, 4L); return }
+      if (remoteMasks == null || remoteMembers.any { it !in remoteMasks }) {
+        predictedFrames++
+        if (remoteMasks != null) {
+          remoteMasks.forEach { (memberId, mask) -> lastRemoteMasks[memberId] = mask }
+        }
+        if (predictedFrames > MAX_PREDICTION_FRAMES) {
+          if (predictedFrames == MAX_PREDICTION_FRAMES + 1) {
+            showToast("Waiting for players... ${predictedFrames * 16}ms")
+            netplayClient?.requestState(lastNetplaySyncId)
+            netplayClient?.reportDesync(nextLockstepFrame, predictedFrames)
+          }
+          if (now - lastFrameReceivedAt > RESYNC_TIMEOUT_MS) {
+            showToast("Connection slow - resyncing...")
+            netplayClient?.requestState(-1L)
+            lastFrameReceivedAt = now
+            consecutiveDesyncs++
+            if (consecutiveDesyncs > 3 && netplayInputDelayFrames < 8) {
+              netplayInputDelayFrames++
+              netplayClient?.requestDelayIncrease(netplayInputDelayFrames, "high-prediction")
+              showToast("Increased buffer to ${netplayInputDelayFrames} frames")
+              consecutiveDesyncs = 0
+            }
+          }
+          lockstepHandler.postDelayed(this, 16L)
+          return
+        }
+        // Prediction: reuse last known
+        applyMask(localMask, localPlayerIndex, appliedMasksByPort[localPlayerIndex] ?: 0)
+        appliedMasksByPort[localPlayerIndex] = localMask
+        remoteMembers.forEach { memberId ->
+          val port = sessionPlayerMemberIds.indexOf(memberId)
+          val mask = remoteMasks?.get(memberId) ?: lastRemoteMasks[memberId] ?: 0
+          applyMask(mask, port, appliedMasksByPort[port] ?: 0)
+          appliedMasksByPort[port] = mask
+        }
+        retroView.requestRender()
+        nextLockstepFrame += 1L
+        val nextExpectedTime = sessionStartTimeMs + (nextLockstepFrame * NETPLAY_FRAME_INTERVAL_MS)
+        val delay = (nextExpectedTime - now).coerceIn(1L, 32L)
+        lockstepHandler.postDelayed(this, delay)
+        return
+      }
+
+      if (predictedFrames > 10) {
+        showToast("Re-synced after ${predictedFrames} predicted frames")
+      }
+      predictedFrames = 0
+      lastFrameReceivedAt = now
+      consecutiveDesyncs = 0
+      remoteMasks.forEach { (memberId, mask) -> lastRemoteMasks[memberId] = mask }
+
       applyMask(localMask, localPlayerIndex, appliedMasksByPort[localPlayerIndex] ?: 0)
       appliedMasksByPort[localPlayerIndex] = localMask
       remoteMembers.forEach { memberId ->
@@ -271,7 +357,17 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       }
       retroView.requestRender()
       nextLockstepFrame += 1L
-      lockstepHandler.postDelayed(this, NETPLAY_FRAME_INTERVAL_MS)
+      val nextExpectedTime = sessionStartTimeMs + (nextLockstepFrame * NETPLAY_FRAME_INTERVAL_MS)
+      val drift = now - nextExpectedTime
+      frameDriftMs = (frameDriftMs * 0.9 + drift * 0.1).toLong()
+      val adjustedInterval = when {
+        frameDriftMs > 32 -> 8L
+        frameDriftMs > 16 -> 12L
+        frameDriftMs < -32 -> 24L
+        frameDriftMs < -16 -> 20L
+        else -> NETPLAY_FRAME_INTERVAL_MS
+      }
+      lockstepHandler.postDelayed(this, adjustedInterval)
     }
   }
 

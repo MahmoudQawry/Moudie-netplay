@@ -1,9 +1,12 @@
-export const FAMICOM_CORE_VERSION = "jsnes-2.1.0-web";
+export const FAMICOM_CORE_VERSION = "jsnes-2.1.0-web-pubg";
 
 export type FamicomMessage =
   | { type: "rom"; fingerprint: string; coreVersion: string }
   | { type: "state"; snapshot: string; syncId: number }
-  | { type: "input"; player: 1 | 2; button: string; isDown: boolean };
+  | { type: "input"; player: 1 | 2; button: string; isDown: boolean; frame?: number; mask?: number }
+  | { type: "quality-probe"; sequence: number; timestamp: number }
+  | { type: "quality-pong"; sequence: number; timestamp: number }
+  | { type: "frame-sync"; frame: number; timestamp: number };
 
 export function peerIdForRoom(roomId: number): string {
   return `moudie-famicom-room-${roomId}`;
@@ -28,7 +31,23 @@ export function decodeFamicomMessage(value: unknown): FamicomMessage | null {
     typeof message.button === "string" &&
     typeof message.isDown === "boolean"
   ) {
-    return { type: "input", player: message.player, button: message.button, isDown: message.isDown };
+    return { 
+      type: "input", 
+      player: message.player, 
+      button: message.button, 
+      isDown: message.isDown,
+      frame: typeof message.frame === "number" ? message.frame : undefined,
+      mask: typeof message.mask === "number" ? message.mask : undefined,
+    };
+  }
+  if (message.type === "quality-probe" && typeof message.sequence === "number" && typeof message.timestamp === "number") {
+    return { type: "quality-probe", sequence: message.sequence, timestamp: message.timestamp };
+  }
+  if (message.type === "quality-pong" && typeof message.sequence === "number" && typeof message.timestamp === "number") {
+    return { type: "quality-pong", sequence: message.sequence, timestamp: message.timestamp };
+  }
+  if (message.type === "frame-sync" && typeof message.frame === "number" && typeof message.timestamp === "number") {
+    return { type: "frame-sync", frame: message.frame, timestamp: message.timestamp };
   }
   return null;
 }
@@ -36,4 +55,28 @@ export function decodeFamicomMessage(value: unknown): FamicomMessage | null {
 export async function fingerprintRom(romData: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", romData);
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+// PUBG-style button mask mapping for Famicom (NES)
+export const FAMICOM_BUTTON_MASKS: Record<string, number> = {
+  UP: 1 << 0,
+  DOWN: 1 << 1,
+  LEFT: 1 << 2,
+  RIGHT: 1 << 3,
+  A: 1 << 4,
+  B: 1 << 5,
+  SELECT: 1 << 6,
+  START: 1 << 7,
+};
+
+export function buttonToMask(button: string): number {
+  return FAMICOM_BUTTON_MASKS[button.toUpperCase()] ?? 0;
+}
+
+export function maskToButtons(mask: number): string[] {
+  const buttons: string[] = [];
+  for (const [name, bit] of Object.entries(FAMICOM_BUTTON_MASKS)) {
+    if (mask & bit) buttons.push(name);
+  }
+  return buttons;
 }

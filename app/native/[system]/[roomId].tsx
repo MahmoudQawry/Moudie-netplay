@@ -44,7 +44,7 @@ export default function NativeRoomScreen() {
   const launchRef = useRef<(netplay?: boolean, settingsMode?: boolean, synchronizedStart?: boolean) => Promise<void>>(async () => undefined);
   const catalog = useMemo(() => MoudieEmulatorModule.getCoreCatalog().find((entry) => entry.system === system), [system]);
   const snapshotQuery = useRealtimeRoomSnapshot(numericRoomId, credential, 4_000);
-  const coreVersion = `moudie-${system}-libretro-lockstep-v1`;
+  const coreVersion = `moudie-${system}-libretro-lockstep-v2-pubg`;
 
   useEffect(() => { if (Number.isFinite(numericRoomId)) getRoomCredential(numericRoomId).then(setCredential); }, [numericRoomId]);
   useEffect(() => {
