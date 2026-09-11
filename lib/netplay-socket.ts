@@ -35,17 +35,38 @@ export function createNetplaySocket(credentials: NetplayCredentials): Socket {
   if (!baseUrl) throw new Error("Could not determine the room server. Check the app's internet connection.");
   return io(baseUrl, {
     path: "/api/netplay",
-    // Game input and WebRTC signalling are latency-sensitive. Polling can
-    // introduce visible frame stalls, so use the direct transport and rely on
-    // Socket.IO reconnection when a network changes.
+    // PUBG-style: aggressive reconnection for seamless experience
     transports: ["websocket"],
     upgrade: false,
     auth: credentials,
     timeout: 20_000,
     reconnection: true,
-    reconnectionAttempts: 12,
-    reconnectionDelay: 1_000,
-    reconnectionDelayMax: 8_000,
-    randomizationFactor: 0.5,
+    reconnectionAttempts: 30, // Increased from 12 for PUBG-style persistence
+    reconnectionDelay: 300, // Faster initial retry (was 1000)
+    reconnectionDelayMax: 3_000, // Lower max for quicker recovery (was 8000)
+    randomizationFactor: 0.3, // Less randomization for more predictable retries
+    // Additional PUBG-style optimizations
+    forceNew: false,
+    autoConnect: true,
+  });
+}
+
+// PUBG-style: create universal socket with same improvements
+export function createUniversalNetplaySocket(credentials: NetplayCredentials): Socket {
+  const baseUrl = getNetplayServiceUrl();
+  if (!baseUrl) throw new Error("Could not determine the room server.");
+  return io(baseUrl, {
+    path: "/api/universal-netplay",
+    transports: ["websocket"],
+    upgrade: false,
+    auth: credentials,
+    timeout: 20_000,
+    reconnection: true,
+    reconnectionAttempts: 30,
+    reconnectionDelay: 300,
+    reconnectionDelayMax: 3_000,
+    randomizationFactor: 0.3,
+    forceNew: false,
+    autoConnect: true,
   });
 }

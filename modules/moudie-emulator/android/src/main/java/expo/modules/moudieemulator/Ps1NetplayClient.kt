@@ -14,7 +14,7 @@ data class Ps1NetplayConfig(
   val playerIndex: Int,
 )
 
-/** Authenticated PS1 relay for control inputs/state; a separate dedicated relay measures quality. */
+/** Authenticated PS1 relay for control inputs/state with PUBG-style improvements */
 class Ps1NetplayClient(
   private val config: Ps1NetplayConfig,
   private val onBootstrap: () -> Unit,
@@ -25,6 +25,7 @@ class Ps1NetplayClient(
   private val onChat: (displayName: String, text: String) -> Unit,
   private val onStatus: (String) -> Unit,
   private val onQuality: (NetplayQuality) -> Unit,
+  private val onDelayUpdate: ((delay: Long) -> Unit)? = null,
 ) {
   private var socket: Socket? = null
   private var qualityMonitor: NetplayQualityMonitor? = null
@@ -35,10 +36,10 @@ class Ps1NetplayClient(
       transports = arrayOf("websocket")
       reconnection = true
       timeout = 5_000
-      reconnectionAttempts = 12
-      reconnectionDelay = 500
-      reconnectionDelayMax = 4_000
-      randomizationFactor = 0.25
+      reconnectionAttempts = 20 // Increased for PUBG-style persistence
+      reconnectionDelay = 300
+      reconnectionDelayMax = 2_000
+      randomizationFactor = 0.3
       auth = hashMapOf(
         "roomId" to config.roomId.toString(),
         "memberId" to config.memberId.toString(),
@@ -52,12 +53,21 @@ class Ps1NetplayClient(
       on(Socket.EVENT_CONNECT) {
         emit("netplay:ps1-ready", JSONObject().put("fingerprint", config.fingerprint).put("coreVersion", config.coreVersion))
         qualityMonitor?.resume()
-        onStatus("PS1 channel connected. The room will resynchronize if this is a recovered connection.")
+        onStatus("PS1 channel connected. PUBG-style sync active.")
       }
-      on("netplay:ps1-session-bootstrap") { onBootstrap() }
+      on("netplay:ps1-session-bootstrap") { args ->
+        val payload = args.firstOrNull() as? JSONObject
+        val inputDelay = payload?.optLong("inputDelay", 3L) ?: 3L
+        onDelayUpdate?.invoke(inputDelay)
+        onBootstrap()
+      }
       on("netplay:ps1-waiting") { args ->
         val payload = args.firstOrNull() as? JSONObject
-        onStatus(payload?.optString("message")?.ifBlank { "Waiting for every active player to open the matching game." } ?: "Waiting for every active player to open the matching game.")
+        val connected = payload?.optInt("connectedCount", 0) ?: 0
+        val required = payload?.optInt("requiredCount", 0) ?: 0
+        val msg = if (required > 0) "Waiting for players $connected/$required - open same game file"
+        else payload?.optString("message")?.ifBlank { "Waiting for every active player to open the matching game." } ?: "Waiting for every active player to open the matching game."
+        onStatus(msg)
       }
       on("netplay:session-start-refused") { args ->
         val payload = args.firstOrNull() as? JSONObject
@@ -70,6 +80,8 @@ class Ps1NetplayClient(
       on("netplay:ps1-session-go") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
         val startAt = payload.optLong("startAt", -1L)
+        val inputDelay = payload.optLong("inputDelay", 3L)
+        onDelayUpdate?.invoke(inputDelay)
         val members = payload.optJSONArray("playerMemberIds")
         val playerMemberIds = buildList {
           if (members != null) for (index in 0 until members.length()) {
@@ -77,7 +89,26 @@ class Ps1NetplayClient(
             if (memberId > 0) add(memberId)
           }
         }
-        if (startAt > 0L && playerMemberIds.size in 2..4) onSessionGo(startAt, playerMemberIds)
+        if (startAt > 0L && playerMemberIds.size in 2..8) onSessionGo(startAt, playerMemberIds)
+      }
+      on("netplay:delay-update") { args ->
+        val payload = args.firstOrNull() as? JSONObject ?: return@on
+        val delay = payload.optLong("delay", -1L)
+        if (delay in 2..8) {
+          onDelayUpdate?.invoke(delay)
+          onStatus("Network adapting: input buffer ${delay} frames")
+        }
+      }
+      on("netplay:frame-rejected") { args ->
+        val payload = args.firstOrNull() as? JSONObject ?: return@on
+        val reason = payload.optString("reason", "")
+        if (reason == "frame too far ahead") {
+          onStatus("Sync: slowing down, device ahead")
+        }
+      }
+      on("netplay:desync-detected") { args ->
+        val payload = args.firstOrNull() as? JSONObject ?: return@on
+        onStatus(payload.optString("message", "Desync detected - resyncing"))
       }
       on("netplay:ps1-state-request") { onStateRequest() }
       on("netplay:ps1-input") { args ->
@@ -99,14 +130,21 @@ class Ps1NetplayClient(
         val text = payload.optString("text", "").trim()
         if (text.isNotEmpty()) onChat(payload.optString("displayName", "Other player"), text)
       }
-      on(Socket.EVENT_CONNECT_ERROR) { onStatus("PS1 channel is retrying. Check the room connection if it does not return.") }
-      on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause(); onStatus("PS1 room channel paused; reconnecting and resynchronizing automatically…") }
+      on(Socket.EVENT_CONNECT_ERROR) { 
+        onStatus("PS1 reconnecting... PUBG-style recovery active") 
+      }
+      on(Socket.EVENT_DISCONNECT) { 
+        qualityMonitor?.pause()
+        onStatus("PS1 paused; auto-reconnecting in PUBG style...") 
+      }
       connect()
     }
   }
 
   fun sendInputFrame(frame: Long, mask: Int) {
-    if (frame >= 0L && mask in 0..0xffff) socket?.emit("netplay:ps1-input", JSONObject().put("frame", frame).put("mask", mask))
+    if (frame >= 0L && mask in 0..0xffff) {
+      socket?.emit("netplay:ps1-input", JSONObject().put("frame", frame).put("mask", mask))
+    }
   }
 
   fun sendState(encodedState: String, syncId: Long, encoding: String) {
@@ -124,6 +162,16 @@ class Ps1NetplayClient(
   fun sendChat(text: String) {
     val safeText = text.trim().take(400)
     if (safeText.isNotEmpty()) socket?.emit("netplay:chat", JSONObject().put("text", safeText))
+  }
+
+  fun requestDelayIncrease(delay: Long, reason: String) {
+    if (delay in 2..8) {
+      socket?.emit("netplay:delay-request", JSONObject().put("delay", delay).put("reason", reason))
+    }
+  }
+
+  fun reportDesync(frame: Long, predictedFrames: Int) {
+    socket?.emit("netplay:desync-report", JSONObject().put("frame", frame).put("predictedFrames", predictedFrames))
   }
 
   fun close() {
