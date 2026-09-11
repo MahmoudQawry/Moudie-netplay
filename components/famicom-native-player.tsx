@@ -44,8 +44,9 @@ export const FamicomNativePlayer = forwardRef<FamicomNativePlayerHandle, Props>(
 
   return (
     <View style={styles.root}>
+      {/* @ts-ignore - WebView types compatibility */}
       <WebView
-        ref={webViewRef}
+        ref={webViewRef as any}
         source={{ html: FAMICOM_HTML_WITH_STABLE_RENDERER }}
         originWhitelist={["*"]}
         javaScriptEnabled
@@ -53,7 +54,7 @@ export const FamicomNativePlayer = forwardRef<FamicomNativePlayerHandle, Props>(
         mediaPlaybackRequiresUserAction={false}
         scrollEnabled={false}
         bounces={false}
-        onMessage={(event) => {
+        onMessage={(event: any) => {
           try {
             const message = JSON.parse(event.nativeEvent.data) as PlayerMessage;
             if (message.type === "bridge-ready") {

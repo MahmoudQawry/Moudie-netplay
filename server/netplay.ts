@@ -279,7 +279,8 @@ export function registerNetplayServer(server: HttpServer) {
         // Auto-trigger state request to host
         for (const peerId of io.sockets.adapter.rooms.get(channel) ?? []) {
           const peer = io.sockets.sockets.get(peerId);
-          const peerSession = peer?.data.session as NetplaySession | undefined;
+          if (!peer) continue;
+          const peerSession = peer.data.session as NetplaySession | undefined;
           if (peerSession?.role === "host") {
             peer.emit("netplay:desync-resync-request", { fromMemberId: session.memberId, frame });
             break;
@@ -330,11 +331,12 @@ export function registerNetplayServer(server: HttpServer) {
       const activeMemberIds = (roomSnapshot?.members ?? []).filter((member) => member.role !== "spectator").map((member) => member.id);
       const readyPeers = Array.from(io.sockets.adapter.rooms.get(channel) ?? [])
         .map((socketId) => io.sockets.sockets.get(socketId))
+        .filter((peer): peer is NonNullable<typeof peer> => Boolean(peer))
         .filter((peer) => {
-          const peerSession = peer?.data.session as NetplaySession | undefined;
+          const peerSession = peer.data.session as NetplaySession | undefined;
           return peerSession?.clientKind === "room-ui" && peerSession.role !== "spectator";
         })
-        .map((peer) => peer?.data.readySession as ReadySessionData | undefined)
+        .map((peer) => peer.data.readySession as ReadySessionData | undefined)
         .filter((ready): ready is ReadySessionData => Boolean(ready && ready.system === system));
       const readyMemberIds = new Set(readyPeers.map((peer) => peer.memberId));
       const everyActivePlayerReady = Boolean(capacity && activeMemberIds.length >= capacity.minPlayers && activeMemberIds.length <= capacity.maxPlayers && activeMemberIds.every((memberId) => readyMemberIds.has(memberId)));
@@ -432,11 +434,11 @@ export function registerNetplayServer(server: HttpServer) {
       if (!/^[a-f0-9]{64}$/.test(fingerprint) || !coreVersion || pending?.system !== "ps1" || !pending.barrier || pending.barrier.fingerprint !== fingerprint || pending.barrier.coreVersion !== coreVersion) return;
       socket.data.ps1Fingerprint = fingerprint;
       socket.data.ps1CoreVersion = coreVersion;
-      const peers = Array.from(io.sockets.adapter.rooms.get(channel) ?? []).map((socketId) => io.sockets.sockets.get(socketId));
+      const peers = Array.from(io.sockets.adapter.rooms.get(channel) ?? []).map((socketId) => io.sockets.sockets.get(socketId)).filter((p): p is NonNullable<typeof p> => Boolean(p));
       const requiredMemberIds = pending.barrier.playerMemberIds;
       const connectedPlayerIds = new Set(peers
-        .filter((peer) => peer?.data.session?.clientKind === "ps1-player" && peer?.data.ps1Fingerprint === fingerprint && peer?.data.ps1CoreVersion === coreVersion)
-        .map((peer) => (peer?.data.session as NetplaySession).memberId));
+        .filter((peer) => peer.data.session?.clientKind === "ps1-player" && peer.data.ps1Fingerprint === fingerprint && peer.data.ps1CoreVersion === coreVersion)
+        .map((peer) => (peer.data.session as NetplaySession).memberId));
       if (!requiredMemberIds.every((memberId) => connectedPlayerIds.has(memberId))) {
         socket.emit("netplay:ps1-waiting", { message: "Waiting for every active PS1 player to open the matching game file.", connectedCount: connectedPlayerIds.size, requiredCount: requiredMemberIds.length });
         return;
@@ -507,8 +509,9 @@ export function registerNetplayServer(server: HttpServer) {
       }
       for (const peerId of io.sockets.adapter.rooms.get(channel) ?? []) {
         const peer = io.sockets.sockets.get(peerId);
-        const peerSession = peer?.data.session as NetplaySession | undefined;
-        if (peerSession?.role === "host" && peer?.data.ps1Fingerprint === fingerprint) {
+        if (!peer) continue;
+        const peerSession = peer.data.session as NetplaySession | undefined;
+        if (peerSession?.role === "host" && peer.data.ps1Fingerprint === fingerprint) {
           peer.emit("netplay:ps1-state-request", { fromMemberId: session.memberId });
           break;
         }
@@ -542,15 +545,15 @@ export function registerNetplayServer(server: HttpServer) {
       socket.data.universalSystem = system;
       socket.data.universalFingerprint = fingerprint;
       socket.data.universalCoreVersion = coreVersion;
-      const peers = Array.from(io.sockets.adapter.rooms.get(channel) ?? []).map((socketId) => io.sockets.sockets.get(socketId));
+      const peers = Array.from(io.sockets.adapter.rooms.get(channel) ?? []).map((socketId) => io.sockets.sockets.get(socketId)).filter((p): p is NonNullable<typeof p> => Boolean(p));
       const readyPlayerIds = new Set(peers
         .filter((peer) => {
-          const peerSession = peer?.data.session as NetplaySession | undefined;
-          return (peerSession?.role === "host" || peerSession?.role === "player") && peerSession.clientKind === "universal-player" && peer?.data.universalSystem === system && peer?.data.universalFingerprint === fingerprint && peer?.data.universalCoreVersion === coreVersion;
+          const peerSession = peer.data.session as NetplaySession | undefined;
+          return (peerSession?.role === "host" || peerSession?.role === "player") && peerSession.clientKind === "universal-player" && peer.data.universalSystem === system && peer.data.universalFingerprint === fingerprint && peer.data.universalCoreVersion === coreVersion;
         })
-        .map((peer) => (peer?.data.session as NetplaySession).memberId));
+        .map((peer) => (peer.data.session as NetplaySession).memberId));
       const requiredPlayerIds = pending.barrier.playerMemberIds;
-      const host = peers.find((peer) => (peer?.data.session as NetplaySession | undefined)?.role === "host" && readyPlayerIds.has((peer?.data.session as NetplaySession).memberId));
+      const host = peers.find((peer) => (peer.data.session as NetplaySession | undefined)?.role === "host" && readyPlayerIds.has((peer.data.session as NetplaySession).memberId));
       if (!host || requiredPlayerIds.some((memberId) => !readyPlayerIds.has(memberId))) {
         socket.emit("netplay:universal-waiting", { message: "Waiting for the other player to choose the same game file.", connectedCount: readyPlayerIds.size, requiredCount: requiredPlayerIds.length });
         return;
@@ -619,8 +622,9 @@ export function registerNetplayServer(server: HttpServer) {
       if (cached?.fingerprint === fingerprint && cached.syncId > requestedAfter && Date.now() - cached.updatedAt < 120_000) socket.emit("netplay:universal-state", cached);
       for (const peerId of io.sockets.adapter.rooms.get(channel) ?? []) {
         const peer = io.sockets.sockets.get(peerId);
-        const peerSession = peer?.data.session as NetplaySession | undefined;
-        if (peerSession?.role === "host" && peerSession.clientKind === "universal-player" && peer?.data.universalSystem === system && peer?.data.universalFingerprint === fingerprint) {
+        if (!peer) continue;
+        const peerSession = peer.data.session as NetplaySession | undefined;
+        if (peerSession?.role === "host" && peerSession.clientKind === "universal-player" && peer.data.universalSystem === system && peer.data.universalFingerprint === fingerprint) {
           peer.emit("netplay:universal-state-request", { fromMemberId: session.memberId });
           break;
         }
