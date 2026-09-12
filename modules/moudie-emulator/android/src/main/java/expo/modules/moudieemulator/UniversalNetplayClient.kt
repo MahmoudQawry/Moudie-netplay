@@ -138,7 +138,8 @@ class UniversalNetplayClient(
   }
 
   fun sendInputFrame(frame: Long, mask: Int) {
-    if (frame < 0L || mask !in 0..0xffff) return
+    if (frame < 0L || mask !in 0..0xffff || socket?.connected() != true) return
+    // Inputs are ephemeral. The connected check prevents stale reconnect queues.
     socket?.emit("netplay:universal-input", JSONObject().put("frame", frame).put("mask", mask))
   }
 

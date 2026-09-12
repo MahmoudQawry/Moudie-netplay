@@ -27,6 +27,7 @@ type SignalPayload = { targetMemberId?: unknown; signal?: unknown };
 type VoiceStatusPayload = { microphoneEnabled?: unknown; speakerEnabled?: unknown; voiceMode?: unknown; voiceChannel?: unknown; isSpeaking?: unknown };
 const VOICE_MODES = new Set(["ptt", "open"]);
 const VOICE_CHANNELS = new Set(["room", "team"]);
+const VOICE_SIGNAL_KINDS = new Set(["voice-hello", "voice-ready", "voice-offer", "voice-answer", "voice-candidate"]);
 type SessionReadyPayload = { system?: unknown; fingerprint?: unknown; coreVersion?: unknown };
 type SessionStartPayload = { system?: unknown };
 type Ps1ReadyPayload = { fingerprint?: unknown; coreVersion?: unknown };
@@ -379,9 +380,12 @@ export function registerNetplayServer(server: HttpServer) {
 
     socket.on("netplay:signal", (payload: SignalPayload) => {
       if (!payload || typeof payload.signal !== "object" || payload.signal === null) return;
+      const signal = payload.signal as Record<string, unknown>;
+      if (typeof signal.kind !== "string" || !VOICE_SIGNAL_KINDS.has(signal.kind)) return;
+      if (JSON.stringify(signal).length > 32_000) return;
       const targetMemberId = Number(payload.targetMemberId);
       const target = Number.isInteger(targetMemberId) ? targetMemberId : undefined;
-      const event = { fromMemberId: session.memberId, signal: payload.signal };
+      const event = { fromMemberId: session.memberId, signal };
       if (target) {
         for (const peer of io.sockets.adapter.rooms.get(channel) ?? []) {
           const peerSocket = io.sockets.sockets.get(peer);
@@ -434,6 +438,9 @@ export function registerNetplayServer(server: HttpServer) {
       if (!/^[a-f0-9]{64}$/.test(fingerprint) || !coreVersion || pending?.system !== "ps1" || !pending.barrier || pending.barrier.fingerprint !== fingerprint || pending.barrier.coreVersion !== coreVersion) return;
       socket.data.ps1Fingerprint = fingerprint;
       socket.data.ps1CoreVersion = coreVersion;
+      // A new verified session starts at frame zero. Do not carry a stale
+      // frame ceiling across a reconnect or a second match in the same room.
+      getFrameTracker(session.roomId).delete(session.memberId);
       const peers = Array.from(io.sockets.adapter.rooms.get(channel) ?? []).map((socketId) => io.sockets.sockets.get(socketId)).filter((p): p is NonNullable<typeof p> => Boolean(p));
       const requiredMemberIds = pending.barrier.playerMemberIds;
       const connectedPlayerIds = new Set(peers
@@ -483,7 +490,7 @@ export function registerNetplayServer(server: HttpServer) {
         if (oldFrame < frame - 60) history.delete(oldFrame);
       }
 
-      socket.to(channel).emit("netplay:ps1-input", { memberId: session.memberId, frame, mask, serverTime: Date.now() });
+      socket.to(channel).volatile.emit("netplay:ps1-input", { memberId: session.memberId, frame, mask, serverTime: Date.now() });
     });
 
     socket.on("netplay:ps1-state", (payload: Ps1StatePayload) => {
@@ -545,6 +552,7 @@ export function registerNetplayServer(server: HttpServer) {
       socket.data.universalSystem = system;
       socket.data.universalFingerprint = fingerprint;
       socket.data.universalCoreVersion = coreVersion;
+      getFrameTracker(session.roomId).delete(session.memberId);
       const peers = Array.from(io.sockets.adapter.rooms.get(channel) ?? []).map((socketId) => io.sockets.sockets.get(socketId)).filter((p): p is NonNullable<typeof p> => Boolean(p));
       const readyPlayerIds = new Set(peers
         .filter((peer) => {
@@ -594,7 +602,7 @@ export function registerNetplayServer(server: HttpServer) {
         if (oldFrame < frame - 60) history.delete(oldFrame);
       }
 
-      socket.to(channel).emit("netplay:universal-input", { memberId: session.memberId, frame, mask, serverTime: Date.now() });
+      socket.to(channel).volatile.emit("netplay:universal-input", { memberId: session.memberId, frame, mask, serverTime: Date.now() });
     });
 
     socket.on("netplay:universal-state", (payload: Ps1StatePayload) => {

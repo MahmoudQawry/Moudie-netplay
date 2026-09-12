@@ -294,6 +294,7 @@ function BuiltInWebRtcVoice({ socket, memberId, members, expose }: { socket?: un
   const remoteStreamsRef = useRef(new Map<number, any>()); 
   const pendingCandidatesRef = useRef(new Map<number, any[]>()); 
   const makingOfferRef = useRef(new Set<number>()); 
+  const voiceRecoveryTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const speakerEnabledRef = useRef(true);
   const voiceModeRef = useRef<"ptt" | "open">("open");
   const voiceChannelRef = useRef<"room" | "team">("room");
@@ -465,18 +466,26 @@ function BuiltInWebRtcVoice({ socket, memberId, members, expose }: { socket?: un
           updateCount();
         } 
       }; 
+      const scheduleRecovery = () => {
+        if (disposed || voiceRecoveryTimersRef.current.has(remoteId)) return;
+        const timer = setTimeout(() => {
+          voiceRecoveryTimersRef.current.delete(remoteId);
+          if (disposed || peersRef.current.get(remoteId) !== peer) return;
+          peer.close();
+          peersRef.current.delete(remoteId);
+          pendingCandidatesRef.current.delete(remoteId);
+          currentSocket.emit?.("netplay:signal", { targetMemberId: remoteId, signal: { kind: "voice-hello" } });
+          setStatus("Voice reconnecting…");
+        }, 1200);
+        voiceRecoveryTimersRef.current.set(remoteId, timer);
+      };
+      peer.oniceconnectionstatechange = () => {
+        if (["failed", "disconnected"].includes(peer.iceConnectionState)) scheduleRecovery();
+      };
       peer.onconnectionstatechange = () => { 
         if (["failed", "closed", "disconnected"].includes(peer.connectionState)) {
           remoteStreamsRef.current.delete(remoteId);
-          // Try to reconnect on failure (PUBG-style recovery)
-          if (peer.connectionState === "failed") {
-            setTimeout(() => {
-              if (!disposed && peersRef.current.has(remoteId)) {
-                peersRef.current.delete(remoteId);
-                currentSocket.emit?.("netplay:signal", { targetMemberId: remoteId, signal: { kind: "voice-hello" } });
-              }
-            }, 2000);
-          }
+          scheduleRecovery();
         }
         updateCount(); 
       }; 
@@ -567,6 +576,10 @@ function BuiltInWebRtcVoice({ socket, memberId, members, expose }: { socket?: un
 
     currentSocket.on?.("netplay:signal", onSignal);
     currentSocket.on?.("netplay:voice-status", onVoiceStatus);
+    const onSocketConnect = () => currentSocket.emit?.("netplay:signal", { signal: { kind: "voice-hello" } });
+    const onSocketDisconnect = () => setStatus("Voice signaling disconnected; reconnecting…");
+    currentSocket.on?.("connect", onSocketConnect);
+    currentSocket.on?.("disconnect", onSocketDisconnect);
     void requestAudio().catch(() => { 
       if (!disposed) setStatus("Microphone permission required for PUBG-style voice."); 
     }); 
@@ -575,6 +588,10 @@ function BuiltInWebRtcVoice({ socket, memberId, members, expose }: { socket?: un
       disposed = true; 
       currentSocket.off?.("netplay:signal", onSignal);
       currentSocket.off?.("netplay:voice-status", onVoiceStatus);
+      currentSocket.off?.("connect", onSocketConnect);
+      currentSocket.off?.("disconnect", onSocketDisconnect);
+      voiceRecoveryTimersRef.current.forEach((timer) => clearTimeout(timer));
+      voiceRecoveryTimersRef.current.clear();
       peersForCleanup.forEach((peer: any) => peer.close()); 
       peersForCleanup.clear(); 
       streamsForCleanup.clear(); 
