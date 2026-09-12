@@ -1,8 +1,8 @@
-import { AudioSession, LiveKitRoom, registerGlobals, useConnectionState, useLocalParticipant, useParticipants, useTracks } from "@livekit/react-native";
-import { ConnectionState, Track } from "livekit-client";
+import { AudioSession, LiveKitRoom, registerGlobals, useConnectionState, useLocalParticipant, useParticipants } from "@livekit/react-native";
+import { ConnectionState } from "livekit-client";
 import { RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, mediaDevices } from "@livekit/react-native-webrtc";
 import InCallManager from "react-native-incall-manager";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { PermissionsAndroid, Platform, Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
 import { useLanguage } from "@/lib/language";

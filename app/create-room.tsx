@@ -58,7 +58,7 @@ export default function CreateRoomScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><MaterialCommunityIcons name="arrow-right" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>{isPublicLobby ? t("hostPublicLobby") : t("createPrivateRoom")}</Text></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-new-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>{isPublicLobby ? t("hostPublicLobby") : t("createPrivateRoom")}</Text></View>
           <View style={styles.headerSpace} />
         </View>
 

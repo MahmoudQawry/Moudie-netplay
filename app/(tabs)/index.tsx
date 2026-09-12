@@ -36,7 +36,7 @@ export default function LobbyScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View style={styles.brandRow}>
-              <Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} resizeMode="cover" />
+              <Image source={require("@/assets/images/classic-era-new-icon.png")} style={styles.brandIcon} resizeMode="cover" />
               <View><Text style={styles.brand}>{t("brandName")}</Text><Text style={styles.brandSub}>{t("homeBrandSub")}</Text><Text style={styles.slogan}>{t("slogan")}</Text></View>
             </View>
             <Pressable onPress={() => router.push("/(tabs)/settings")} style={({ pressed }) => [styles.profile, pressed && styles.pressed]} accessibilityLabel={t("homeOpenSettings")}>
@@ -47,7 +47,7 @@ export default function LobbyScreen() {
 
           <View style={styles.hero}>
             <View style={[styles.orb, styles.orbCyan]} /><View style={[styles.orb, styles.orbPurple]} />
-            <Image source={require("@/assets/images/classic-era-four-systems-card.png")} style={styles.heroIcon} resizeMode="cover" />
+            <Image source={require("@/assets/images/classic-era-new-poster.png")} style={styles.heroIcon} resizeMode="cover" />
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>{copy.retro}</Text>
               <Text style={styles.heroTitle}>{copy.title}</Text>

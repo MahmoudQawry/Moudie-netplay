@@ -44,16 +44,15 @@ describe("Android startup splash safeguards", () => {
     expect(application).toContain('Log.e("MoudieStartup"');
   });
 
-  it("plays the animated Moudie envelope intro after the lobby has mounted", () => {
+  it("plays only the official boot video after the lobby has mounted", () => {
     const rootLayout = readProjectFile("app/_layout.tsx");
     const lobby = readProjectFile("app/(tabs)/index.tsx");
     const intro = readProjectFile("components/moudie-launch-intro.tsx");
     const recovery = readProjectFile("components/startup-recovery-boundary.tsx");
-    ["PS1", "PSP", "NES", "SEGA", "introSkip", "Moudie"].forEach((label) => expect(intro).toContain(label));
-    expect(intro).toContain('import { MaterialCommunityIcons } from "@expo/vector-icons"');
-    expect(intro).toContain("Animated.sequence([");
-    expect(intro).toContain("Animated.stagger(110");
-    expect(intro).toContain("sequence.start(() => setIntroVisible(false))");
+    ["introSkip", "classic-era-official-boot.mp4", "VideoView", "useVideoPlayer"].forEach((label) => expect(intro).toContain(label));
+    expect(intro).not.toContain("MaterialCommunityIcons");
+    expect(intro).not.toContain("Animated.sequence");
+    expect(intro).not.toContain("classic-era-new-poster.png");
     expect(intro).toContain("onPress={() => setIntroVisible(false)}");
     expect(intro).toContain("const [introVisible, setIntroVisible] = useState(true)");
     expect(intro).toContain("{children}");

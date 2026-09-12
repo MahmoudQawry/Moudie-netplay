@@ -53,7 +53,7 @@ export default function JoinRoomScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><MaterialCommunityIcons name="arrow-left" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>{t("joinPrivateRoom")}</Text></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-new-icon.png")} style={styles.brandIcon} /><Text style={styles.title}>{t("joinPrivateRoom")}</Text></View>
           <View style={styles.headerSpace} />
         </View>
         <View style={styles.panel}>

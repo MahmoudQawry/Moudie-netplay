@@ -71,7 +71,7 @@ export default function PublicLobbyScreen() {
       ListHeaderComponent={<View>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]} accessibilityLabel={t("commonBack")}><MaterialCommunityIcons name="arrow-left" size={21} color="#F8F5FF" /></Pressable>
-          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-four-systems-icon.png")} style={styles.brandIcon} /><View><Text style={styles.title}>{t("lbTitle")}</Text><Text style={styles.subtitle}>{t("slogan")}</Text></View></View>
+          <View style={styles.titleRow}><Image source={require("@/assets/images/classic-era-new-icon.png")} style={styles.brandIcon} /><View><Text style={styles.title}>{t("lbTitle")}</Text><Text style={styles.subtitle}>{t("slogan")}</Text></View></View>
           <Pressable onPress={() => router.push({ pathname: "/create-room", params: { visibility: "public" } })} style={({ pressed }) => [styles.hostButton, pressed && styles.pressed]} accessibilityLabel={t("hostPublicLobby")}><MaterialCommunityIcons name="plus" size={21} color="#081127" /></Pressable>
         </View>
         <View style={styles.hero}><MaterialCommunityIcons name="account-group-outline" size={32} color="#69E8FF" /><View style={styles.heroCopy}><Text style={styles.heroTitle}>{t("lbFindSession")}</Text><Text style={styles.heroText}>{t("lbHeroText")}</Text></View></View>
