@@ -54,9 +54,4 @@ fetch_core genesis_plus_gx genesis_plus_gx
 fetch_core ppsspp ppsspp
 fetch_ppsspp_assets
 
-# Arcade is bundled in release CI so all five emulators are available offline.
-if [[ "${INCLUDE_MAME:-0}" == "1" ]]; then
-  fetch_core mamearcade mamearcade
-fi
-
 echo "Installed Libretro cores and PPSSPP system assets."
