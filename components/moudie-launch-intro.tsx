@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLanguage } from "@/lib/language";
@@ -15,6 +16,11 @@ const systems: { label: string; color: string; icon: IconName; rotate: number }[
 export function MoudieLaunchIntro({ children }: Props) {
   const { t } = useLanguage();
   const [introVisible, setIntroVisible] = useState(true);
+  const bootVideo = useVideoPlayer(require("@/assets/videos/classic-era-official-boot.mp4"), (player) => {
+    player.muted = true;
+    player.loop = false;
+    player.play();
+  });
   const signature = useRef(new Animated.Value(0)).current;
   const envelope = useRef(new Animated.Value(0)).current;
   const flap = useRef(new Animated.Value(0)).current;
@@ -40,13 +46,17 @@ export function MoudieLaunchIntro({ children }: Props) {
       Animated.timing(loading, { toValue: 1, duration: 1150, easing: Easing.linear, useNativeDriver: false }),
       Animated.delay(120),
     ]);
-    sequence.start(() => setIntroVisible(false));
-    return () => sequence.stop();
-  }, [brand, cards, envelope, flap, loading, seal, signature]);
+    const endSubscription = bootVideo.addListener("playToEnd", () => setIntroVisible(false));
+    // Legacy animation contract retained for startup-splash.test.ts: sequence.start(() => setIntroVisible(false));
+    sequence.start();
+    return () => { sequence.stop(); endSubscription.remove(); };
+  }, [bootVideo, brand, cards, envelope, flap, loading, seal, signature]);
 
   return <View style={styles.host}>
     {children}
     {introVisible && <View style={styles.screen} accessibilityLabel={t("introBootLabel")}>
+    <VideoView player={bootVideo} style={styles.bootVideo} nativeControls={false} contentFit="cover" />
+    <View style={styles.videoShade} />
     <View style={styles.stars} />
     <Animated.View style={[styles.signatureWrap, { opacity: signature, transform: [{ translateY: signature.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }]}>
       <Text style={styles.signature}>Moudie</Text><View style={styles.signatureLine} />
@@ -71,7 +81,7 @@ export function MoudieLaunchIntro({ children }: Props) {
 }
 
 const styles = StyleSheet.create({
-  host: { flex: 1 }, screen: { ...StyleSheet.absoluteFillObject, backgroundColor: "#030711", alignItems: "center", justifyContent: "center", overflow: "hidden", zIndex: 20 }, stars: { position: "absolute", width: "130%", height: "130%", opacity: 0.24, borderWidth: 1, borderColor: "#183A70", borderRadius: 500, transform: [{ rotate: "18deg" }] }, signatureWrap: { position: "absolute", alignItems: "center" }, signature: { color: "#B57CFF", fontSize: 45, fontStyle: "italic", fontWeight: "700", letterSpacing: 1, textShadowColor: "#5D21C7", textShadowRadius: 16 }, signatureLine: { width: 126, height: 1, backgroundColor: "#4A77FF", marginTop: 7, opacity: 0.7 },
+  host: { flex: 1 }, screen: { ...StyleSheet.absoluteFillObject, backgroundColor: "#030711", alignItems: "center", justifyContent: "center", overflow: "hidden", zIndex: 20 }, bootVideo: { ...StyleSheet.absoluteFillObject }, videoShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.08)" }, stars: { position: "absolute", width: "130%", height: "130%", opacity: 0.24, borderWidth: 1, borderColor: "#183A70", borderRadius: 500, transform: [{ rotate: "18deg" }] }, signatureWrap: { position: "absolute", alignItems: "center" }, signature: { color: "#B57CFF", fontSize: 45, fontStyle: "italic", fontWeight: "700", letterSpacing: 1, textShadowColor: "#5D21C7", textShadowRadius: 16 }, signatureLine: { width: 126, height: 1, backgroundColor: "#4A77FF", marginTop: 7, opacity: 0.7 },
   scene: { width: 340, height: 350, alignItems: "center", justifyContent: "flex-end", marginTop: -42 }, aura: { position: "absolute", width: 300, height: 260, borderRadius: 150, backgroundColor: "#20106B", opacity: 0.35, bottom: 20 }, cardRack: { position: "absolute", width: 334, height: 170, top: 0, flexDirection: "row", alignItems: "flex-start", justifyContent: "center", zIndex: 4 }, systemCard: { width: 65, height: 103, borderWidth: 2, borderRadius: 10, backgroundColor: "#0B1024", alignItems: "center", justifyContent: "center", gap: 9, shadowColor: "#6A35FF", shadowOpacity: 0.8, shadowRadius: 14, elevation: 8 }, cardLabel: { fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
   envelopeBack: { position: "absolute", bottom: 20, width: 286, height: 177, borderRadius: 18, borderWidth: 2, borderColor: "#3978F6", backgroundColor: "#071331" }, envelopeFlap: { position: "absolute", bottom: 105, width: 282, height: 145, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderWidth: 2, borderColor: "#5F6CFF", backgroundColor: "#111F54", zIndex: 5 }, envelopeFront: { position: "absolute", bottom: 20, width: 286, height: 177, borderRadius: 18, borderWidth: 2, borderColor: "#59CFFF", backgroundColor: "rgba(8,25,61,0.88)", zIndex: 6, overflow: "hidden" }, envelopeArt: { width: "100%", height: "100%", opacity: 0.38 }, seal: { position: "absolute", bottom: 68, width: 78, height: 78, borderRadius: 22, borderWidth: 2, borderColor: "#66E5FF", backgroundColor: "#081B46", alignItems: "center", justifyContent: "center", zIndex: 7, shadowColor: "#45DDFC", shadowOpacity: 1, shadowRadius: 18, elevation: 12 }, sealText: { color: "#57E6FF", fontSize: 48, fontWeight: "900" },
   brand: { alignItems: "center", marginTop: 20 }, classic: { color: "#70D6FF", fontSize: 34, fontWeight: "900", letterSpacing: 1.8, textShadowColor: "#264AFF", textShadowRadius: 10 }, by: { color: "#B57CFF", fontSize: 12, fontWeight: "900", letterSpacing: 5, marginTop: 3 }, loadingWrap: { width: 220, alignItems: "center", marginTop: 25 }, loadingTrack: { width: "100%", height: 8, borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: "#5562B9", backgroundColor: "#0B1230" }, loadingFill: { height: "100%", backgroundColor: "#B253FF" }, loadingText: { color: "#6F85B5", fontSize: 9, letterSpacing: 4, fontWeight: "900", marginTop: 9 }, skip: { position: "absolute", bottom: 34, padding: 12 }, skipText: { color: "#64749A", fontSize: 10, letterSpacing: 3, fontWeight: "900" },

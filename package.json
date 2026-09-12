@@ -51,6 +51,7 @@
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",
+    "expo-video": "~3.0.16",
     "expo-web-browser": "~15.0.11",
     "express": "^4.22.2",
     "jose": "6.1.0",

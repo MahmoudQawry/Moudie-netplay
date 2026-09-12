@@ -75,6 +75,7 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-font",
     "expo-web-browser",
+    "expo-video",
     ["expo-secure-store", { configureAndroidBackup: true }],
     "expo-document-picker",
     "@livekit/react-native-expo-plugin",
