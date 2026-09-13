@@ -15,7 +15,7 @@ data class UniversalNetplayConfig(
   val playerIndex: Int,
 )
 
-/** Dedicated low-latency emulator transport for PSP and Sega with PUBG-style improvements */
+/** Dedicated low-latency emulator transport for PSP and Sega with adaptive improvements */
 class UniversalNetplayClient(
   private val config: UniversalNetplayConfig,
   private val onBootstrap: (playerMemberIds: List<Int>) -> Unit,
@@ -62,7 +62,7 @@ class UniversalNetplayClient(
           .put("fingerprint", config.fingerprint)
           .put("coreVersion", config.coreVersion))
         qualityMonitor?.resume()
-        onStatus("${config.system.uppercase()} channel connected - PUBG sync active")
+        onStatus("${config.system.uppercase()} channel connected - adaptive sync active")
       }
       on("netplay:universal-session-bootstrap") { args ->
         val payload = args.firstOrNull() as? JSONObject ?: return@on
@@ -131,7 +131,7 @@ class UniversalNetplayClient(
         val text = payload.optString("text", "").trim()
         if (text.isNotEmpty()) onChat(payload.optString("displayName", "Player"), text)
       }
-      on(Socket.EVENT_CONNECT_ERROR) { onStatus("Emulator channel reconnecting - PUBG recovery") }
+      on(Socket.EVENT_CONNECT_ERROR) { onStatus("Emulator channel reconnecting - adaptive recovery") }
       on(Socket.EVENT_DISCONNECT) { qualityMonitor?.pause(); onStatus("Game channel paused; auto-reconnecting...") }
       connect()
     }

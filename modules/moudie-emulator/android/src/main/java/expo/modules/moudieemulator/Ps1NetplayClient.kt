@@ -14,7 +14,7 @@ data class Ps1NetplayConfig(
   val playerIndex: Int,
 )
 
-/** Authenticated PS1 relay for control inputs/state with PUBG-style improvements */
+/** Authenticated PS1 relay for control inputs/state with adaptive improvements */
 class Ps1NetplayClient(
   private val config: Ps1NetplayConfig,
   private val onBootstrap: () -> Unit,
@@ -36,7 +36,7 @@ class Ps1NetplayClient(
       transports = arrayOf("websocket")
       reconnection = true
       timeout = 5_000
-      reconnectionAttempts = 20 // Increased for PUBG-style persistence
+      reconnectionAttempts = 20 // Increased for adaptive persistence
       reconnectionDelay = 300
       reconnectionDelayMax = 2_000
       randomizationFactor = 0.3
@@ -53,7 +53,7 @@ class Ps1NetplayClient(
       on(Socket.EVENT_CONNECT) {
         emit("netplay:ps1-ready", JSONObject().put("fingerprint", config.fingerprint).put("coreVersion", config.coreVersion))
         qualityMonitor?.resume()
-        onStatus("PS1 channel connected. PUBG-style sync active.")
+        onStatus("PS1 channel connected. adaptive sync active.")
       }
       on("netplay:ps1-session-bootstrap") { args ->
         val payload = args.firstOrNull() as? JSONObject
@@ -131,11 +131,11 @@ class Ps1NetplayClient(
         if (text.isNotEmpty()) onChat(payload.optString("displayName", "Other player"), text)
       }
       on(Socket.EVENT_CONNECT_ERROR) { 
-        onStatus("PS1 reconnecting... PUBG-style recovery active") 
+        onStatus("PS1 reconnecting... adaptive recovery active") 
       }
       on(Socket.EVENT_DISCONNECT) { 
         qualityMonitor?.pause()
-        onStatus("PS1 paused; auto-reconnecting in PUBG style...") 
+        onStatus("PS1 paused; auto-reconnecting in adaptive style...") 
       }
       connect()
     }

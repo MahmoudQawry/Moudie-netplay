@@ -5,7 +5,7 @@ export type NetplayQuality = {
   jitterMs: number | null;
   probeLossPercent: number | null;
   grade: "CONNECTING" | "STABLE" | "FAIR" | "UNSTABLE";
-  recommendedDelay?: number; // PUBG-style adaptive delay
+  recommendedDelay?: number; // adaptive adaptive delay
   packetLossStreak?: number;
 };
 
@@ -24,9 +24,9 @@ export function formatNetplayQuality(quality: NetplayQuality): string {
   return `PING ${quality.rttMs}ms · ${quality.grade}${delayInfo}`;
 }
 
-// PUBG-style quality thresholds with adaptive delay calculation
+// adaptive quality thresholds with adaptive delay calculation
 function calculateRecommendedDelay(rtt: number, jitter: number, loss: number): number {
-  // PUBG uses adaptive buffering based on network quality
+  // adaptive uses adaptive buffering based on network quality
   if (rtt <= 50 && jitter <= 10 && loss < 1) return 2; // Excellent - minimal delay
   if (rtt <= 80 && jitter <= 20 && loss < 2) return 3; // Good - standard
   if (rtt <= 120 && jitter <= 30 && loss <= 3) return 4; // Fair - increased buffer
@@ -39,7 +39,7 @@ function calculateGrade(rtt: number | null, jitter: number | null, loss: number 
   if (rtt === null) return "CONNECTING";
   const j = jitter ?? 0;
   const l = loss ?? 0;
-  // PUBG-style grading with more granular thresholds
+  // adaptive grading with more granular thresholds
   if (rtt <= 60 && j <= 12 && l < 1) return "STABLE";
   if (rtt <= 100 && j <= 25 && l <= 2) return "STABLE";
   if (rtt <= 150 && j <= 35 && l <= 4) return "FAIR";
@@ -48,7 +48,7 @@ function calculateGrade(rtt: number | null, jitter: number | null, loss: number 
 }
 
 /** 
- * PUBG-style improved quality monitor
+ * adaptive improved quality monitor
  * - Faster probing (500ms instead of 1000ms) for quicker adaptation
  * - Adaptive delay recommendation
  * - Packet loss streak tracking
@@ -119,7 +119,7 @@ export function startNetplayQualityMonitor(socket: Socket, onQuality: (quality: 
     const rtt = Math.max(0, Date.now() - sentAt);
     const delta = previousRtt === null ? 0 : Math.abs(rtt - previousRtt);
     previousRtt = rtt;
-    // PUBG-style exponential smoothing with faster adaptation for high jitter
+    // adaptive exponential smoothing with faster adaptation for high jitter
     const rttAlpha = delta > 30 ? 0.5 : 0.3; // Adapt faster when jitter high
     const jitterAlpha = 0.35;
     smoothedRtt = smoothedRtt === null ? rtt : (smoothedRtt * (1 - rttAlpha)) + (rtt * rttAlpha);
@@ -143,7 +143,7 @@ export function startNetplayQualityMonitor(socket: Socket, onQuality: (quality: 
   socket.on("netplay:quality-pong", onPong);
   socket.on("universal:quality-pong", onPong); // Listen to both
   
-  // PUBG-style: probe faster (500ms) for quicker adaptation
+  // adaptive: probe faster (500ms) for quicker adaptation
   tick();
   const timer = setInterval(tick, 600); // 600ms for balance between accuracy and bandwidth
   
@@ -156,7 +156,7 @@ export function startNetplayQualityMonitor(socket: Socket, onQuality: (quality: 
 
 export { emptyQuality };
 
-// PUBG-style helper to get color for quality grade
+// adaptive helper to get color for quality grade
 export function getQualityColor(grade: NetplayQuality["grade"]): string {
   switch (grade) {
     case "STABLE": return "#48C78E"; // Green

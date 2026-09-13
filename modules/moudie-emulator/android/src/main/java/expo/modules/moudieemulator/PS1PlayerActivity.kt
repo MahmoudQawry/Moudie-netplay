@@ -58,7 +58,7 @@ class PS1PlayerActivity : ComponentActivity() {
     const val EXTRA_PLAYER_ORIENTATION = "expo.modules.moudieemulator.PLAYER_ORIENTATION"
     const val EXTRA_PLAYER_ASPECT_RATIO = "expo.modules.moudieemulator.PLAYER_ASPECT_RATIO"
     const val EXTRA_PLAYER_SETTINGS_MODE = "expo.modules.moudieemulator.PLAYER_SETTINGS_MODE"
-    private const val NETPLAY_CORE_VERSION = "pcsx-rearmed-0.13.2-lockstep-v2-pubg"
+    private const val NETPLAY_CORE_VERSION = "pcsx-rearmed-0.13.2-lockstep-v2-adaptive"
     private const val NETPLAY_INPUT_DELAY_FRAMES = 3L
     private const val NETPLAY_FRAME_INTERVAL_MS = 16L
     private const val MAX_PREDICTION_FRAMES = 30
@@ -100,7 +100,7 @@ class PS1PlayerActivity : ComponentActivity() {
   private val lockstepHandler = Handler(Looper.getMainLooper())
   private val bootstrapHandler = Handler(Looper.getMainLooper())
   private var bootstrapRequestAttempts = 0
-  // PUBG-style improved synchronization
+  // adaptive improved synchronization
   private val remoteFrameMasks = TreeMap<Long, MutableMap<Int, Int>>()
   private val localFrameMasks = TreeMap<Long, Int>()
   private val localPressedKeys = mutableSetOf<Int>()
@@ -372,7 +372,7 @@ class PS1PlayerActivity : ComponentActivity() {
     if (!lockstepActive.compareAndSet(false, true)) return
     configureMultitapPorts(playerMemberIds.size)
     stopBootstrapRetry()
-    // PUBG-style: synchronized start time with jitter buffer
+    // adaptive: synchronized start time with jitter buffer
     sessionStartTimeMs = startAt
     nextLockstepFrame = 0L
     predictedFrames = 0
@@ -384,7 +384,7 @@ class PS1PlayerActivity : ComponentActivity() {
     synchronized(remoteFrameMasks) { remoteFrameMasks.clear() }
     synchronized(localFrameMasks) {
       localFrameMasks.clear()
-      // Pre-fill jitter buffer (PUBG-style: 4 frames buffer to absorb network jitter)
+      // Pre-fill jitter buffer (adaptive: 4 frames buffer to absorb network jitter)
       val bufferFrames = max(netplayInputDelayFrames, JITTER_BUFFER_FRAMES.toLong())
       repeat(bufferFrames.toInt()) { frame ->
         localFrameMasks[frame.toLong()] = 0
@@ -393,7 +393,7 @@ class PS1PlayerActivity : ComponentActivity() {
     }
     val initialDelay = max(0L, startAt - System.currentTimeMillis())
     lockstepHandler.postDelayed(lockstepTick, initialDelay)
-    showToast("The shared session started with PUBG-style sync. Input delay: ${netplayInputDelayFrames} frames.")
+    showToast("The shared session started with adaptive sync. Input delay: ${netplayInputDelayFrames} frames.")
   }
 
   private fun configureMultitapPorts(playerCount: Int) {
@@ -417,7 +417,7 @@ class PS1PlayerActivity : ComponentActivity() {
       if (localPlayerIndex == 0 || lastNetplaySyncId >= 0L || lockstepActive.get()) return
       if (bootstrapRequestAttempts >= 30) {
         showToast("Initial-state sync taking long. Check host connection and restart room if needed. Retrying...")
-        bootstrapRequestAttempts = 0 // Reset and keep trying (PUBG-style persistent retry)
+        bootstrapRequestAttempts = 0 // Reset and keep trying (adaptive persistent retry)
       }
       bootstrapRequestAttempts += 1
       netplayClient?.requestState(-1L)
@@ -445,7 +445,7 @@ class PS1PlayerActivity : ComponentActivity() {
       synchronized(localFrameMasks) { localFrameMasks[targetFrame] = localMask }
       netplayClient?.sendInputFrame(targetFrame, localMask)
 
-      // Cleanup old history to prevent memory leak (PUBG-style)
+      // Cleanup old history to prevent memory leak (adaptive)
       synchronized(localFrameMasks) {
         val toRemove = localFrameMasks.keys.filter { it < nextLockstepFrame - FRAME_HISTORY_CLEANUP_THRESHOLD }
         toRemove.forEach { localFrameMasks.remove(it) }
@@ -459,7 +459,7 @@ class PS1PlayerActivity : ComponentActivity() {
       val remoteMasks = synchronized(remoteFrameMasks) { remoteFrameMasks.remove(nextLockstepFrame) }
       val expectedRemoteMembers = sessionPlayerMemberIds.filter { it != localMemberId }
 
-      // PUBG-style prediction: don't freeze, reuse last known input if remote missing
+      // adaptive prediction: don't freeze, reuse last known input if remote missing
       if (remoteMasks == null || expectedRemoteMembers.any { it !in remoteMasks }) {
         predictedFrames++
         // Update last known for prediction
@@ -482,7 +482,7 @@ class PS1PlayerActivity : ComponentActivity() {
             lastFrameReceivedAt = now
             consecutiveDesyncs++
             if (consecutiveDesyncs > 3) {
-              // Increase input delay adaptively (PUBG-style)
+              // Increase input delay adaptively (adaptive)
               if (netplayInputDelayFrames < 8) {
                 netplayInputDelayFrames++
                 netplayClient?.requestDelayIncrease(netplayInputDelayFrames, "high-prediction")
@@ -505,7 +505,7 @@ class PS1PlayerActivity : ComponentActivity() {
         retroView.requestRender()
         nextLockstepFrame += 1L
 
-        // PUBG-style timing: calculate next frame time based on session start
+        // adaptive timing: calculate next frame time based on session start
         val nextExpectedTime = sessionStartTimeMs + (nextLockstepFrame * NETPLAY_FRAME_INTERVAL_MS)
         val drift = now - nextExpectedTime
         frameDriftMs = (frameDriftMs * 0.9 + drift * 0.1).toLong() // smooth drift
@@ -536,7 +536,7 @@ class PS1PlayerActivity : ComponentActivity() {
       retroView.requestRender()
       nextLockstepFrame += 1L
 
-      // PUBG-style precise timing with drift compensation
+      // adaptive precise timing with drift compensation
       val nextExpectedTime = sessionStartTimeMs + (nextLockstepFrame * NETPLAY_FRAME_INTERVAL_MS)
       val drift = now - nextExpectedTime
       frameDriftMs = (frameDriftMs * 0.9 + drift * 0.1).toLong()

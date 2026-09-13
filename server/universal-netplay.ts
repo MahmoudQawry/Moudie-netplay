@@ -20,7 +20,7 @@ const validCoreVersion = (value: unknown): value is string => typeof value === "
 const validFrame = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const validMask = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffff;
 
-/** Dedicated low-latency relay for PSP/SEGA with PUBG-style improvements */
+/** Dedicated low-latency relay for PSP/SEGA with adaptive improvements */
 export function registerUniversalNetplayServer(server: HttpServer) {
   const io = new Server(server, {
     path: "/api/universal-netplay", 
@@ -163,7 +163,7 @@ export function registerUniversalNetplayServer(server: HttpServer) {
       const tracker = getFrameTracker(session.roomId);
       const lastFrame = tracker.get(session.memberId) ?? -1;
       const frame = p.frame as number;
-      // PUBG-style: prevent one device getting ahead
+      // adaptive: prevent one device getting ahead
       if (frame > lastFrame + 30) {
         socket.emit("universal:frame-rejected", { frame, reason: "too far ahead", lastFrame });
         return;

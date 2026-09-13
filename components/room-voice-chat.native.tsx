@@ -1,9 +1,8 @@
 import { AudioSession, LiveKitRoom, registerGlobals, useConnectionState, useLocalParticipant, useParticipants } from "@livekit/react-native";
 import { ConnectionState } from "livekit-client";
-import { RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, mediaDevices } from "@livekit/react-native-webrtc";
 import InCallManager from "react-native-incall-manager";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { PermissionsAndroid, Platform, Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
+import { Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
 import { useLanguage } from "@/lib/language";
 
@@ -20,32 +19,7 @@ export type RoomVoiceChatHandle = {
 type SocketLike = { on?: (event: string, listener: (payload: any) => void) => unknown; off?: (event: string, listener?: (payload: any) => void) => unknown; emit?: (event: string, payload?: any) => unknown };
 type Props = { mediaToken?: MediaToken | null; memberRole?: VoiceMember["role"]; socket?: unknown; isHost?: boolean; remoteOnline?: boolean; memberId?: number; members?: VoiceMember[] };
 type RoomSocketAuth = { roomId?: unknown; memberId?: unknown; memberToken?: unknown };
-type VoiceSignal = { kind?: unknown; description?: unknown; candidate?: unknown };
 type VoiceStatusPayload = { memberId?: number; displayName?: string; microphoneEnabled?: boolean; speakerEnabled?: boolean; isSpeaking?: boolean; voiceMode?: string; voiceChannel?: string };
-
-// PUBG-style ICE servers with TURN for NAT traversal
-const VOICE_ICE_SERVERS = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-  { urls: "stun:stun.cloudflare.com:3478" },
-  // Free TURN servers for better NAT traversal (PUBG-style reliability)
-  {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-];
 
 function readSocketAuth(socket: unknown): RoomSocketAuth | null { 
   if (!socket || typeof socket !== "object") return null; 
@@ -112,12 +86,12 @@ function VoiceControls({
   return (
     <View style={styles.card}>
       <View style={styles.heading}>
-        <Text style={styles.title}>🎙️ {t("voice")} · PUBG STYLE</Text>
+        <Text style={styles.title}>🎙️ {t("voice")} · adaptive STYLE</Text>
         <View style={styles.counter}><Text style={styles.counterText}>{connectedCount} ONLINE</Text></View>
       </View>
       <Text style={styles.status}>{status}</Text>
       
-      {/* PUBG-style voice mode selector */}
+      {/* adaptive voice mode selector */}
       <View style={styles.modeRow}>
         <Text style={styles.modeLabel}>{t("voiceMode")}:</Text>
         <Pressable onPress={() => onModeChange?.("open")} style={[styles.modeChip, voiceMode === "open" && styles.modeChipActive]}>
@@ -128,7 +102,7 @@ function VoiceControls({
         </Pressable>
       </View>
 
-      {/* PUBG-style channel selector */}
+      {/* adaptive channel selector */}
       <View style={styles.modeRow}>
         <Text style={styles.modeLabel}>{t("voiceChannel")}:</Text>
         <Pressable onPress={() => onChannelChange?.("room")} style={[styles.modeChip, voiceChannel === "room" && styles.modeChipActive]}>
@@ -140,7 +114,7 @@ function VoiceControls({
       </View>
       {voiceChannel === "team" && <Text style={styles.hint}>{t("voiceTeamNote")}</Text>}
 
-      {/* Speaking indicators - PUBG style */}
+      {/* Speaking indicators - adaptive style */}
       {members && members.length > 0 && (
         <View style={styles.membersList}>
           <Text style={styles.membersTitle}>VOICE ACTIVITY:</Text>
@@ -180,7 +154,7 @@ function VoiceControls({
         </Pressable>
       </View>
       
-      {voiceMode === "ptt" && <Text style={styles.hint}>💡 Hold the PTT button to talk - PUBG style. Team channel: only players hear you.</Text>}
+      {voiceMode === "ptt" && <Text style={styles.hint}>💡 Hold the PTT button to talk - adaptive style. Team channel: only players hear you.</Text>}
     </View>
   );
 }
@@ -287,350 +261,14 @@ function LiveKitVoiceControls({ members, localMemberId, socket }: { members?: Vo
   );
 }
 
-function BuiltInWebRtcVoice({ socket, memberId, members, expose }: { socket?: unknown; memberId?: number; members?: VoiceMember[]; expose: (handle: RoomVoiceChatHandle) => void }) {
-  const socketRef = useRef(socket as SocketLike | undefined); 
-  const streamRef = useRef<any>(null); 
-  const peersRef = useRef(new Map<number, any>()); 
-  const remoteStreamsRef = useRef(new Map<number, any>()); 
-  const pendingCandidatesRef = useRef(new Map<number, any[]>()); 
-  const makingOfferRef = useRef(new Set<number>()); 
-  const voiceRecoveryTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
-  const speakerEnabledRef = useRef(true);
-  const voiceModeRef = useRef<"ptt" | "open">("open");
-  const voiceChannelRef = useRef<"room" | "team">("room");
-  
-  const [microphoneEnabled, setMicrophoneEnabled] = useState(false); 
-  const [speakerEnabled, setSpeakerEnabled] = useState(true); 
-  const [voiceMode, setVoiceMode] = useState<"ptt" | "open">("open");
-  const [voiceChannel, setVoiceChannel] = useState<"room" | "team">("room");
-  const [connectedCount, setConnectedCount] = useState(0); 
-  const [status, setStatus] = useState("Preparing PUBG-style voice channel…");
-  const [speakingMap, setSpeakingMap] = useState<Map<number, boolean>>(new Map());
-
-  const setSpeaker = (enabled: boolean) => { 
-    speakerEnabledRef.current = enabled; 
-    setSpeakerEnabled(enabled); 
-    InCallManager.setForceSpeakerphoneOn(enabled); 
-  };
-
-  const setMic = async (enabled: boolean) => { 
-    const stream = streamRef.current; 
-    if (!stream) return; 
-    stream.getAudioTracks().forEach((track: any) => { 
-      track.enabled = enabled; 
-    }); 
-    setMicrophoneEnabled(enabled); 
-    socketRef.current?.emit?.("netplay:voice-status", { 
-      microphoneEnabled: enabled, 
-      speakerEnabled: speakerEnabledRef.current,
-      voiceMode: voiceModeRef.current,
-      voiceChannel: voiceChannelRef.current,
-      isSpeaking: enabled
-    }); 
-  };
-
-  const handleModeChange = (mode: "ptt" | "open") => {
-    setVoiceMode(mode);
-    voiceModeRef.current = mode;
-    if (mode === "ptt") {
-      setMic(false);
-    }
-    socketRef.current?.emit?.("netplay:voice-status", { 
-      microphoneEnabled: mode === "open" ? microphoneEnabled : false, 
-      speakerEnabled, 
-      voiceMode: mode, 
-      voiceChannel 
-    });
-  };
-
-  const handleChannelChange = (channel: "room" | "team") => {
-    setVoiceChannel(channel);
-    voiceChannelRef.current = channel;
-    socketRef.current?.emit?.("netplay:voice-status", { 
-      microphoneEnabled, 
-      speakerEnabled, 
-      voiceMode, 
-      voiceChannel: channel 
-    });
-  };
-
-  const handlePttPress = () => {
-    if (voiceMode === "ptt") {
-      setMic(true);
-    }
-  };
-
-  const handlePttRelease = () => {
-    if (voiceMode === "ptt") {
-      setMic(false);
-    }
-  };
-
-  useEffect(() => { 
-    expose({ 
-      setMicrophoneEnabled: setMic, 
-      setSpeakerEnabled: async (enabled) => setSpeaker(enabled),
-      setVoiceMode: handleModeChange,
-      setVoiceChannel: handleChannelChange
-    }); 
-  });
-
-  useEffect(() => {
-    const currentSocket = socket as SocketLike | undefined; 
-    socketRef.current = currentSocket; 
-    const peersForCleanup = peersRef.current; 
-    const streamsForCleanup = remoteStreamsRef.current; 
-    const localId = Number(memberId); 
-    if (!currentSocket?.on || !currentSocket.emit || !Number.isInteger(localId) || localId <= 0) { 
-      setStatus("Voice waiting for room connection..."); 
-      return; 
-    }
-    let disposed = false; 
-    const updateCount = () => setConnectedCount(Array.from(peersRef.current.values()).filter((peer: any) => peer.connectionState === "connected").length);
-    
-    const requestAudio = async () => { 
-      if (Platform.OS === "android") { 
-        const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, { 
-          title: "PUBG-style Room Voice", 
-          message: "Classic Era needs microphone for PUBG-style voice chat with team/room channels.", 
-          buttonPositive: "Allow",
-          buttonNegative: "Deny"
-        }); 
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) throw new Error("microphone-permission-denied"); 
-      }
-      // PUBG-style audio constraints with echo cancellation and noise suppression
-      const stream = await mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-          sampleRate: 48000,
-          sampleSize: 16,
-        } as any, 
-        video: false 
-      }); 
-      if (disposed) { 
-        stream.getTracks().forEach((track: any) => track.stop()); 
-        return; 
-      } 
-      stream.getAudioTracks().forEach((track: any) => { 
-        track.enabled = false; 
-        // Enable advanced audio processing if available
-        if (track.applyConstraints) {
-          track.applyConstraints({
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          }).catch(() => {});
-        }
-      }); 
-      streamRef.current = stream; 
-      await AudioSession.startAudioSession().catch(() => undefined); 
-      InCallManager.start({ media: "audio", auto: true }); 
-      InCallManager.setForceSpeakerphoneOn(true);
-      InCallManager.setKeepScreenOn(true);
-      InCallManager.setSpeakerphoneOn(true);
-      setStatus("PUBG-style voice ready - choose Team/Room channel"); 
-      currentSocket.emit?.("netplay:signal", { signal: { kind: "voice-hello" } }); 
-    };
-
-    const ensurePeer = (remoteId: number) => { 
-      const existing = peersRef.current.get(remoteId); 
-      if (existing) return existing; 
-      const peer = new RTCPeerConnection({ 
-        iceServers: VOICE_ICE_SERVERS,
-        iceTransportPolicy: "all",
-        bundlePolicy: "max-bundle",
-        rtcpMuxPolicy: "require",
-        iceCandidatePoolSize: 2,
-      } as any); 
-      streamRef.current?.getTracks().forEach((track: any) => peer.addTrack(track, streamRef.current)); 
-      peer.addTransceiver("audio", { 
-        direction: "sendrecv",
-      } as any); 
-      peer.onicecandidate = (event: any) => { 
-        if (event.candidate) currentSocket.emit?.("netplay:signal", { 
-          targetMemberId: remoteId, 
-          signal: { kind: "voice-candidate", candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate } 
-        }); 
-      }; 
-      peer.ontrack = (event: any) => { 
-        const stream = event.streams?.[0]; 
-        if (stream) { 
-          stream.getAudioTracks?.().forEach((track: any) => { 
-            track.enabled = true; 
-          }); 
-          remoteStreamsRef.current.set(remoteId, stream); 
-          InCallManager.setForceSpeakerphoneOn(speakerEnabledRef.current); 
-          updateCount();
-        } 
-      }; 
-      const scheduleRecovery = () => {
-        if (disposed || voiceRecoveryTimersRef.current.has(remoteId)) return;
-        const timer = setTimeout(() => {
-          voiceRecoveryTimersRef.current.delete(remoteId);
-          if (disposed || peersRef.current.get(remoteId) !== peer) return;
-          peer.close();
-          peersRef.current.delete(remoteId);
-          pendingCandidatesRef.current.delete(remoteId);
-          currentSocket.emit?.("netplay:signal", { targetMemberId: remoteId, signal: { kind: "voice-hello" } });
-          setStatus("Voice reconnecting…");
-        }, 1200);
-        voiceRecoveryTimersRef.current.set(remoteId, timer);
-      };
-      peer.oniceconnectionstatechange = () => {
-        if (["failed", "disconnected"].includes(peer.iceConnectionState)) scheduleRecovery();
-      };
-      peer.onconnectionstatechange = () => { 
-        if (["failed", "closed", "disconnected"].includes(peer.connectionState)) {
-          remoteStreamsRef.current.delete(remoteId);
-          scheduleRecovery();
-        }
-        updateCount(); 
-      }; 
-      peersRef.current.set(remoteId, peer); 
-      return peer; 
-    };
-
-    const sendOffer = async (remoteId: number) => { 
-      if (makingOfferRef.current.has(remoteId) || !streamRef.current) return; 
-      makingOfferRef.current.add(remoteId); 
-      try { 
-        const peer = ensurePeer(remoteId); 
-        if (peer.signalingState !== "stable") return; 
-        const offer = await peer.createOffer({ 
-          offerToReceiveAudio: true, 
-          offerToReceiveVideo: false,
-          voiceActivityDetection: true
-        } as any); 
-        await peer.setLocalDescription(offer); 
-        currentSocket.emit?.("netplay:signal", { targetMemberId: remoteId, signal: { kind: "voice-offer", description: offer } }); 
-      } finally { 
-        makingOfferRef.current.delete(remoteId); 
-      } 
-    };
-
-    const onSignal = async (payload: { fromMemberId?: unknown; signal?: VoiceSignal }) => { 
-      const remoteId = Number(payload?.fromMemberId); 
-      const signal = payload?.signal; 
-      if (!Number.isInteger(remoteId) || remoteId <= 0 || remoteId === localId || !signal || disposed) return; 
-      const kind = signal.kind; 
-      if (kind === "voice-hello") { 
-        currentSocket.emit?.("netplay:signal", { targetMemberId: remoteId, signal: { kind: "voice-ready" } }); 
-        if (localId < remoteId) await sendOffer(remoteId); 
-        return; 
-      } 
-      if (kind === "voice-ready") { 
-        if (localId < remoteId) await sendOffer(remoteId); 
-        return; 
-      } 
-      if (kind === "voice-offer" && signal.description && streamRef.current) { 
-        const peer = ensurePeer(remoteId); 
-        await peer.setRemoteDescription(new RTCSessionDescription(signal.description as any)); 
-        const queued = pendingCandidatesRef.current.get(remoteId) ?? []; 
-        pendingCandidatesRef.current.delete(remoteId); 
-        for (const candidate of queued) await peer.addIceCandidate(new RTCIceCandidate(candidate)); 
-        const answer = await peer.createAnswer(); 
-        await peer.setLocalDescription(answer); 
-        currentSocket.emit?.("netplay:signal", { targetMemberId: remoteId, signal: { kind: "voice-answer", description: answer } }); 
-        return; 
-      } 
-      if (kind === "voice-answer" && signal.description) { 
-        const peer = peersRef.current.get(remoteId); 
-        if (peer) await peer.setRemoteDescription(new RTCSessionDescription(signal.description as any)); 
-        return; 
-      } 
-      if (kind === "voice-candidate" && signal.candidate) { 
-        const peer = ensurePeer(remoteId); 
-        if (peer.remoteDescription) await peer.addIceCandidate(new RTCIceCandidate(signal.candidate as any)); 
-        else pendingCandidatesRef.current.set(remoteId, [...(pendingCandidatesRef.current.get(remoteId) ?? []), signal.candidate]); 
-      } 
-    };
-
-    const onVoiceStatus = (payload: VoiceStatusPayload) => {
-      if (payload?.memberId && payload.memberId !== localId) {
-        setSpeakingMap(prev => {
-          const next = new Map(prev);
-          const isSpeaking = !!payload.microphoneEnabled && (!!payload.isSpeaking || !!payload.microphoneEnabled);
-          if (isSpeaking) {
-            next.set(payload.memberId!, true);
-            // Auto-clear speaking indicator after 2s if no update (PUBG-style)
-            setTimeout(() => {
-              setSpeakingMap(curr => {
-                const updated = new Map(curr);
-                // Only clear if still same state
-                if (updated.get(payload.memberId!) === true) {
-                  updated.set(payload.memberId!, false);
-                }
-                return updated;
-              });
-            }, 2000);
-          } else {
-            next.set(payload.memberId!, false);
-          }
-          return next;
-        });
-      }
-    };
-
-    currentSocket.on?.("netplay:signal", onSignal);
-    currentSocket.on?.("netplay:voice-status", onVoiceStatus);
-    const onSocketConnect = () => currentSocket.emit?.("netplay:signal", { signal: { kind: "voice-hello" } });
-    const onSocketDisconnect = () => setStatus("Voice signaling disconnected; reconnecting…");
-    currentSocket.on?.("connect", onSocketConnect);
-    currentSocket.on?.("disconnect", onSocketDisconnect);
-    void requestAudio().catch(() => { 
-      if (!disposed) setStatus("Microphone permission required for PUBG-style voice."); 
-    }); 
-    
-    return () => { 
-      disposed = true; 
-      currentSocket.off?.("netplay:signal", onSignal);
-      currentSocket.off?.("netplay:voice-status", onVoiceStatus);
-      currentSocket.off?.("connect", onSocketConnect);
-      currentSocket.off?.("disconnect", onSocketDisconnect);
-      voiceRecoveryTimersRef.current.forEach((timer) => clearTimeout(timer));
-      voiceRecoveryTimersRef.current.clear();
-      peersForCleanup.forEach((peer: any) => peer.close()); 
-      peersForCleanup.clear(); 
-      streamsForCleanup.clear(); 
-      streamRef.current?.getTracks().forEach((track: any) => track.stop()); 
-      streamRef.current = null; 
-      InCallManager.stop(); 
-      AudioSession.stopAudioSession().catch(() => undefined); 
-    };
-  }, [socket, memberId]);
-  
-  return (
-    <VoiceControls 
-      microphoneEnabled={microphoneEnabled} 
-      speakerEnabled={speakerEnabled}
-      voiceMode={voiceMode}
-      voiceChannel={voiceChannel}
-      connectedCount={connectedCount} 
-      status={status} 
-      onMicChange={setMic} 
-      onSpeakerChange={setSpeaker}
-      onModeChange={handleModeChange}
-      onChannelChange={handleChannelChange}
-      onPttPress={handlePttPress}
-      onPttRelease={handlePttRelease}
-      speakingMembers={speakingMap}
-      members={members}
-      localMemberId={memberId}
-    />
-  );
-}
-
 export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function RoomVoiceChat({ mediaToken: suppliedToken, socket, memberId, members }: Props, ref) {
   const [mediaToken, setMediaToken] = useState<MediaToken | null | undefined>(suppliedToken); 
-  const fallbackHandle = useRef<RoomVoiceChatHandle>({ setMicrophoneEnabled: async () => undefined }); 
+  const liveKitHandle = useRef<RoomVoiceChatHandle>({ setMicrophoneEnabled: async () => undefined }); 
   useImperativeHandle(ref, () => ({ 
-    setMicrophoneEnabled: (enabled) => fallbackHandle.current.setMicrophoneEnabled(enabled), 
-    setSpeakerEnabled: (enabled) => fallbackHandle.current.setSpeakerEnabled?.(enabled) ?? Promise.resolve(),
-    setVoiceMode: (mode) => fallbackHandle.current.setVoiceMode?.(mode),
-    setVoiceChannel: (channel) => fallbackHandle.current.setVoiceChannel?.(channel)
+    setMicrophoneEnabled: (enabled) => liveKitHandle.current.setMicrophoneEnabled(enabled), 
+    setSpeakerEnabled: (enabled) => liveKitHandle.current.setSpeakerEnabled?.(enabled) ?? Promise.resolve(),
+    setVoiceMode: (mode) => liveKitHandle.current.setVoiceMode?.(mode),
+    setVoiceChannel: (channel) => liveKitHandle.current.setVoiceChannel?.(channel)
   }), []);
   
   useEffect(() => { 
@@ -656,7 +294,7 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
         const envelope = await response.json() as { result?: { data?: { json?: MediaToken } } }; 
         if (!cancelled) setMediaToken(envelope.result?.data?.json ?? { configured: false, message: "Voice SFU unavailable." }); 
       } catch { 
-        if (!cancelled) setMediaToken({ configured: false, message: "Voice SFU unavailable - using PUBG-style P2P." }); 
+        if (!cancelled) setMediaToken({ configured: false, message: "Voice SFU unavailable - using adaptive P2P." }); 
       } 
     }; 
     void load(); 
@@ -675,7 +313,7 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
           adaptiveStream: true, 
           publishDefaults: { 
             audioPreset: { maxBitrate: 64000, priority: "high" } as any, 
-            dtx: true, // Enable DTX for better bandwidth (PUBG-style)
+            dtx: true, // Enable DTX for better bandwidth (adaptive)
             red: true, // Enable RED for packet loss resilience
             forceStereo: false,
             autoGainControl: true,
@@ -690,7 +328,7 @@ export const RoomVoiceChat = forwardRef<RoomVoiceChatHandle, Props>(function Roo
       </LiveKitRoom>
     );
   }
-  return <BuiltInWebRtcVoice socket={socket} memberId={memberId} members={members} expose={(handle) => { fallbackHandle.current = handle; }} />;
+  return <View style={styles.card}><Text style={styles.status}>{mediaToken?.message ?? "خدمة الصوت غير متاحة حاليًا."}</Text></View>;
 });
 
 const styles = StyleSheet.create({ 

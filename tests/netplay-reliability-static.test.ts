@@ -23,13 +23,14 @@ describe("NetPlay and voice reliability safeguards", () => {
     expect((server.match(/getFrameTracker\(session\.roomId\)\.delete\(session\.memberId\)/g) ?? []).length).toBe(2);
   });
 
-  it("restricts signaling to bounded voice message kinds and recovers ICE failures", () => {
+  it("restricts signaling and uses the managed LiveKit audio path", () => {
     const server = read("server/netplay.ts");
     const voice = read("components/room-voice-chat.native.tsx");
     expect(server).toContain("VOICE_SIGNAL_KINDS");
     expect(server).toContain("JSON.stringify(signal).length > 32_000");
-    expect(voice).toContain("peer.oniceconnectionstatechange");
-    expect(voice).toContain('"failed", "disconnected"');
-    expect(voice).toContain('signal: { kind: "voice-hello" }');
+    expect(voice).toContain("LiveKitRoom");
+    expect(voice).toContain("serverUrl={mediaToken.url}");
+    expect(voice).not.toContain("RTCPeerConnection");
+    expect(voice).not.toContain("BuiltInWebRtcVoice");
   });
 });

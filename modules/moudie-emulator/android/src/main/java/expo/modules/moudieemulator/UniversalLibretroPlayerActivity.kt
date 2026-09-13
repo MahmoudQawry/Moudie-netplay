@@ -96,7 +96,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
   private var nextLockstepFrame = 0L
   private var netplayInputDelayFrames = NETPLAY_INPUT_DELAY_FRAMES
   private var netplayQuality = NetplayQuality()
-  // PUBG-style improved sync
+  // adaptive improved sync
   private var sessionStartTimeMs = 0L
   private var predictedFrames = 0
   private var lastRemoteMasks = mutableMapOf<Int, Int>()
@@ -269,7 +269,7 @@ class UniversalLibretroPlayerActivity : ComponentActivity() {
       }
     }
     lockstepHandler.postDelayed(lockstepTick, maxOf(0L, startAt - System.currentTimeMillis()))
-    showToast("Shared session started with PUBG-style sync. Delay: ${netplayInputDelayFrames} frames.")
+    showToast("Shared session started with adaptive sync. Delay: ${netplayInputDelayFrames} frames.")
   }
 
   private fun stopLockstep() { lockstepActive.set(false); lockstepHandler.removeCallbacksAndMessages(null) }

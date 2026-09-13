@@ -1,4 +1,4 @@
-# كيفية بناء APK بعد إصلاحات PUBG
+# كيفية بناء APK بعد إصلاحات adaptive
 
 ## المشكلة: لا يمكن بناء APK في بيئة Arena
 بيئة Arena الحالية لا تحتوي على Android SDK أو Java، لذلك لا يمكن بناء APK مباشرة هنا.
@@ -80,7 +80,7 @@ eas build --platform android --profile preview
 
 ## ما تم إصلاحه في هذا البناء:
 
-### Server (PUBG-style):
+### Server (adaptive):
 - `frameTrackers`: يمنع جهاز من التقدم أكثر من 30 فريم
 - `inputHistory` 60 فريم فقط + تنظيف تلقائي
 - `delay negotiation` من 2 إلى 8 فريم حسب الشبكة
@@ -89,14 +89,14 @@ eas build --platform android --profile preview
 - `voice team/room filtering`
 
 ### Kotlin (PS1 & Universal):
-- `CORE_VERSION v2-pubg`, `interval 16ms`
+- `CORE_VERSION v2-adaptive`, `interval 16ms`
 - `MAX_PREDICTION 30` فريم - لا يتجمد، يتنبأ بحركة الخصم
 - `JITTER_BUFFER 4` فريمات احتياط
 - `RESYNC 5s` - إعادة مزامنة تلقائية بعد 5 ثواني
 - `frameDriftMs` مع تعويض: 8ms إذا متأخر، 24ms إذا متقدم
 - `sessionStartTimeMs` وقت بداية موحد
 
-### Voice Chat (PUBG-style):
+### Voice Chat (adaptive):
 - TURN servers: `openrelay.metered.ca:80/443/TCP` + 4 STUN
 - Audio: `echoCancellation, noiseSuppression, autoGainControl, 48kHz`
 - PTT (اضغط لتتحدث) vs Open Mic
@@ -117,7 +117,7 @@ eas build --platform android --profile preview
 
 - الـ APK القديم في المجلد (`Classic-Era-by-Moudie-release.apk`) هو من قبل الإصلاحات - لا تستخدمه
 - الـ APK الجديد بعد الإصلاحات سيكون بحجم ~60MB
-- تأكد أن الجهازين على نفس إصدار `v2-pubg`
+- تأكد أن الجهازين على نفس إصدار `v2-adaptive`
 
 ## رابط الـ PR:
 https://github.com/MahmoudQawry/Classic-Era-by-Moudie-Netplay/pull/6

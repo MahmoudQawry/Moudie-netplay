@@ -35,23 +35,23 @@ export function createNetplaySocket(credentials: NetplayCredentials): Socket {
   if (!baseUrl) throw new Error("Could not determine the room server. Check the app's internet connection.");
   return io(baseUrl, {
     path: "/api/netplay",
-    // PUBG-style: aggressive reconnection for seamless experience
+    // adaptive: aggressive reconnection for seamless experience
     transports: ["websocket"],
     upgrade: false,
     auth: credentials,
     timeout: 20_000,
     reconnection: true,
-    reconnectionAttempts: 30, // Increased from 12 for PUBG-style persistence
+    reconnectionAttempts: 30, // Increased from 12 for adaptive persistence
     reconnectionDelay: 300, // Faster initial retry (was 1000)
     reconnectionDelayMax: 3_000, // Lower max for quicker recovery (was 8000)
     randomizationFactor: 0.3, // Less randomization for more predictable retries
-    // Additional PUBG-style optimizations
+    // Additional adaptive optimizations
     forceNew: false,
     autoConnect: true,
   });
 }
 
-// PUBG-style: create universal socket with same improvements
+// adaptive: create universal socket with same improvements
 export function createUniversalNetplaySocket(credentials: NetplayCredentials): Socket {
   const baseUrl = getNetplayServiceUrl();
   if (!baseUrl) throw new Error("Could not determine the room server.");

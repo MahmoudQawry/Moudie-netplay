@@ -1,4 +1,4 @@
-export const FAMICOM_CORE_VERSION = "jsnes-2.1.0-web-pubg";
+export const FAMICOM_CORE_VERSION = "jsnes-2.1.0-web-adaptive";
 
 export type FamicomMessage =
   | { type: "rom"; fingerprint: string; coreVersion: string }
@@ -57,7 +57,7 @@ export async function fingerprintRom(romData: ArrayBuffer): Promise<string> {
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-// PUBG-style button mask mapping for Famicom (NES)
+// adaptive button mask mapping for Famicom (NES)
 export const FAMICOM_BUTTON_MASKS: Record<string, number> = {
   UP: 1 << 0,
   DOWN: 1 << 1,

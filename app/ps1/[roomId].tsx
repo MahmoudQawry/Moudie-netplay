@@ -18,7 +18,7 @@ import MoudieEmulatorModule from "@/modules/moudie-emulator/src/MoudieEmulatorMo
 // Android's single-file picker cannot guarantee that a CUE's companion BIN remains beside it.
 // Accept self-contained formats so the native player receives a complete game image.
 const SUPPORTED_EXTENSIONS = [".bin", ".iso", ".chd", ".pbp"] as const;
-const PS1_NETPLAY_CORE_VERSION = "pcsx-rearmed-0.13.2-lockstep-v2-pubg";
+const PS1_NETPLAY_CORE_VERSION = "pcsx-rearmed-0.13.2-lockstep-v2-adaptive";
 type BiosStatus = Record<string, { required: boolean; available: boolean; files?: string[]; message: string }>;
 type RoomVoiceChatHandle = { setMicrophoneEnabled: (enabled: boolean) => Promise<void>; setSpeakerEnabled?: (enabled: boolean) => Promise<void> };
 

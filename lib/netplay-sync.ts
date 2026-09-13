@@ -1,18 +1,18 @@
 /** 
- * PUBG-style: authoritative checkpoint interval
+ * adaptive: authoritative checkpoint interval
  * Reduced from 2500ms to 1500ms for faster divergence correction
  * while allowing inputs to keep flowing between checkpoints.
  */
 export const NETPLAY_SYNC_INTERVAL_MS = 1500;
 
 /**
- * PUBG-style: max frames before forcing a state sync
+ * adaptive: max frames before forcing a state sync
  * If one device gets too far ahead, force resync
  */
 export const NETPLAY_MAX_DESYNC_FRAMES = 10;
 
 /**
- * PUBG-style: jitter buffer sizes based on network quality
+ * adaptive: jitter buffer sizes based on network quality
  */
 export const JITTER_BUFFER_SIZES = {
   STABLE: 2,
@@ -29,7 +29,7 @@ export function shouldApplyAuthoritativeState(lastApplied: number, incoming: num
   return incoming > lastApplied;
 }
 
-// PUBG-style: calculate if desync is severe enough to force resync
+// adaptive: calculate if desync is severe enough to force resync
 export function isDesyncSevere(predictedFrames: number, frameDrift: number): boolean {
   return predictedFrames > 20 || Math.abs(frameDrift) > 100;
 }

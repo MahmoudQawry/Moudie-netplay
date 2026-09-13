@@ -48,7 +48,7 @@ type UniversalSnapshot = AuthoritativeSnapshot & { fingerprint: string; system: 
 const roomChannel = (roomId: number) => `netplay:${roomId}`;
 const memberKey = (roomId: number, memberId: number, clientKind: NetplaySession["clientKind"]) => `${roomId}:${memberId}:${clientKind}`;
 
-// PUBG-style tracking structures
+// adaptive tracking structures
 type FrameInputRecord = { mask: number; receivedAt: number; memberId: number };
 type RoomFrameHistory = Map<number, Map<number, FrameInputRecord>>; // frame -> memberId -> record
 type RoomFrameTracker = Map<number, number>; // memberId -> lastFrame
@@ -57,7 +57,7 @@ type RoomFrameTracker = Map<number, number>; // memberId -> lastFrame
  * Realtime relay for private rooms. It does not receive ROM files or raw audio;
  * it relays verified player input, chat, save-state sync and WebRTC signalling.
  *
- * PUBG-inspired improvements implemented:
+ * adaptive improvements implemented:
  * - Fixed missing quality-probe handler (was causing CONNECTING forever)
  * - Frame validation + history to prevent desync and detect lag
  * - Adaptive input delay negotiation (2-8 frames) broadcast to all
@@ -86,7 +86,7 @@ export function registerNetplayServer(server: HttpServer) {
   const universalSnapshots = new Map<string, UniversalSnapshot>();
   const universalInitialStateAcks = new Map<string, Set<number>>();
   const pendingSessions = new Map<number, PendingSession>();
-  // PUBG-style anti-desync structures
+  // adaptive anti-desync structures
   const roomFrameTrackers = new Map<number, RoomFrameTracker>();
   const ps1InputHistory = new Map<number, RoomFrameHistory>();
   const universalInputHistory = new Map<string, RoomFrameHistory>();
@@ -243,7 +243,7 @@ export function registerNetplayServer(server: HttpServer) {
     });
     socket.to(channel).emit("netplay:presence", { memberId: session.memberId, displayName: session.displayName, online: true });
 
-    // PUBG-style quality probe handler - THIS WAS MISSING causing CONNECTING forever
+    // adaptive quality probe handler - THIS WAS MISSING causing CONNECTING forever
     socket.on("netplay:quality-probe", (payload: QualityProbePayload) => {
       const sequence = typeof payload?.sequence === "number" && Number.isSafeInteger(payload.sequence) ? payload.sequence : -1;
       if (sequence >= 0) {
@@ -251,7 +251,7 @@ export function registerNetplayServer(server: HttpServer) {
       }
     });
 
-    // Adaptive input delay negotiation (PUBG-style)
+    // Adaptive input delay negotiation (adaptive)
     socket.on("netplay:delay-request", (payload: DelayUpdatePayload) => {
       if (session.role === "spectator") return;
       const delay = Number(payload?.delay);
@@ -397,7 +397,7 @@ export function registerNetplayServer(server: HttpServer) {
       }
     });
 
-    // PUBG-style voice with team/room filtering
+    // adaptive voice with team/room filtering
     socket.on("netplay:voice-status", (payload: VoiceStatusPayload) => {
       const voiceMode = typeof payload?.voiceMode === "string" && VOICE_MODES.has(payload.voiceMode) ? payload.voiceMode : undefined;
       const voiceChannel = typeof payload?.voiceChannel === "string" && VOICE_CHANNELS.has(payload.voiceChannel) ? payload.voiceChannel : undefined;

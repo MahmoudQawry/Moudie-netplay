@@ -22,7 +22,7 @@ data class NetplayQuality(
     return rttMs?.let { "PING ${it}ms · $grade$delayInfo" } ?: "PING — · $grade"
   }
 
-  /** PUBG-style adaptive delay calculation */
+  /** adaptive adaptive delay calculation */
   fun recommendedInputDelayFrames(): Long = when {
     grade == "STABLE" && (rttMs ?: 100L) <= 50L && (jitterMs ?: 0L) <= 10L -> 2L
     grade == "STABLE" -> 3L
@@ -34,7 +34,7 @@ data class NetplayQuality(
   }
 }
 
-/** PUBG-style improved quality monitor with faster probing and adaptive delay */
+/** adaptive improved quality monitor with faster probing and adaptive delay */
 class NetplayQualityMonitor(
   private val socket: Socket,
   private val onQuality: (NetplayQuality) -> Unit,
@@ -69,7 +69,7 @@ class NetplayQualityMonitor(
       val sequence = nextSequence++
       pending[sequence] = now
       socket.emit(probeEvent, JSONObject().put("sequence", sequence))
-      // PUBG-style: faster probing 600ms
+      // adaptive: faster probing 600ms
       handler.postDelayed(this, PROBE_INTERVAL_MS)
     }
   }
@@ -114,7 +114,7 @@ class NetplayQualityMonitor(
     val rtt = (SystemClock.elapsedRealtime() - sentAt).coerceAtLeast(0L)
     val delta = previousRtt?.let { abs(rtt - it) } ?: 0L
     previousRtt = rtt
-    // PUBG-style: adapt faster when jitter high
+    // adaptive: adapt faster when jitter high
     val rttAlpha = if (delta > 30) 0.5 else 0.3
     smoothedRtt = smoothedRtt?.let { (it * (1 - rttAlpha)) + (rtt * rttAlpha) } ?: rtt.toDouble()
     smoothedJitter = smoothedJitter?.let { (it * 0.65) + (delta * 0.35) } ?: delta.toDouble()
@@ -145,7 +145,7 @@ class NetplayQualityMonitor(
     val loss = outcomes.takeIf { it.isNotEmpty() }?.let { samples ->
       ((samples.count { !it } * 100.0) / samples.size).toInt()
     }
-    // PUBG-style grading with more granular thresholds
+    // adaptive grading with more granular thresholds
     val grade = when {
       rtt == null -> "CONNECTING"
       rtt <= 60L && (jitter ?: 0L) <= 12L && (loss ?: 0) < 1 -> "STABLE"
@@ -167,7 +167,7 @@ class NetplayQualityMonitor(
   }
 
   private companion object {
-    const val PROBE_INTERVAL_MS = 600L // PUBG-style faster probing
+    const val PROBE_INTERVAL_MS = 600L // adaptive faster probing
     const val PROBE_TIMEOUT_MS = 2000L // Reduced timeout
     const val OUTCOME_WINDOW = 30 // Larger window for stability
   }
